@@ -9,18 +9,18 @@ from termcolor import cprint
 from dotenv import load_dotenv
 import time
 from datetime import datetime, timedelta
-from config import *
+import src.config as config
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
 # Import agents
-from src.agents.trading_agent import TradingAgent
-from src.agents.risk_agent import RiskAgent
-from src.agents.strategy_agent import StrategyAgent
-from src.agents.copybot_agent import CopyBotAgent
-from src.agents.sentiment_agent import SentimentAgent
+from src.agents.trading_agent import TradingAgent  # noqa: E402
+from src.agents.risk_agent import RiskAgent  # noqa: E402
+from src.agents.strategy_agent import StrategyAgent  # noqa: E402
+from src.agents.copybot_agent import CopyBotAgent  # noqa: E402
+from src.agents.sentiment_agent import SentimentAgent  # noqa: E402
 
 # Load environment variables
 load_dotenv()
@@ -62,8 +62,8 @@ def run_agents():
                 # Run Strategy Analysis
                 if strategy_agent:
                     cprint("\n📊 Running Strategy Analysis...", "cyan")
-                    for token in MONITORED_TOKENS:
-                        if token not in EXCLUDED_TOKENS:  # Skip USDC and other excluded tokens
+                    for token in config.MONITORED_TOKENS:
+                        if token not in config.EXCLUDED_TOKENS:  # Skip USDC and other excluded tokens
                             cprint(f"\n🔍 Analyzing {token}...", "cyan")
                             strategy_agent.get_signals(token)
 
@@ -78,9 +78,9 @@ def run_agents():
                     sentiment_agent.run()
 
                 # Sleep until next cycle
-                next_run = datetime.now() + timedelta(minutes=SLEEP_BETWEEN_RUNS_MINUTES)
+                next_run = datetime.now() + timedelta(minutes=config.SLEEP_BETWEEN_RUNS_MINUTES)
                 cprint(f"\n😴 Sleeping until {next_run.strftime('%H:%M:%S')}", "cyan")
-                time.sleep(60 * SLEEP_BETWEEN_RUNS_MINUTES)
+                time.sleep(60 * config.SLEEP_BETWEEN_RUNS_MINUTES)
 
             except Exception as e:
                 cprint(f"\n❌ Error running agents: {str(e)}", "red")

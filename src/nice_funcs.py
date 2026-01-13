@@ -3,21 +3,18 @@
 Built with love by Moon Dev 🚀
 """
 
-from src.config import *
+import src.config as config
 import requests
 import pandas as pd
 import pprint
 import re as reggie
-import sys
 import os
 import time
 import json
-import numpy as np
-import datetime
 import pandas_ta as ta
 from datetime import datetime, timedelta
-from termcolor import colored, cprint
-import solders
+import math
+from termcolor import cprint
 from dotenv import load_dotenv
 import shutil
 import atexit
@@ -36,6 +33,106 @@ BASE_URL = "https://public-api.birdeye.so/defi"
 
 # Create temp directory and register cleanup
 os.makedirs('temp_data', exist_ok=True)
+
+# Simple in-memory cache for token symbols to avoid 'Unknown' labels
+TOKEN_CACHE = {}
+
+
+def get_cached_symbol(address: str) -> str:
+    """
+    Return cached symbol for address, or a short fallback (first 4 chars)
+    to avoid 'Unknown' labels in logs/Discord.
+    """
+    try:
+        sym = TOKEN_CACHE.get(address)
+        if sym:
+            return sym
+    except Exception:
+        pass
+
+    # Fallback to first 4 chars to keep messages readable
+    return str(address)[:4]
+
+
+def get_priority_fee(mode: str = 'standard') -> int:
+    """
+    Return a prioritization fee (in lamports) based on the urgency mode.
+    'standard' is a low value, 'panic' is high.
+
+    Values: standard=50_000, panic=250_000
+    """
+    try:
+        if mode == 'panic':
+            return 250_000
+        return 50_000
+    except Exception:
+        return 50_000
+
+
+# Persistence helpers for position state (highest_price_seen, de_risked, entry_price)
+POS_STATE_FILE = os.path.join('data', 'positions_state.json')
+
+def load_positions_state():
+    try:
+        os.makedirs('data', exist_ok=True)
+        if os.path.exists(POS_STATE_FILE):
+            with open(POS_STATE_FILE, 'r') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def save_positions_state(state: dict):
+    try:
+        os.makedirs('data', exist_ok=True)
+        with open(POS_STATE_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+        return True
+    except Exception as e:
+        print('Failed to save positions state:', e)
+        return False
+
+
+def verify_transaction_structure(tx_bytes: bytes):
+    """
+    Best-effort verification that a VersionedTransaction (bytes) contains
+    ComputeBudget set_compute_unit_limit followed by set_compute_unit_price
+    instructions in that order. Prints a confirmation message when found.
+    """
+    try:
+        # Try solders VersionedTransaction first
+        try:
+            from solders.transaction import VersionedTransaction
+            tx = VersionedTransaction.from_bytes(tx_bytes)
+            instrs = getattr(tx.message, 'instructions', []) or []
+            # stringify instructions for heuristic matching
+            instr_texts = [str(i).lower() for i in instrs]
+        except Exception:
+            # Fallback to solana-py decoding if available
+            try:
+                from solana.transaction import VersionedTransaction
+                tx = VersionedTransaction.deserialize(tx_bytes)
+                instrs = getattr(tx.message, 'instructions', []) or []
+                instr_texts = [str(i).lower() for i in instrs]
+            except Exception:
+                print('⚠️ Could not decode VersionedTransaction for structure verification (no supported library).')
+                return False
+
+        # Heuristic: look for keywords 'compute' + 'limit' and 'compute' + 'price'
+        idx_limit = next((i for i, t in enumerate(instr_texts) if 'compute' in t and 'limit' in t), None)
+        idx_price = next((i for i, t in enumerate(instr_texts) if 'compute' in t and 'price' in t), None)
+
+        if idx_limit is not None and idx_price is not None and idx_limit < idx_price:
+            print('✅ Transaction structure OK: SetComputeUnitLimit followed by SetComputeUnitPrice found')
+            return True
+        else:
+            print('⚠️ Transaction structure does not contain compute-budget price/limit in expected order')
+            return False
+
+    except Exception as e:
+        print('⚠️ Error while verifying transaction structure:', e)
+        return False
 
 def cleanup_temp_data():
     if os.path.exists('temp_data'):
@@ -64,7 +161,7 @@ def token_overview(address):
 
     print(f'Getting the token overview for {address}')
     overview_url = f"{BASE_URL}/token_overview?address={address}"
-    headers = {"X-API-KEY": BIRDEYE_API_KEY}
+    headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
 
     response = requests.get(overview_url, headers=headers)
     result = {}
@@ -91,7 +188,7 @@ def token_overview(address):
         result['sell_percentage'] = sell_percentage
 
         # Check if trade1h is bigger than MIN_TRADES_LAST_HOUR
-        result['minimum_trades_met'] = True if trade1h >= MIN_TRADES_LAST_HOUR else False
+        result['minimum_trades_met'] = True if trade1h >= config.MIN_TRADES_LAST_HOUR else False
 
         # Extract price changes over different timeframes
         price_changes = {k: v for k, v in overview_data.items() if 'priceChange' in k}
@@ -137,6 +234,14 @@ def token_overview(address):
         # Add extracted links to result
         result['description'] = links
 
+
+        # If we can derive a token symbol/name, cache it for later
+        token_name = overview_data.get('tokenName') or overview_data.get('name') or overview_data.get('symbol')
+        if token_name:
+            try:
+                TOKEN_CACHE[address] = token_name
+            except Exception:
+                pass
 
         # Return result dictionary with all the data
         return result
@@ -187,7 +292,7 @@ def token_security_info(address):
 
     # API endpoint for getting token security information
     url = f"{BASE_URL}/token_security?address={address}"
-    headers = {"X-API-KEY": BIRDEYE_API_KEY}
+    headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
 
     # Sending a GET request to the API
     response = requests.get(url, headers=headers)
@@ -195,9 +300,106 @@ def token_security_info(address):
     if response.status_code == 200:
         # Parse the JSON response
         security_data = response.json()['data']
+        # Cache any symbol/name we can find to reduce Unknown labels elsewhere
+        token_name = security_data.get('tokenName') or security_data.get('name') or security_data.get('symbol')
+        if token_name:
+            try:
+                TOKEN_CACHE[address] = token_name
+            except Exception:
+                pass
+
         print_pretty_json(security_data)
     else:
         print("Failed to retrieve token security info:", response.status_code)
+
+
+def send_discord_message(content: str):
+    """
+    Send a simple text message to a Discord webhook if configured via
+    the DISCORD_WEBHOOK environment variable. Falls back to printing
+    when the webhook is not configured.
+    """
+    webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook:
+        # Webhook not configured — print so we still have an audit trail
+        print(f"[Discord disabled] {content}")
+        return False
+
+    try:
+        res = requests.post(webhook, json={"content": content}, timeout=5)
+        if res.status_code in (200, 204):
+            return True
+        else:
+            print(f"Failed to send discord message, status={res.status_code}: {res.text}")
+            return False
+    except Exception as e:
+        print(f"Exception sending discord message: {e}")
+        return False
+
+
+def is_momentum_reject(address: str):
+    """
+    Query Birdeye's token_security endpoint and apply a conservative
+    "momentum reject" rule: if a mint authority exists (not null) OR
+    freeze authority / freezeable is enabled, mark as a reject.
+
+    Returns: (is_reject: bool, token_name_or_address: str, details: dict)
+    """
+    url = f"{BASE_URL}/token_security?address={address}"
+    headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=6)
+        if resp.status_code != 200:
+            return (False, address, {"error": f"http_{resp.status_code}"})
+
+        data = resp.json().get('data', {}) or {}
+
+        # Try to derive a friendly token name from available fields
+        token_name = data.get('tokenName') or data.get('name') or data.get('symbol') or address
+
+        # Cache token name/symbol if available
+        if token_name and token_name != address:
+            try:
+                TOKEN_CACHE[address] = token_name
+            except Exception:
+                pass
+
+        # Fields observed in Birdeye responses: freezeAuthority, freezeable, metaplexUpdateAuthority, creatorAddress, ownerAddress
+        mint_fields = [
+            data.get('mintAuthority'),
+            data.get('mint_authority'),
+            data.get('metaplexUpdateAuthority'),
+            data.get('creatorAddress'),
+            data.get('ownerAddress'),
+            data.get('owner'),
+        ]
+
+        freeze_field = data.get('freezeAuthority') if 'freezeAuthority' in data else data.get('freeze_authority', None)
+        freezeable = data.get('freezeable') or data.get('isFreezeable') or False
+
+        mint_present = any(x for x in mint_fields if x not in (None, '', []))
+        freeze_present = (freeze_field not in (None, '', False)) or bool(freezeable)
+
+        reasons = {}
+        if mint_present:
+            reasons['mint'] = [x for x in mint_fields if x not in (None, '', [])]
+        if freeze_present:
+            reasons['freeze'] = {'freezeAuthority': freeze_field, 'freezeable': freezeable}
+
+        is_reject = mint_present or freeze_present
+
+        details = {
+            'raw': data,
+            'mint_present': mint_present,
+            'freeze_present': freeze_present,
+            'reasons': reasons
+        }
+
+        return (is_reject, token_name, details)
+
+    except Exception as e:
+        return (False, address, {'error': str(e)})
 
 def token_creation_info(address):
 
@@ -225,9 +427,12 @@ def token_creation_info(address):
     else:
         print("Failed to retrieve token creation info:", response.status_code)
 
-def market_buy(token, amount, slippage):
+def market_buy(token, amount, slippage=None, mode: str = 'standard'):
+    """
+    Market buy via Jupiter Lite. mode controls priority fee escalation.
+    slippage is optional (BPS). If not provided, a sensible default is used.
+    """
     import requests
-    import sys
     import json
     import base64
     from solders.keypair import Keypair
@@ -238,44 +443,208 @@ def market_buy(token, amount, slippage):
     KEY = Keypair.from_base58_string(os.getenv("SOLANA_PRIVATE_KEY"))
     if not KEY:
         raise ValueError("🚨 SOLANA_PRIVATE_KEY not found in environment variables!")
-    #print('key success')
-    SLIPPAGE = slippage # 5000 is 50%, 500 is 5% and 50 is .5%
 
-    QUOTE_TOKEN = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" # usdc
+    # Default slippage (BPS) if caller didn't provide one
+    SLIPPAGE = slippage if slippage is not None else 500
+
+    QUOTE_TOKEN = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"  # usdc
 
     http_client = Client(os.getenv("RPC_ENDPOINT"))
-    #print('http client success')
     if not http_client:
         raise ValueError("🚨 RPC_ENDPOINT not found in environment variables!")
 
     # Convert amount from dollars to USDC units (6 decimals)
-    amount_in_units = int(amount * 1_000_000)
+    amount_in_units = int(int(amount) if isinstance(amount, str) and amount.isdigit() else float(amount) * 1_000_000)
     print(f"💰 Converting ${amount} to {amount_in_units:,} USDC units")
 
     # Use Jupiter Lite API (faster and more efficient)
     quote = requests.get(f'https://lite-api.jup.ag/swap/v1/quote?inputMint={QUOTE_TOKEN}&outputMint={token}&amount={amount_in_units}&slippageBps={SLIPPAGE}').json()
 
+    priority_fee_value = get_priority_fee(mode)
+
     txRes = requests.post('https://lite-api.jup.ag/swap/v1/swap',
                           headers={"Content-Type": "application/json"},
                           data=json.dumps({
                               "quoteResponse": quote,
                               "userPublicKey": str(KEY.pubkey()),
-                              "prioritizationFeeLamports": PRIORITY_FEE  # or replace 'auto' with your specific lamport value
+                              "prioritizationFeeLamports": priority_fee_value
                           })).json()
 
     swapTx = base64.b64decode(txRes['swapTransaction'])
     tx1 = VersionedTransaction.from_bytes(swapTx)
+
+    # Try to prepend compute-budget instructions for extra priority (best-effort)
+    try:
+        # Try solders compute budget
+        try:
+            from solders.programs.compute_budget import ComputeBudgetProgram
+            limit_ix = ComputeBudgetProgram.set_compute_unit_limit(200_000)
+            price_ix = ComputeBudgetProgram.set_compute_unit_price(priority_fee_value)
+            if hasattr(tx1.message, 'instructions'):
+                tx1.message.instructions = [limit_ix, price_ix] + list(tx1.message.instructions)
+        except Exception:
+            # Try solana-py compute budget
+            try:
+                from solana.compute_budget import ComputeBudgetProgram
+                limit_ix = ComputeBudgetProgram.set_compute_unit_limit(200_000)
+                price_ix = ComputeBudgetProgram.set_compute_unit_price(priority_fee_value)
+                if hasattr(tx1.message, 'instructions'):
+                    tx1.message.instructions = [limit_ix, price_ix] + list(tx1.message.instructions)
+            except Exception:
+                # If both libs fail, just continue; prioritizationFeeLamports still applied
+                print('⚠️ Could not prepend compute budget instructions (library mismatch). Falling back to prioritizationFee only.')
+    except Exception as e:
+        print('⚠️ Unexpected error while attempting compute budget prepend:', e)
+
+    # Record pre-trade on-chain balance as a fallback if tx metadata is not available
+    usd_spent = float(amount)
+    pre_balance = 0.0
+    try:
+        pre_balance = float(get_position(token))
+    except Exception:
+        pre_balance = 0.0
+
     tx = VersionedTransaction(tx1.message, [KEY])
     txId = http_client.send_raw_transaction(bytes(tx), TxOpts(skip_preflight=True)).value
     print(f"https://solscan.io/tx/{str(txId)}")
-    return str(txId)  # Return the transaction ID for the calling function to use
-    return str(txId)  # Return the transaction ID for the calling function to use
+
+    # Confirm transaction: poll signature status and get_transaction until confirmed/finalized or timeout
+    tx_meta = None
+    confirmed = False
+    for _ in range(30):
+        try:
+            time.sleep(1)
+            # Check signature status first (faster) to detect 'confirmed' or 'finalized'
+            try:
+                sig_status = http_client.get_signature_statuses([txId])
+                val = sig_status.get('result', {}).get('value', [None])[0]
+                if val and val.get('confirmationStatus') in ('confirmed', 'finalized'):
+                    confirmed = True
+                    # Try to fetch transaction metadata; if not present yet, we'll still proceed with fallback
+                    try:
+                        resp = http_client.get_transaction(txId)
+                        if resp and resp.get('result'):
+                            tx_meta = resp.get('result', {}).get('meta', {}) or {}
+                    except Exception:
+                        tx_meta = None
+                    break
+            except Exception:
+                # If get_signature_statuses isn't available or fails, fall back to get_transaction
+                pass
+
+            # As a secondary check, attempt to fetch full transaction (may contain pre/post balances)
+            try:
+                resp = http_client.get_transaction(txId)
+                if resp and resp.get('result'):
+                    tx_meta = resp.get('result', {}).get('meta', {}) or {}
+                    confirmed = True
+                    break
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    if not confirmed:
+        print(f"⚠️ Transaction {txId} not confirmed within timeout; will fallback to balance polling to infer tokens received.")
+
+    # Verify transaction structure (debugging / dry-run helper)
+    try:
+        verify_transaction_structure(swapTx)
+    except Exception:
+        pass
+
+    tokens_received = 0.0
+
+    # First try to extract token change from transaction metadata (pre/post token balances)
+    try:
+        if tx_meta:
+            pre_toks = tx_meta.get('preTokenBalances', []) or []
+            post_toks = tx_meta.get('postTokenBalances', []) or []
+
+            # helper to find uiAmount for our token mint
+            def find_uiamount(lst, mint):
+                for entry in lst:
+                    try:
+                        if entry.get('mint') == mint:
+                            ui = entry.get('uiTokenAmount', {}).get('uiAmount')
+                            if ui is None:
+                                # older fields may use 'uiAmountString' or raw amount
+                                ui = float(entry.get('uiTokenAmount', {}).get('amount', 0))
+                            return float(ui)
+                    except Exception:
+                        continue
+                return None
+
+            pre_ui = find_uiamount(pre_toks, token)
+            post_ui = find_uiamount(post_toks, token)
+            if pre_ui is not None and post_ui is not None:
+                tokens_received = max(0.0, float(post_ui) - float(pre_ui))
+    except Exception:
+        tokens_received = 0.0
+
+    # Fallback: if metadata not present or didn't show the token change, poll balances
+    if tokens_received == 0.0:
+        post_balance = pre_balance
+        for _ in range(10):
+            try:
+                time.sleep(2)
+                post_balance = float(get_position(token))
+                if post_balance > pre_balance:
+                    break
+            except Exception:
+                pass
+        tokens_received = max(0.0, post_balance - pre_balance)
+
+    # Update persisted positions state with precise entry price and amount (immediately)
+    try:
+        positions = load_positions_state()
+        pos = positions.get(token, {})
+        prev_amt = float(pos.get('amount', 0) or 0)
+        prev_entry = float(pos.get('entry_price', 0) or 0)
+
+        if tokens_received > 0:
+            new_amt = prev_amt + tokens_received
+            if prev_amt > 0 and prev_entry > 0:
+                new_entry = (prev_entry * prev_amt + usd_spent) / new_amt
+            else:
+                new_entry = usd_spent / tokens_received
+
+            pos['amount'] = new_amt
+            pos['entry_price'] = new_entry
+            # initialize highest_price_seen to the true entry price if not set or lower
+            pos['highest_price_seen'] = float(pos.get('highest_price_seen', new_entry))
+            if pos['highest_price_seen'] < new_entry:
+                pos['highest_price_seen'] = new_entry
+            pos.setdefault('de_risked', False)
+            positions[token] = pos
+            save_positions_state(positions)
+            # Validation log
+            try:
+                print(f"✅ TRADE VERIFIED | Tokens: {tokens_received} | True Entry: ${round(new_entry,6)} | Priority: {mode}")
+            except Exception:
+                print(f"✅ TRADE VERIFIED | Tokens: {tokens_received} | True Entry: ${new_entry} | Priority: {mode}")
+        else:
+            # No tokens detected; still persist pre-existing state if absent
+            pos.setdefault('amount', prev_amt)
+            pos.setdefault('entry_price', prev_entry)
+            pos.setdefault('highest_price_seen', prev_entry or 0)
+            pos.setdefault('de_risked', False)
+            positions[token] = pos
+            save_positions_state(positions)
+    except Exception as e:
+        print('⚠️ Failed to update positions state after buy:', e)
+
+    return str(txId)
 
 
 
-def market_sell(QUOTE_TOKEN, amount, slippage):
+def market_sell(QUOTE_TOKEN, amount, slippage=None, mode: str = 'standard'):
+    """
+    Market sell via Jupiter Lite. QUOTE_TOKEN is the input mint (token to sell).
+    mode: 'standard' or 'panic' — panic increases priority fee and attempts compute-budget.
+    slippage is optional BPS.
+    """
     import requests
-    import sys
     import json
     import base64
     from solders.keypair import Keypair
@@ -286,65 +655,71 @@ def market_sell(QUOTE_TOKEN, amount, slippage):
     KEY = Keypair.from_base58_string(os.getenv("SOLANA_PRIVATE_KEY"))
     if not KEY:
         raise ValueError("🚨 SOLANA_PRIVATE_KEY not found in environment variables!")
-    #print('key success')
-    SLIPPAGE = slippage  # 5000 is 50%, 500 is 5% and 50 is .5%
 
-    # token would be usdc for sell orders cause we are selling
+    SLIPPAGE = slippage if slippage is not None else 500
+
+    # token would be usdc for sell orders because we are selling into USDC
     token = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"  # USDC
 
     http_client = Client(os.getenv("RPC_ENDPOINT"))
     if not http_client:
         raise ValueError("🚨 RPC_ENDPOINT not found in environment variables!")
-    print('http client success')
 
     # Use Jupiter Lite API (faster and more efficient)
     quote = requests.get(f'https://lite-api.jup.ag/swap/v1/quote?inputMint={QUOTE_TOKEN}&outputMint={token}&amount={amount}&slippageBps={SLIPPAGE}').json()
-    #print(quote)
+
+    priority_fee_value = get_priority_fee(mode)
+
     txRes = requests.post('https://lite-api.jup.ag/swap/v1/swap',
                           headers={"Content-Type": "application/json"},
                           data=json.dumps({
                               "quoteResponse": quote,
                               "userPublicKey": str(KEY.pubkey()),
-                              "prioritizationFeeLamports": PRIORITY_FEE
+                              "prioritizationFeeLamports": priority_fee_value
                           })).json()
-    #print(txRes)
+
     swapTx = base64.b64decode(txRes['swapTransaction'])
-    #print(swapTx)
     tx1 = VersionedTransaction.from_bytes(swapTx)
-    #print(tx1)
+
+    # Try to prepend compute-budget instructions for extra priority (best-effort)
+    try:
+        try:
+            from solders.programs.compute_budget import ComputeBudgetProgram
+            limit_ix = ComputeBudgetProgram.set_compute_unit_limit(200_000)
+            price_ix = ComputeBudgetProgram.set_compute_unit_price(priority_fee_value)
+            if hasattr(tx1.message, 'instructions'):
+                tx1.message.instructions = [limit_ix, price_ix] + list(tx1.message.instructions)
+        except Exception:
+            try:
+                from solana.compute_budget import ComputeBudgetProgram
+                limit_ix = ComputeBudgetProgram.set_compute_unit_limit(200_000)
+                price_ix = ComputeBudgetProgram.set_compute_unit_price(priority_fee_value)
+                if hasattr(tx1.message, 'instructions'):
+                    tx1.message.instructions = [limit_ix, price_ix] + list(tx1.message.instructions)
+            except Exception:
+                print('⚠️ Could not prepend compute budget instructions (library mismatch). Falling back to prioritizationFee only.')
+    except Exception as e:
+        print('⚠️ Unexpected error while attempting compute budget prepend:', e)
+
     tx = VersionedTransaction(tx1.message, [KEY])
-    #print(tx)
     txId = http_client.send_raw_transaction(bytes(tx), TxOpts(skip_preflight=True)).value
     print(f"https://solscan.io/tx/{str(txId)}")
-    return str(txId)  # Return the transaction ID for the calling function to use
+    return str(txId)
 
 
 
-def get_time_range():
+def get_time_range(days_back: int = 10):
 
     now = datetime.now()
-    ten_days_earlier = now - timedelta(days=10)
+    earlier = now - timedelta(days=days_back)
     time_to = int(now.timestamp())
-    time_from = int(ten_days_earlier.timestamp())
-    #print(time_from, time_to)
-
+    time_from = int(earlier.timestamp())
     return time_from, time_to
 
-import math
+
 def round_down(value, decimals):
     factor = 10 ** decimals
     return math.floor(value * factor) / factor
-
-
-def get_time_range(days_back):
-
-    now = datetime.now()
-    ten_days_earlier = now - timedelta(days=days_back)
-    time_to = int(now.timestamp())
-    time_from = int(ten_days_earlier.timestamp())
-    #print(time_from, time_to)
-
-    return time_from, time_to
 
 def get_data(address, days_back_4_data, timeframe):
     time_from, time_to = get_time_range(days_back_4_data)
@@ -382,7 +757,7 @@ def get_data(address, days_back_4_data, timeframe):
 
         # Pad if needed
         if len(df) < 40:
-            print(f"🌙 MoonDev Alert: Padding data to ensure minimum 40 rows for analysis! 🚀")
+            print("🌙 MoonDev Alert: Padding data to ensure minimum 40 rows for analysis! 🚀")
             rows_to_add = 40 - len(df)
             first_row_replicated = pd.concat([df.iloc[0:1]] * rows_to_add, ignore_index=True)
             df = pd.concat([first_row_replicated, df], ignore_index=True)
@@ -463,7 +838,7 @@ def fetch_wallet_token_single(address, token_mint_address):
 
 def token_price(address):
     url = f"https://public-api.birdeye.so/defi/price?address={address}"
-    headers = {"X-API-KEY": BIRDEYE_API_KEY}
+    headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
     response = requests.get(url, headers=headers)
     price_data = response.json()
 
@@ -490,7 +865,7 @@ def get_position(token_mint_address):
     Returns:
     - The balance of the specified token if found, otherwise a message indicating the token is not in the wallet.
     """
-    dataframe = fetch_wallet_token_single(address, token_mint_address)
+    dataframe = fetch_wallet_token_single(config.address, token_mint_address)
 
     #dataframe = pd.read_csv('data/token_per_addy.csv')
 
@@ -521,7 +896,6 @@ def get_position(token_mint_address):
 
 def get_decimals(token_mint_address):
     import requests
-    import base64
     import json
     # Solana Mainnet RPC endpoint
     url = "https://api.mainnet-beta.solana.com/"
@@ -551,127 +925,179 @@ def get_decimals(token_mint_address):
     return decimals
 
 def pnl_close(token_mint_address):
+    '''
+    Staged exits (Moon Bags) — cleaned and hardened.
+    '''
 
-    ''' this will check to see if price is > sell 1, sell 2, sell 3 and sell accordingly '''
+    print(f'checking pnl close to see if time to exit for {token_mint_address[:4]}...')
 
-    print(f'checking pnl close to see if its time to exit for {token_mint_address[:4]}...')
-    # check solana balance
+    # Get current position and price
+    try:
+        balance = get_position(token_mint_address)
+    except Exception as e:
+        print(f'❌ ERROR IN nice_funcs.py: {e}')
+        return
 
+    try:
+        price = token_price(token_mint_address)
+    except Exception as e:
+        print(f'❌ ERROR IN nice_funcs.py: {e}')
+        return
 
-    # if time is on the 5 minute do the balance check, if not grab from data/current_position.csv
-    balance = get_position(token_mint_address)
-
-    # save to data/current_position.csv w/ pandas
-
-    # get current price of token
-    price = token_price(token_mint_address)
+    try:
+        decimals = get_decimals(token_mint_address)
+    except Exception:
+        decimals = 0
 
     usd_value = balance * price
 
-    tp = sell_at_multiple * USDC_SIZE
-    sl = ((1+stop_loss_percentage) * USDC_SIZE)
-    sell_size = balance
-    decimals = 0
-    decimals = get_decimals(token_mint_address)
-    #print(f'for {token_mint_address[-4:]} decimals is {decimals}')
+    # Load or initialize position state
+    positions = load_positions_state()
+    pos_state = positions.get(token_mint_address, {})
 
-    sell_size = int(sell_size * 10 **decimals)
+    if balance > 0 and not pos_state.get('entry_price'):
+        pos_state['entry_price'] = price
+        pos_state['highest_price_seen'] = price
+        pos_state['de_risked'] = False
+        positions[token_mint_address] = pos_state
+        save_positions_state(positions)
 
-    #print(f'bal: {balance} price: {price} usdVal: {usd_value} TP: {tp} sell size: {sell_size} decimals: {decimals}')
+    # Update highest_price_seen
+    if balance > 0 and pos_state:
+        prev_high = pos_state.get('highest_price_seen', price)
+        if price > prev_high:
+            pos_state['highest_price_seen'] = price
+            positions[token_mint_address] = pos_state
+            save_positions_state(positions)
 
-    while usd_value > tp:
+    # Defensive extraction of state values
+    try:
+        entry_price = float(pos_state.get('entry_price', price))
+        de_risked = bool(pos_state.get('de_risked', False))
+        highest_price = float(pos_state.get('highest_price_seen', price))
+    except Exception:
+        entry_price = price
+        de_risked = False
+        highest_price = price
 
+    # Only attempt staged exits if we have a balance
+    if balance > 0:
+        # Stage 1: take 50% at 2x
+        if (not de_risked) and price >= (entry_price * 2):
+            sell_tokens = balance * 0.5
+            sell_units = int(sell_tokens * (10 ** decimals))
+            cprint(f"Stage1: 2x hit for {token_mint_address[:4]} — selling 50% ({sell_tokens} tokens / {sell_units} units)", 'white', 'on_magenta')
+            try:
+                market_sell(token_mint_address, sell_units, None, mode='standard')
+                pos_state['de_risked'] = True
+                positions[token_mint_address] = pos_state
+                save_positions_state(positions)
+                time.sleep(2)
+                balance = get_position(token_mint_address)
+                price = token_price(token_mint_address)
+                usd_value = balance * price
+            except Exception as e:
+                print(f'❌ ERROR IN nice_funcs.py: {e}')
 
-        cprint(f'for {token_mint_address[:4]} value is {usd_value} and tp is {tp} so closing...', 'white', 'on_green')
+        # Stage 2: if already de_risked and price drops 20% from peak
+        elif de_risked:
+            highest_price = float(pos_state.get('highest_price_seen', price))
+            if price <= (highest_price * 0.80):
+                try:
+                    balance = get_position(token_mint_address)
+                except Exception as e:
+                    print(f'❌ ERROR IN nice_funcs.py: {e}')
+                    balance = 0
+
+                sell_tokens = balance
+                sell_units = int(sell_tokens * (10 ** decimals))
+                cprint(f"Stage2: Moon bag trailing triggered for {token_mint_address[:4]} — selling remaining {sell_tokens} tokens ({sell_units} units) in panic mode", 'white', 'on_magenta')
+                try:
+                    market_sell(token_mint_address, sell_units, None, mode='panic')
+                    if token_mint_address in positions:
+                        positions.pop(token_mint_address, None)
+                        save_positions_state(positions)
+                    time.sleep(2)
+                    balance = get_position(token_mint_address)
+                    price = token_price(token_mint_address)
+                    usd_value = balance * price
+                    with open('dont_overtrade.txt', 'a') as file:
+                        file.write(token_mint_address + '\n')
+                except Exception as e:
+                    print(f'❌ ERROR IN nice_funcs.py: {e}')
+
+    # Fallback TP/SL using config values
+    tp = config.sell_at_multiple * config.USDC_SIZE
+    sl = ((1 + config.stop_loss_percentage) * config.USDC_SIZE)
+
+    try:
+        sell_size = int(balance * (10 ** decimals))
+    except Exception:
+        sell_size = 0
+
+    # TP loop
+    while usd_value > tp and sell_size > 0:
+        cprint(
+            f'for {token_mint_address[:4]} value is {usd_value} and tp is {tp} so closing...',
+            'white',
+            'on_green',
+        )
         try:
-
             market_sell(token_mint_address, sell_size)
             cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_green')
             time.sleep(2)
-            market_sell(token_mint_address, sell_size)
-            cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_green')
-            time.sleep(2)
-            market_sell(token_mint_address, sell_size)
-            cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_green')
-            time.sleep(15)
-
-        except:
+        except Exception as e:
+            print(f'❌ ERROR IN nice_funcs.py: {e}')
             cprint('order error.. trying again', 'white', 'on_red')
             time.sleep(2)
 
         balance = get_position(token_mint_address)
         price = token_price(token_mint_address)
         usd_value = balance * price
-        tp = sell_at_multiple * USDC_SIZE
-        sell_size = balance
-        sell_size = int(sell_size * 10 **decimals)
-        print(f'USD Value is {usd_value} | TP is {tp} ')
+        try:
+            sell_size = int(balance * (10 ** decimals))
+        except Exception:
+            sell_size = 0
 
-
-    else:
-        #print(f'for {token_mint_address[-4:]} value is {usd_value} and tp is {tp} so not closing...')
-        hi = 'hi'
-        #time.sleep(10)
-
-    # while usd_value < sl but bigger than .05
-
+    # SL loop
     if usd_value != 0:
-        #print(f'for {token_mint_address[-4:]} value is {usd_value} and sl is {sl} so not closing...')
-
-        while usd_value < sl and usd_value > 0:
-
-            sell_size = balance
-            sell_size = int(sell_size * 10 **decimals)
-
+        while usd_value < sl and usd_value > 0 and sell_size > 0:
             cprint(f'for {token_mint_address[:4]} value is {usd_value} and sl is {sl} so closing as a loss...', 'white', 'on_blue')
-
-            #print(f'for {token_mint_address[-4:]} value is {usd_value} and tp is {tp} so closing...')
             try:
-
-                market_sell(token_mint_address, sell_size)
+                market_sell(token_mint_address, sell_size, None, mode='panic')
                 cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_blue')
                 time.sleep(1)
-                market_sell(token_mint_address, sell_size)
-                cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_blue')
-                time.sleep(1)
-                market_sell(token_mint_address, sell_size)
-                cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_blue')
-                time.sleep(15)
-
-            except:
+            except Exception as e:
+                print(f'❌ ERROR IN nice_funcs.py: {e}')
                 cprint('order error.. trying again', 'white', 'on_red')
-                # time.sleep(7)
 
             balance = get_position(token_mint_address)
             price = token_price(token_mint_address)
             usd_value = balance * price
-            tp = sell_at_multiple * USDC_SIZE
-            sl = ((1+stop_loss_percentage) * USDC_SIZE)
-            sell_size = balance
+            tp = config.sell_at_multiple * config.USDC_SIZE
+            sl = ((1 + config.stop_loss_percentage) * config.USDC_SIZE)
+            try:
+                sell_size = int(balance * (10 ** decimals))
+            except Exception:
+                sell_size = 0
 
-            sell_size = int(sell_size * 10 **decimals)
-            print(f'balance is {balance} and price is {price} and usd_value is {usd_value} and tp is {tp} and sell_size is {sell_size} decimals is {decimals}')
-
-            # break the loop if usd_value is 0
             if usd_value == 0:
-                print(f'successfully closed {token_mint_address[:4]} usd_value is {usd_value} so breaking loop AFTER putting it on my dont_overtrade.txt...')
-                with open('dont_overtrade.txt', 'a') as file:
-                    file.write(token_mint_address + '\n')
+                try:
+                    with open('dont_overtrade.txt', 'a') as file:
+                        file.write(token_mint_address + '\n')
+                except Exception:
+                    pass
                 break
-
-        else:
-            print(f'for {token_mint_address[:4]} value is {usd_value} and tp is {tp} so not closing...')
-            #time.sleep(10)
     else:
         print(f'for {token_mint_address[:4]} value is {usd_value} and tp is {tp} so not closing...')
 
 def chunk_kill(token_mint_address, max_usd_order_size, slippage):
     """Kill a position in chunks"""
-    cprint(f"\n🔪 Moon Dev's AI Agent initiating position exit...", "white", "on_cyan")
+    cprint("\n🔪 Moon Dev's AI Agent initiating position exit...", "white", "on_cyan")
     
     try:
         # Get current position using address from config
-        df = fetch_wallet_token_single(address, token_mint_address)
+        df = fetch_wallet_token_single(config.address, token_mint_address)
         if df.empty:
             cprint("❌ No position found to exit", "white", "on_red")
             return
@@ -695,7 +1121,7 @@ def chunk_kill(token_mint_address, max_usd_order_size, slippage):
                 try:
                     cprint(f"\n💫 Executing sell chunk {i+1}/3...", "white", "on_cyan")
                     sell_size = int(chunk_size * 10**decimals)
-                    market_sell(token_mint_address, sell_size, slippage)
+                    market_sell(token_mint_address, sell_size, slippage, mode='panic')
                     cprint(f"✅ Sell chunk {i+1}/3 complete", "white", "on_green")
                     time.sleep(2)  # Small delay between chunks
                 except Exception as e:
@@ -703,7 +1129,7 @@ def chunk_kill(token_mint_address, max_usd_order_size, slippage):
             
             # Check remaining position
             time.sleep(5)  # Wait for blockchain to update
-            df = fetch_wallet_token_single(address, token_mint_address)
+            df = fetch_wallet_token_single(config.address, token_mint_address)
             if df.empty:
                 cprint("\n✨ Position successfully closed!", "white", "on_green")
                 return
@@ -752,7 +1178,8 @@ def kill_switch(token_mint_address):
     else:
         sell_size = 10000/price
 
-    tp = sell_at_multiple * USDC_SIZE
+    # compute TP (used later by loop) - avoid unused-assignment here
+    # tp value will be recomputed inside the TP loop when needed
 
     # round to 2 decimals
     sell_size = round_down(sell_size, 2)
@@ -769,29 +1196,29 @@ def kill_switch(token_mint_address):
         #print(f'for {token_mint_address[-4:]} closing position cause exit all positions is set to {EXIT_ALL_POSITIONS} and value is {usd_value} and tp is {tp} so closing...')
         try:
 
-            market_sell(token_mint_address, sell_size)
+            market_sell(token_mint_address, sell_size, None, mode='panic')
             cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_blue')
             time.sleep(1)
-            market_sell(token_mint_address, sell_size)
+            market_sell(token_mint_address, sell_size, None, mode='panic')
             cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_blue')
             time.sleep(1)
-            market_sell(token_mint_address, sell_size)
+            market_sell(token_mint_address, sell_size, None, mode='panic')
             cprint(f'just made an order {token_mint_address[:4]} selling {sell_size} ...', 'white', 'on_blue')
             time.sleep(15)
 
-        except:
+        except Exception as e:
+            print(f'❌ ERROR IN nice_funcs.py: {e}')
             cprint('order error.. trying again', 'white', 'on_red')
             # time.sleep(7)
 
         balance = get_position(token_mint_address)
         price = token_price(token_mint_address)
         usd_value = balance * price
-        tp = sell_at_multiple * USDC_SIZE
 
         if usd_value < 10000:
             sell_size = balance
         else:
-            sell_size = 10000/price
+            sell_size = 10000 / price
 
         # down downwards to 2 decimals
         sell_size = round_down(sell_size, 2)
@@ -799,9 +1226,8 @@ def kill_switch(token_mint_address):
         decimals = 0
         decimals = get_decimals(token_mint_address)
         #print(f'xxxxxxxxx for {token_mint_address[-4:]} decimals is {decimals}')
-        sell_size = int(sell_size * 10 **decimals)
+        sell_size = int(sell_size * 10 ** decimals)
         print(f'balance is {balance} and usd_value is {usd_value} EXIT ALL POSITIONS TRUE and sell_size is {sell_size} decimals is {decimals}')
-
 
     else:
         print(f'for {token_mint_address[:4]} value is {usd_value} ')
@@ -812,15 +1238,15 @@ def kill_switch(token_mint_address):
 def close_all_positions():
 
     # get all positions
-    open_positions = fetch_wallet_holdings_og(address)
+    open_positions = fetch_wallet_holdings_og(config.address)
 
     # loop through all positions and close them getting the mint address from Mint Address column
     for index, row in open_positions.iterrows():
         token_mint_address = row['Mint Address']
 
         # Check if the current token mint address is the USDC contract address
-        cprint(f'this is the token mint address {token_mint_address} this is don not trade list {dont_trade_list}', 'white', 'on_magenta')
-        if token_mint_address in dont_trade_list:
+        cprint(f'this is the token mint address {token_mint_address} this is don not trade list {config.dont_trade_list}', 'white', 'on_magenta')
+        if token_mint_address in config.dont_trade_list:
             print(f'Skipping kill switch for USDC contract at {token_mint_address}')
             continue  # Skip the rest of the loop for this iteration
 
@@ -870,8 +1296,8 @@ def supply_demand_zones(token_address, timeframe, limit):
     #print(df)
 
 
-    sd_df[f'dz'] = [supp_lo, supp]
-    sd_df[f'sz'] = [res_hi, resis]
+    sd_df['dz'] = [supp_lo, supp]
+    sd_df['sz'] = [res_hi, resis]
 
     print('here are moons supply and demand zones')
     #print(sd_df)
@@ -884,78 +1310,84 @@ def elegant_entry(symbol, buy_under):
     pos = get_position(symbol)
     price = token_price(symbol)
     pos_usd = pos * price
-    size_needed = usd_size - pos_usd
-    if size_needed > max_usd_order_size: chunk_size = max_usd_order_size
-    else: chunk_size = size_needed
+    size_needed = config.usd_size - pos_usd
+    if size_needed > config.max_usd_order_size:
+        chunk_size = config.max_usd_order_size
+    else:
+        chunk_size = size_needed
 
     chunk_size = int(chunk_size * 10**6)
     chunk_size = str(chunk_size)
 
     print(f'chunk_size: {chunk_size}')
 
-    if pos_usd > (.97 * usd_size):
+    if pos_usd > (.97 * config.usd_size):
         print('position filled')
-        time.sleep(10)
+        time.sleep(config.tx_sleep)
 
     # add debug prints for next while
     print(f'position: {round(pos,2)} price: {round(price,8)} pos_usd: ${round(pos_usd,2)}')
     print(f'buy_under: {buy_under}')
-    while pos_usd < (.97 * usd_size) and (price < buy_under):
+    while pos_usd < (.97 * config.usd_size) and (price < buy_under):
 
         print(f'position: {round(pos,2)} price: {round(price,8)} pos_usd: ${round(pos_usd,2)}')
 
         try:
 
-            for i in range(orders_per_open):
-                market_buy(symbol, chunk_size, slippage)
+            for i in range(config.orders_per_open):
+                market_buy(symbol, chunk_size, config.slippage)
                 # cprint green background black text
                 cprint(f'chunk buy submitted of {symbol[:4]} sz: {chunk_size} you my dawg moon dev', 'white', 'on_blue')
                 time.sleep(1)
 
-            time.sleep(tx_sleep)
+            time.sleep(config.tx_sleep)
 
             pos = get_position(symbol)
             price = token_price(symbol)
             pos_usd = pos * price
-            size_needed = usd_size - pos_usd
-            if size_needed > max_usd_order_size: chunk_size = max_usd_order_size
-            else: chunk_size = size_needed
+            size_needed = config.usd_size - pos_usd
+            if size_needed > config.max_usd_order_size:
+                chunk_size = config.max_usd_order_size
+            else:
+                chunk_size = size_needed
             chunk_size = int(chunk_size * 10**6)
             chunk_size = str(chunk_size)
-
-        except:
-
+        except Exception as e:
+            print(f'❌ ERROR IN nice_funcs.py: {e}')
             try:
-                cprint(f'trying again to make the order in 30 seconds.....', 'light_blue', 'on_light_magenta')
+                cprint('trying again to make the order in 30 seconds.....', 'light_blue', 'on_light_magenta')
                 time.sleep(30)
-                for i in range(orders_per_open):
-                    market_buy(symbol, chunk_size, slippage)
-                    # cprint green background black text
+                for i in range(config.orders_per_open):
+                    market_buy(symbol, chunk_size, config.slippage)
                     cprint(f'chunk buy submitted of {symbol[:4]} sz: {chunk_size} you my dawg moon dev', 'white', 'on_blue')
                     time.sleep(1)
 
-                time.sleep(tx_sleep)
+                time.sleep(config.tx_sleep)
                 pos = get_position(symbol)
                 price = token_price(symbol)
                 pos_usd = pos * price
-                size_needed = usd_size - pos_usd
-                if size_needed > max_usd_order_size: chunk_size = max_usd_order_size
-                else: chunk_size = size_needed
+                size_needed = config.usd_size - pos_usd
+                if size_needed > config.max_usd_order_size:
+                    chunk_size = config.max_usd_order_size
+                else:
+                    chunk_size = size_needed
                 chunk_size = int(chunk_size * 10**6)
                 chunk_size = str(chunk_size)
 
-
-            except:
-                cprint(f'Final Error in the buy, restart needed', 'white', 'on_red')
+            except Exception as e:
+                print(f'❌ ERROR IN nice_funcs.py: {e}')
+                cprint('Final Error in the buy, restart needed', 'white', 'on_red')
                 time.sleep(10)
                 break
 
         pos = get_position(symbol)
         price = token_price(symbol)
         pos_usd = pos * price
-        size_needed = usd_size - pos_usd
-        if size_needed > max_usd_order_size: chunk_size = max_usd_order_size
-        else: chunk_size = size_needed
+        size_needed = config.usd_size - pos_usd
+        if size_needed > config.max_usd_order_size:
+            chunk_size = config.max_usd_order_size
+        else:
+            chunk_size = size_needed
         chunk_size = int(chunk_size * 10**6)
         chunk_size = str(chunk_size)
 
@@ -967,23 +1399,25 @@ def breakout_entry(symbol, BREAKOUT_PRICE):
     price = token_price(symbol)
     price = float(price)
     pos_usd = pos * price
-    size_needed = usd_size - pos_usd
-    if size_needed > max_usd_order_size: chunk_size = max_usd_order_size
-    else: chunk_size = size_needed
+    size_needed = config.usd_size - pos_usd
+    if size_needed > config.max_usd_order_size:
+        chunk_size = config.max_usd_order_size
+    else:
+        chunk_size = size_needed
 
     chunk_size = int(chunk_size * 10**6)
     chunk_size = str(chunk_size)
 
     print(f'chunk_size: {chunk_size}')
 
-    if pos_usd > (.97 * usd_size):
+    if pos_usd > (.97 * config.usd_size):
         print('position filled')
-        time.sleep(10)
+        time.sleep(config.tx_sleep)
 
     # add debug prints for next while
     print(f'position: {round(pos,2)} price: {round(price,8)} pos_usd: ${round(pos_usd,2)}')
     print(f'breakoutpurce: {BREAKOUT_PRICE}')
-    while pos_usd < (.97 * usd_size) and (price > BREAKOUT_PRICE):
+    while pos_usd < (.97 * config.usd_size) and (price > BREAKOUT_PRICE):
 
         print(f'position: {round(pos,2)} price: {round(price,8)} pos_usd: ${round(pos_usd,2)}')
 
@@ -1006,56 +1440,60 @@ def breakout_entry(symbol, BREAKOUT_PRICE):
 
         try:
 
-            for i in range(orders_per_open):
-                market_buy(symbol, chunk_size, slippage)
+            for i in range(config.orders_per_open):
+                market_buy(symbol, chunk_size, config.slippage)
                 # cprint green background black text
                 cprint(f'chunk buy submitted of {symbol[:4]} sz: {chunk_size} you my dawg moon dev', 'white', 'on_blue')
                 time.sleep(1)
-
-            time.sleep(tx_sleep)
+            time.sleep(config.tx_sleep)
 
             pos = get_position(symbol)
             price = token_price(symbol)
             pos_usd = pos * price
-            size_needed = usd_size - pos_usd
-            if size_needed > max_usd_order_size: chunk_size = max_usd_order_size
-            else: chunk_size = size_needed
+            size_needed = config.usd_size - pos_usd
+            if size_needed > config.max_usd_order_size:
+                chunk_size = config.max_usd_order_size
+            else:
+                chunk_size = size_needed
             chunk_size = int(chunk_size * 10**6)
             chunk_size = str(chunk_size)
 
-        except:
-
+        except Exception as e:
+            print(f'❌ ERROR IN nice_funcs.py: {e}')
             try:
-                cprint(f'trying again to make the order in 30 seconds.....', 'light_blue', 'on_light_magenta')
+                cprint('trying again to make the order in 30 seconds.....', 'light_blue', 'on_light_magenta')
                 time.sleep(30)
-                for i in range(orders_per_open):
-                    market_buy(symbol, chunk_size, slippage)
-                    # cprint green background black text
+                for i in range(config.orders_per_open):
+                    market_buy(symbol, chunk_size, config.slippage)
                     cprint(f'chunk buy submitted of {symbol[:4]} sz: {chunk_size} you my dawg moon dev', 'white', 'on_blue')
                     time.sleep(1)
 
-                time.sleep(tx_sleep)
+                time.sleep(config.tx_sleep)
                 pos = get_position(symbol)
                 price = token_price(symbol)
                 pos_usd = pos * price
-                size_needed = usd_size - pos_usd
-                if size_needed > max_usd_order_size: chunk_size = max_usd_order_size
-                else: chunk_size = size_needed
+                size_needed = config.usd_size - pos_usd
+                if size_needed > config.max_usd_order_size:
+                    chunk_size = config.max_usd_order_size
+                else:
+                    chunk_size = size_needed
                 chunk_size = int(chunk_size * 10**6)
                 chunk_size = str(chunk_size)
 
-
-            except:
-                cprint(f'Final Error in the buy, restart needed', 'white', 'on_red')
+            except Exception as e:
+                print(f'❌ ERROR IN nice_funcs.py: {e}')
+                cprint('Final Error in the buy, restart needed', 'white', 'on_red')
                 time.sleep(10)
                 break
 
         pos = get_position(symbol)
         price = token_price(symbol)
         pos_usd = pos * price
-        size_needed = usd_size - pos_usd
-        if size_needed > max_usd_order_size: chunk_size = max_usd_order_size
-        else: chunk_size = size_needed
+        size_needed = config.usd_size - pos_usd
+        if size_needed > config.max_usd_order_size:
+            chunk_size = config.max_usd_order_size
+        else:
+            chunk_size = size_needed
         chunk_size = int(chunk_size * 10**6)
         chunk_size = str(chunk_size)
 
@@ -1072,7 +1510,7 @@ def ai_entry(symbol, amount):
     price = token_price(symbol)
     pos_usd = pos * price
     
-    cprint(f"🎯 Target allocation: ${target_size:.2f} USD (max 30% of ${usd_size})", "white", "on_blue")
+    cprint(f"🎯 Target allocation: ${target_size:.2f} USD (max 30% of ${config.usd_size})", "white", "on_blue")
     cprint(f"📊 Current position: ${pos_usd:.2f} USD", "white", "on_blue")
     
     # Check if we're already at or above target
@@ -1087,27 +1525,27 @@ def ai_entry(symbol, amount):
         return
         
     # For order execution, we'll chunk into max_usd_order_size pieces
-    if size_needed > max_usd_order_size: 
-        chunk_size = max_usd_order_size
-    else: 
+    if size_needed > config.max_usd_order_size:
+        chunk_size = config.max_usd_order_size
+    else:
         chunk_size = size_needed
 
     chunk_size = int(chunk_size * 10**6)
     chunk_size = str(chunk_size)
     
-    cprint(f"💫 Entry chunk size: {chunk_size} (chunking ${size_needed:.2f} into ${max_usd_order_size:.2f} orders)", "white", "on_blue")
+    cprint(f"💫 Entry chunk size: {chunk_size} (chunking ${size_needed:.2f} into ${config.max_usd_order_size:.2f} orders)", "white", "on_blue")
 
     while pos_usd < (target_size * 0.97):
         cprint(f"🤖 AI Agent executing entry for {symbol[:8]}...", "white", "on_blue")
         print(f"Position: {round(pos,2)} | Price: {round(price,8)} | USD Value: ${round(pos_usd,2)}")
 
         try:
-            for i in range(orders_per_open):
-                market_buy(symbol, chunk_size, slippage)
-                cprint(f"🚀 AI Agent placed order {i+1}/{orders_per_open} for {symbol[:8]}", "white", "on_blue")
+            for i in range(config.orders_per_open):
+                market_buy(symbol, chunk_size, config.slippage)
+                cprint(f"🚀 AI Agent placed order {i+1}/{config.orders_per_open} for {symbol[:8]}", "white", "on_blue")
                 time.sleep(1)
 
-            time.sleep(tx_sleep)
+            time.sleep(config.tx_sleep)
             
             # Update position info
             pos = get_position(symbol)
@@ -1124,23 +1562,23 @@ def ai_entry(symbol, amount):
                 break
                 
             # Determine next chunk size
-            if size_needed > max_usd_order_size: 
-                chunk_size = max_usd_order_size
-            else: 
+            if size_needed > config.max_usd_order_size:
+                chunk_size = config.max_usd_order_size
+            else:
                 chunk_size = size_needed
             chunk_size = int(chunk_size * 10**6)
             chunk_size = str(chunk_size)
-
         except Exception as e:
+            print(f'❌ ERROR IN nice_funcs.py: {e}')
             try:
                 cprint("🔄 AI Agent retrying order in 30 seconds...", "white", "on_blue")
                 time.sleep(30)
-                for i in range(orders_per_open):
-                    market_buy(symbol, chunk_size, slippage)
-                    cprint(f"🚀 AI Agent retry order {i+1}/{orders_per_open} for {symbol[:8]}", "white", "on_blue")
+                for i in range(config.orders_per_open):
+                    market_buy(symbol, chunk_size, config.slippage)
+                    cprint(f"🚀 AI Agent retry order {i+1}/{config.orders_per_open} for {symbol[:8]}", "white", "on_blue")
                     time.sleep(1)
 
-                time.sleep(tx_sleep)
+                time.sleep(config.tx_sleep)
                 pos = get_position(symbol)
                 price = token_price(symbol)
                 pos_usd = pos * price
@@ -1152,14 +1590,15 @@ def ai_entry(symbol, amount):
                 if size_needed <= 0:
                     break
                     
-                if size_needed > max_usd_order_size: 
-                    chunk_size = max_usd_order_size
-                else: 
+                if size_needed > config.max_usd_order_size:
+                    chunk_size = config.max_usd_order_size
+                else:
                     chunk_size = size_needed
                 chunk_size = int(chunk_size * 10**6)
                 chunk_size = str(chunk_size)
 
-            except:
+            except Exception as e:
+                print(f'❌ ERROR IN nice_funcs.py: {e}')
                 cprint("❌ AI Agent encountered critical error, manual intervention needed", "white", "on_red")
                 return
 
@@ -1169,16 +1608,16 @@ def get_token_balance_usd(token_mint_address):
     """Get the USD value of a token position for Moon Dev's wallet 🌙"""
     try:
         # Get the position data using existing function
-        df = fetch_wallet_token_single(address, token_mint_address)  # Using address from config
-        
+        df = fetch_wallet_token_single(config.address, token_mint_address)  # Using address from config
+
         if df.empty:
             print(f"🔍 No position found for {token_mint_address[:8]}")
             return 0.0
-            
+
         # Get the USD Value from the dataframe
         usd_value = df['USD Value'].iloc[0]
         return float(usd_value)
-        
+
     except Exception as e:
         print(f"❌ Error getting token balance: {str(e)}")
         return 0.0

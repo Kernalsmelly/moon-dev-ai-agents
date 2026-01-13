@@ -23,11 +23,11 @@ import time
 import random
 import requests
 from termcolor import colored
+from src.nice_funcs import is_momentum_reject, send_discord_message
 import pandas as pd
 from pathlib import Path
 import logging
 from rich.console import Console
-from rich import print as rprint
 from playsound import playsound
 
 # Suppress INFO logs
@@ -47,6 +47,8 @@ EXCLUDE_PATTERNS = ['So11111111111111111111111111111111111111112']  # Exclude th
 BASE_URL = "http://api.moondev.com:8000"
 SOUND_ENABLED = True  # Set to True to enable sound effects, False to disable them
 DATA_FOLDER = Path(__file__).parent.parent / "data" / "sniper_agent"  # Folder for token data
+# Freshness: only treat tokens younger than this (seconds) as "fresh" in the live monitor
+MAX_FRESH_AGE_SECONDS = 60
 
 # Animation sequences
 ATTENTION_EMOJIS = [
@@ -92,10 +94,10 @@ class TokenScanner:
         # Only check sound files if sound is enabled
         if self.sound_enabled:
             for sound_file in SOUND_EFFECTS:
-                if not os.path.exists(sound_file):
-                    print(f"⚠️ Warning: Sound file not found: {sound_file}")
-                    self.sound_enabled = False
-                    break
+                        if not os.path.exists(sound_file):
+                            print(f"⚠️ Warning: Sound file not found: {sound_file}")
+                            self.sound_enabled = False
+                            break
                     
     def attention_animation(self):
         """Run an attention-grabbing animation"""
@@ -144,7 +146,7 @@ class TokenScanner:
             df = pd.read_csv(save_path)
             return df
                 
-        except Exception as e:
+        except Exception:
             return None
         
     def filter_tokens(self, df):
@@ -177,7 +179,8 @@ class TokenScanner:
         try:
             time_obj = pd.to_datetime(time_found)
             time_str = time_obj.strftime("%m-%d %H:%M")
-        except:
+        except Exception as e:
+            print(f'❌ ERROR IN src/agents/sniper_agent.py: {e}')
             time_str = time_found
             
         random_emoji = random.choice(LAUNCH_EMOJIS)
@@ -207,7 +210,8 @@ class TokenScanner:
             # Save to CSV
             save_path = self.data_dir / "recent_tokens.csv"
             df.to_csv(save_path, index=False)
-        except Exception:
+        except Exception as e:
+            print(f'❌ ERROR IN src/agents/sniper_agent.py: {e}')
             pass
             
     def show_past_tokens(self):
@@ -252,7 +256,8 @@ class TokenScanner:
         try:
             time_obj = pd.to_datetime(time_found)
             time_str = time_obj.strftime("%m-%d %H:%M")
-        except:
+        except Exception as e:
+            print(f'❌ ERROR IN src/agents/sniper_agent.py: {e}')
             time_str = time_found
             
         random_emoji = random.choice(LAUNCH_EMOJIS)
@@ -268,7 +273,8 @@ class TokenScanner:
             try:
                 import webbrowser
                 webbrowser.open(display_link)
-            except Exception:
+            except Exception as e:
+                print(f'❌ ERROR IN src/agents/sniper_agent.py: {e}')
                 pass
         
         # Play sound first, then do animation
@@ -296,6 +302,14 @@ class TokenScanner:
                 if self.last_check_time and current_time > self.last_check_time:
                     # Get only tokens newer than our last check
                     new_df = df[pd.to_datetime(df['Time Found']) > self.last_check_time]
+
+                    # Apply an explicit freshness filter so we only treat very recent launches
+                    try:
+                        freshness_threshold = pd.Timestamp.now() - pd.Timedelta(seconds=MAX_FRESH_AGE_SECONDS)
+                        new_df = new_df[pd.to_datetime(new_df['Time Found']) >= freshness_threshold]
+                    except Exception:
+                        # If anything goes wrong parsing timestamps, fall back to unfiltered new_df
+                        pass
                     new_tokens = set(new_df['Token Address']) - self.seen_tokens
                     
                     if new_tokens:
@@ -312,13 +326,30 @@ class TokenScanner:
                         # Display new tokens
                         for _, row in new_token_rows.iterrows():
                             try:
+                                # Check Birdeye token_security for rug/momentum rejects
+                                try:
+                                    is_reject, token_name, details = is_momentum_reject(row['Token Address'])
+                                except Exception:
+                                    is_reject, token_name, details = (False, row['Token Address'], {})
+
+                                if is_reject:
+                                    # Notify Discord (if configured) and skip display
+                                    msg = f"⛔️ RUG DETECTED: {token_name} ({row['Token Address']})"
+                                    send_discord_message(msg)
+                                    print(colored(msg, 'white', 'on_red'))
+                                    # Mark seen so we don't repeatedly notify
+                                    self.seen_tokens.add(row['Token Address'])
+                                    continue
+
+                                # Safe to display
                                 self.display_token(
                                     row['Token Address'],
                                     row['Time Found'],
                                     row['Birdeye Link']
                                 )
                                 self.seen_tokens.add(row['Token Address'])
-                            except Exception:
+                            except Exception as e:
+                                print(f'❌ ERROR IN src/agents/sniper_agent.py: {e}')
                                 pass
                         
                         self.last_check_time = current_time
