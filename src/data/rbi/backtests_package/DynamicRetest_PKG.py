@@ -22,7 +22,6 @@ Enjoy the ride, and may the Moon Dev vibes guide you! 🌙✨🚀
 
 import os
 import pandas as pd
-import numpy as np
 import talib
 from backtesting import Backtest, Strategy
 
@@ -79,7 +78,7 @@ class DynamicRetest(Strategy):
                 trend = 'down'
             else:
                 trend = 'none'
-        except Exception as e:
+        except Exception:
             trend = 'none'
         print(f"🚀 Moon Dev: Trend identified as {trend.upper()}!")
 

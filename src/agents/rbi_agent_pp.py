@@ -58,7 +58,6 @@ AI_MAX_TOKENS = 4000
 
 # Import model factory with proper path handling
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-import sys
 sys.path.append(str(PROJECT_ROOT))
 
 try:
@@ -866,7 +865,7 @@ def create_backtest(strategy, strategy_name, thread_id):
             with open(filepath, 'w') as f:
                 f.write(output)
 
-        thread_print(f"🔥 Backtest code saved", thread_id, "green")
+        thread_print("🔥 Backtest code saved", thread_id, "green")
         return output
     return None
 
@@ -889,7 +888,7 @@ def package_check(backtest_code, strategy_name, thread_id):
             with open(filepath, 'w') as f:
                 f.write(output)
 
-        thread_print(f"📦 Package check complete", thread_id, "green")
+        thread_print("📦 Package check complete", thread_id, "green")
         return output
     return None
 
@@ -958,7 +957,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
     This is the worker function for each parallel thread
     """
     try:
-        thread_print(f"🚀 Starting processing", thread_id, attrs=['bold'])
+        thread_print("🚀 Starting processing", thread_id, attrs=['bold'])
 
         # Phase 1: Research
         strategy, strategy_name = research_strategy(idea, thread_id)
@@ -1021,7 +1020,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
                         current_file = BACKTEST_DIR / f"T{thread_id:02d}_{strategy_name}_DEBUG_v{debug_iteration}.py"
                         continue
                     else:
-                        thread_print(f"❌ Max debug iterations reached", thread_id, "red")
+                        thread_print("❌ Max debug iterations reached", thread_id, "red")
                         return {"success": False, "error": "Max debug iterations", "thread_id": thread_id}
                 else:
                     # SUCCESS! Code executes with trades!
@@ -1165,7 +1164,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
 
                 error_signature = error_message.split('\n')[-1] if '\n' in error_message else error_message
                 if error_signature in error_history:
-                    thread_print(f"🔄 Repeated error detected - stopping", thread_id, "red")
+                    thread_print("🔄 Repeated error detected - stopping", thread_id, "red")
                     return {"success": False, "error": "Repeated error", "thread_id": thread_id}
 
                 error_history.append(error_signature)
@@ -1188,7 +1187,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
                     # 🌙 Moon Dev: Update to match new debug file location
                     current_file = BACKTEST_DIR / f"T{thread_id:02d}_{strategy_name}_DEBUG_v{debug_iteration}.py"
                 else:
-                    thread_print(f"❌ Max debug iterations reached", thread_id, "red")
+                    thread_print("❌ Max debug iterations reached", thread_id, "red")
                     return {"success": False, "error": "Max debug iterations", "thread_id": thread_id}
 
         return {"success": True, "thread_id": thread_id}
@@ -1200,7 +1199,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
 def main():
     """Main parallel processing orchestrator"""
     cprint(f"\n{'='*60}", "cyan", attrs=['bold'])
-    cprint(f"🌟 Moon Dev's RBI AI v3.0 PARALLEL PROCESSOR 🚀", "cyan", attrs=['bold'])
+    cprint("🌟 Moon Dev's RBI AI v3.0 PARALLEL PROCESSOR 🚀", "cyan", attrs=['bold'])
     cprint(f"{'='*60}", "cyan", attrs=['bold'])
 
     cprint(f"\n📅 Date: {TODAY_DATE}", "magenta")
@@ -1287,7 +1286,7 @@ def main():
 
     # Final summary
     cprint(f"\n{'='*60}", "cyan", attrs=['bold'])
-    cprint(f"🎉 PARALLEL PROCESSING COMPLETE!", "cyan", attrs=['bold'])
+    cprint("🎉 PARALLEL PROCESSING COMPLETE!", "cyan", attrs=['bold'])
     cprint(f"{'='*60}", "cyan", attrs=['bold'])
 
     cprint(f"\n⏱️  Total time: {total_time:.2f}s", "magenta")

@@ -10,9 +10,7 @@ Key insight: Beat buy & hold by entering before the trend starts
 """
 
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -97,9 +95,9 @@ print("=" * 70)
 print(stats)
 
 # Key metrics
-print(f"\n⭐ Early Bird Performance:")
+print("\n⭐ Early Bird Performance:")
 print(f"💰 Total Return: {stats['Return [%]']:.2f}%")
-print(f"🎯 Buy & Hold Benchmark: 127.77%")
+print("🎯 Buy & Hold Benchmark: 127.77%")
 print(f"📈 Sharpe Ratio: {stats['Sharpe Ratio']:.2f}")
 print(f"📉 Max Drawdown: {stats['Max. Drawdown [%]']:.2f}%")
 print(f"🎯 Win Rate: {stats['Win Rate [%]']:.2f}%")
@@ -107,18 +105,18 @@ print(f"📊 Total Trades: {stats['# Trades']}")
 
 # Success check
 if stats['Return [%]'] > 127.77 and stats['# Trades'] >= 5:
-    print(f"\n🏆 SUCCESS! Early Bird DESTROYS buy & hold!")
+    print("\n🏆 SUCCESS! Early Bird DESTROYS buy & hold!")
     print(f"   Strategy: {stats['Return [%]']:.2f}% vs Buy & Hold: 127.77%")
     print(f"   Trades: {stats['# Trades']} (Required: 5+)")
     print(f"   Outperformance: {stats['Return [%]'] - 127.77:.2f}%")
-    print(f"   🔥 EARLY BIRD VICTORY! 🔥")
+    print("   🔥 EARLY BIRD VICTORY! 🔥")
 elif stats['# Trades'] >= 5:
-    print(f"\n✅ TRADE COUNT MET but return insufficient")
+    print("\n✅ TRADE COUNT MET but return insufficient")
     print(f"   Strategy: {stats['Return [%]']:.2f}% vs Buy & Hold: 127.77%")
     print(f"   Trades: {stats['# Trades']} (Required: 5+)")
     print(f"   Underperformance: {stats['Return [%]'] - 127.77:.2f}%")
 else:
-    print(f"\n❌ Requirements not met")
+    print("\n❌ Requirements not met")
     print(f"   Return: {stats['Return [%]']:.2f}% (Target: >127.77%)")
     print(f"   Trades: {stats['# Trades']} (Required: 5+)")
 

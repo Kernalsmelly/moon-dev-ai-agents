@@ -14,7 +14,6 @@ from datetime import datetime
 from pathlib import Path
 import re
 
-import pandas as pd
 from anthropic import Anthropic
 from dotenv import load_dotenv
 import openai

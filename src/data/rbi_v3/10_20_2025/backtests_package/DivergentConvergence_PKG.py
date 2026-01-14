@@ -1,6 +1,5 @@
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Backtest, Strategy
 
 # Data loading and cleaning
@@ -123,11 +122,11 @@ class DivergentConvergence(Strategy):
             # Dynamic exits
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 return
             if rsi_now > 70:
                 self.position.close()
-                print(f"🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
+                print("🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
                 return
 
             print(f"🌙 Moon Dev: Position held. Bars: {bars_held}, Price: {current_price}, RSI: {rsi_now}, %K: {self.slowk[-1]} ✨")

@@ -1,9 +1,7 @@
 # 🌙 Moon Dev's BandwidthSurge Backtest Implementation
 from backtesting import Strategy, Backtest
-from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 # Data Preparation 🌙
 def load_data(path):

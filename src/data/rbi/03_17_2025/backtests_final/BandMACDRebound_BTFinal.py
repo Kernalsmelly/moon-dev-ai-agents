@@ -2,7 +2,6 @@
 from backtesting import Backtest, Strategy
 import pandas as pd
 import talib
-import numpy as np
 
 class BandMACDRebound(Strategy):
     risk_pct = 0.01  # 1% risk per trade 🌕

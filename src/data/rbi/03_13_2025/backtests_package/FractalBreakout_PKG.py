@@ -1,8 +1,7 @@
 # 🌙 Moon Dev's FractalBreakout Backtest 🌙
-from backtesting import Backtest, Strategy
+from backtesting import Strategy
 import pandas as pd
 import talib
-import numpy as np
 import pandas_ta as ta
 
 # 🚀 DATA PREPARATION 

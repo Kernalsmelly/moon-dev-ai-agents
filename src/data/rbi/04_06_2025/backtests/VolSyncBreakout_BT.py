@@ -1,9 +1,7 @@
 # 🌙 Moon Dev's VolSyncBreakout Backtest 🌙
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 class VolSyncBreakout(Strategy):
     risk_percent = 0.01  # 1% risk per trade

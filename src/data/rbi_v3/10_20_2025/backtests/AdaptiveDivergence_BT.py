@@ -2,7 +2,6 @@ import pandas as pd
 import talib
 import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 from collections import deque
 
 # Data loading and cleaning

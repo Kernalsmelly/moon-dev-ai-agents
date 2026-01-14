@@ -1,8 +1,5 @@
-import pandas as pd
 import yfinance as yf
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
-from backtesting.test import SMA
 import numpy as np
 
 class VWAPVolumeStrategy(Strategy):

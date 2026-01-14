@@ -9,7 +9,6 @@ Have fun & moon on! 🚀✨
 # 1. All necessary imports
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Backtest, Strategy
 
 # 2. Strategy class with indicators, entry/exit logic, and risk management

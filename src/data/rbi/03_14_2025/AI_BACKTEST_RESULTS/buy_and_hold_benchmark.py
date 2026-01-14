@@ -20,7 +20,7 @@ initial_price = data['Close'].iloc[0]
 final_price = data['Close'].iloc[-1]
 buy_hold_return = (final_price - initial_price) / initial_price
 
-print(f"🌙 BTC-USD 15m Buy and Hold Benchmark")
+print("🌙 BTC-USD 15m Buy and Hold Benchmark")
 print(f"Initial Price: ${initial_price:.2f}")
 print(f"Final Price: ${final_price:.2f}")
 print(f"Buy and Hold Return: {buy_hold_return:.4f} ({buy_hold_return*100:.2f}%)")

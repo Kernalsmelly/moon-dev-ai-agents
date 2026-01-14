@@ -59,7 +59,6 @@ from termcolor import cprint
 import sys
 import argparse  # 🌙 Moon Dev: For command-line args
 from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock, Semaphore, Thread
 from queue import Queue
 import requests
@@ -74,7 +73,6 @@ AI_TEMPERATURE = 0.7
 AI_MAX_TOKENS = 16000  # 🌙 Moon Dev: Increased for complete backtest code generation with execution block!
 
 # Import model factory with proper path handling
-import sys
 sys.path.append(str(PROJECT_ROOT))  # 🌙 Moon Dev: Dynamic path that works on any system!
 
 try:
@@ -377,7 +375,7 @@ def extract_content_from_url(idea: str, thread_id: int) -> str:
                 # Red background warning
                 with console_lock:
                     cprint("="*80, "white", "on_red", attrs=['bold'])
-                    cprint(f"⚠️  YOUTUBE EXTRACTION FAILED - Sleeping 30s", "white", "on_red", attrs=['bold'])
+                    cprint("⚠️  YOUTUBE EXTRACTION FAILED - Sleeping 30s", "white", "on_red", attrs=['bold'])
                     cprint("="*80, "white", "on_red", attrs=['bold'])
                 time.sleep(30)
                 return idea  # Return original idea to continue processing
@@ -391,7 +389,7 @@ def extract_content_from_url(idea: str, thread_id: int) -> str:
             # Red background warning
             with console_lock:
                 cprint("="*80, "white", "on_red", attrs=['bold'])
-                cprint(f"⚠️  PDF EXTRACTION FAILED - Sleeping 30s", "white", "on_red", attrs=['bold'])
+                cprint("⚠️  PDF EXTRACTION FAILED - Sleeping 30s", "white", "on_red", attrs=['bold'])
                 cprint("="*80, "white", "on_red", attrs=['bold'])
             time.sleep(30)
             return idea  # Return original idea to continue processing
@@ -1245,7 +1243,7 @@ def create_backtest(strategy, strategy_name, thread_id):
             with open(filepath, 'w') as f:
                 f.write(output)
 
-        thread_print(f"🔥 Backtest code saved", thread_id, "green")
+        thread_print("🔥 Backtest code saved", thread_id, "green")
         return output
     return None
 
@@ -1268,7 +1266,7 @@ def package_check(backtest_code, strategy_name, thread_id):
             with open(filepath, 'w') as f:
                 f.write(output)
 
-        thread_print(f"📦 Package check complete", thread_id, "green")
+        thread_print("📦 Package check complete", thread_id, "green")
         return output
     return None
 
@@ -1340,7 +1338,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
         # 🌙 Moon Dev: Check if date has changed and update folders!
         update_date_folders()
 
-        thread_print(f"🚀 Starting processing", thread_id, attrs=['bold'])
+        thread_print("🚀 Starting processing", thread_id, attrs=['bold'])
 
         # 🌙 Moon Dev: Extract content from PDF/YouTube if URL provided
         processed_idea = extract_content_from_url(idea, thread_id)
@@ -1406,7 +1404,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
                         current_file = BACKTEST_DIR / f"T{thread_id:02d}_{strategy_name}_DEBUG_v{debug_iteration}.py"
                         continue
                     else:
-                        thread_print(f"❌ Max debug iterations reached", thread_id, "red")
+                        thread_print("❌ Max debug iterations reached", thread_id, "red")
                         return {"success": False, "error": "Max debug iterations", "thread_id": thread_id}
                 else:
                     # SUCCESS! Code executes with trades!
@@ -1566,7 +1564,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
 
                 error_signature = error_message.split('\n')[-1] if '\n' in error_message else error_message
                 if error_signature in error_history:
-                    thread_print(f"🔄 Repeated error detected - stopping", thread_id, "red")
+                    thread_print("🔄 Repeated error detected - stopping", thread_id, "red")
                     return {"success": False, "error": "Repeated error", "thread_id": thread_id}
 
                 error_history.append(error_signature)
@@ -1589,7 +1587,7 @@ def process_trading_idea_parallel(idea: str, thread_id: int) -> dict:
                     # 🌙 Moon Dev: Update to match new debug file location
                     current_file = BACKTEST_DIR / f"T{thread_id:02d}_{strategy_name}_DEBUG_v{debug_iteration}.py"
                 else:
-                    thread_print(f"❌ Max debug iterations reached", thread_id, "red")
+                    thread_print("❌ Max debug iterations reached", thread_id, "red")
                     return {"success": False, "error": "Max debug iterations", "thread_id": thread_id}
 
         return {"success": True, "thread_id": thread_id}
@@ -1722,7 +1720,7 @@ def main(ideas_file_path=None, run_name=None):
         IDEAS_FILE = Path(ideas_file_path)
 
     cprint(f"\n{'='*60}", "cyan", attrs=['bold'])
-    cprint(f"🌟 Moon Dev's RBI AI v3.0 PARALLEL PROCESSOR + MULTI-DATA 🚀", "cyan", attrs=['bold'])
+    cprint("🌟 Moon Dev's RBI AI v3.0 PARALLEL PROCESSOR + MULTI-DATA 🚀", "cyan", attrs=['bold'])
     cprint(f"{'='*60}", "cyan", attrs=['bold'])
 
     cprint(f"\n📅 Date: {CURRENT_DATE}", "magenta")
@@ -1739,7 +1737,7 @@ def main(ideas_file_path=None, run_name=None):
     # 🌙 Moon Dev: Show VERY CLEAR configuration mode
     cprint(f"\n{'='*60}", "white", attrs=['bold'])
     if STRATEGIES_FROM_FILES:
-        cprint(f"📁 STRATEGY SOURCE: FILES FROM FOLDER", "green", attrs=['bold'])
+        cprint("📁 STRATEGY SOURCE: FILES FROM FOLDER", "green", attrs=['bold'])
         cprint(f"📂 Folder: {STRATEGIES_FOLDER}", "yellow")
         # Count files
         folder_path = Path(STRATEGIES_FOLDER)
@@ -1747,16 +1745,16 @@ def main(ideas_file_path=None, run_name=None):
             file_count = len([f for f in folder_path.glob('*') if f.suffix.lower() in ['.md', '.txt']])
             cprint(f"📊 Found {file_count} strategy files (.md/.txt)", "cyan", attrs=['bold'])
         else:
-            cprint(f"⚠️  Folder does not exist yet!", "red")
+            cprint("⚠️  Folder does not exist yet!", "red")
     else:
-        cprint(f"📝 STRATEGY SOURCE: ideas.txt (line by line)", "cyan", attrs=['bold'])
+        cprint("📝 STRATEGY SOURCE: ideas.txt (line by line)", "cyan", attrs=['bold'])
         cprint(f"📄 File: {IDEAS_FILE}", "yellow")
-        cprint(f"💡 Classic mode - one strategy per line", "white")
+        cprint("💡 Classic mode - one strategy per line", "white")
     cprint(f"{'='*60}\n", "white", attrs=['bold'])
 
     # Create template if needed
     if not IDEAS_FILE.exists():
-        cprint(f"❌ ideas.txt not found! Creating template...", "red")
+        cprint("❌ ideas.txt not found! Creating template...", "red")
         IDEAS_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(IDEAS_FILE, 'w') as f:
             f.write("# Add your trading ideas here (one per line)\n")
@@ -1767,11 +1765,11 @@ def main(ideas_file_path=None, run_name=None):
         cprint(f"📝 Created template ideas.txt at: {IDEAS_FILE}", "yellow")
 
     # 🌙 Moon Dev: CONTINUOUS QUEUE MODE
-    cprint(f"\n🔄 CONTINUOUS QUEUE MODE ACTIVATED", "cyan", attrs=['bold'])
+    cprint("\n🔄 CONTINUOUS QUEUE MODE ACTIVATED", "cyan", attrs=['bold'])
     if STRATEGIES_FROM_FILES:
-        cprint(f"⏰ Monitoring strategy files in folder every 1 second", "yellow")
+        cprint("⏰ Monitoring strategy files in folder every 1 second", "yellow")
     else:
-        cprint(f"⏰ Monitoring ideas.txt every 1 second", "yellow")
+        cprint("⏰ Monitoring ideas.txt every 1 second", "yellow")
     cprint(f"🧵 {MAX_PARALLEL_THREADS} worker threads ready\n", "yellow")
 
     # Shared queue, queued ideas set, and stats
@@ -1815,11 +1813,11 @@ def main(ideas_file_path=None, run_name=None):
                     cprint(f"💤 AI swarm waiting... ({stats['completed']} total completed, {stats['targets_hit']} targets hit) - {datetime.now().strftime('%I:%M:%S %p')}", "yellow")
 
     except KeyboardInterrupt:
-        cprint(f"\n\n🛑 Shutting down gracefully...", "yellow", attrs=['bold'])
+        cprint("\n\n🛑 Shutting down gracefully...", "yellow", attrs=['bold'])
         stop_flag['stop'] = True
 
         cprint(f"\n{'='*60}", "cyan", attrs=['bold'])
-        cprint(f"📊 FINAL STATS", "cyan", attrs=['bold'])
+        cprint("📊 FINAL STATS", "cyan", attrs=['bold'])
         cprint(f"{'='*60}", "cyan", attrs=['bold'])
         cprint(f"✅ Successful: {stats['successful']}", "green")
         cprint(f"🎯 Targets hit: {stats['targets_hit']}", "green", attrs=['bold'])

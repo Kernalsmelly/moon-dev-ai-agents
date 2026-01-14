@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import pandas as pd
-import numpy as np
-import talib
 import pandas_ta as ta
 
 class DeviantCloud(Strategy):
@@ -49,7 +46,7 @@ class DeviantCloud(Strategy):
                 if risk_per_share > 0:
                     position_size = int(round(risk_amount / risk_per_share))
                     self.sell(size=position_size, sl=stop_loss, tag="moon_short")
-                    print(f"🌙✨ MOON DEV SHORT ACTIVATED ✨🌙")
+                    print("🌙✨ MOON DEV SHORT ACTIVATED ✨🌙")
                     print(f"| Entry: {price:.2f} | SL: {stop_loss:.2f}")
                     print(f"| Size: {position_size} | Risk: {self.risk_per_trade*100}% Equity")
         
@@ -58,7 +55,7 @@ class DeviantCloud(Strategy):
             # Mean reversion exit condition
             if self.data.df['funding_rate'][-1] <= self.funding_mean[-1]:
                 self.position.close()
-                print(f"🚀🌑 MOON DEV EXIT SIGNAL 🌑🚀")
+                print("🚀🌑 MOON DEV EXIT SIGNAL 🌑🚀")
                 print(f"| Exit: {price:.2f} | PnL: {self.position.pl:.2f}")
 
 # 🌙 DATA PREPROCESSING FOR MOON DEV SYSTEMS 🌙

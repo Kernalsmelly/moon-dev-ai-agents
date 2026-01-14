@@ -127,7 +127,7 @@ class FractalCascade(Strategy):
                     self.position.close()
                     self.current_sl = None
                     self.current_tp = None
-                    print(f"🌙 Moon Dev: Long hard exit - below Jaw 😤")
+                    print("🌙 Moon Dev: Long hard exit - below Jaw 😤")
                     return
                 
                 # Fractal trail for long
@@ -158,7 +158,7 @@ class FractalCascade(Strategy):
                     self.position.close()
                     self.current_sl = None
                     self.current_tp = None
-                    print(f"🌙 Moon Dev: Short hard exit - above Jaw 😤")
+                    print("🌙 Moon Dev: Short hard exit - above Jaw 😤")
                     return
                 
                 # Fractal trail for short

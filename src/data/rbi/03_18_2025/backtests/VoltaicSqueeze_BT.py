@@ -51,7 +51,7 @@ class VoltaicSqueeze(Strategy):
                     tp=take_profit,
                     tag="Voltaic Squeeze Entry 🌙"
                 )
-                print(f"🌕 MOON DEV ALERT: Cosmic Alignment Detected! 🚀")
+                print("🌕 MOON DEV ALERT: Cosmic Alignment Detected! 🚀")
                 print(f"   ENTRY: {entry_price:.2f} | SIZE: {position_size}")
                 print(f"   STAR MAP: SL {stop_loss:.2f} | TP {take_profit:.2f} 🌌")
 

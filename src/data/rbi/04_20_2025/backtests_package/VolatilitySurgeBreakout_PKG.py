@@ -1,6 +1,5 @@
 from backtesting import Backtest, Strategy
 import pandas as pd
-import numpy as np
 import talib
 
 # Load and preprocess data

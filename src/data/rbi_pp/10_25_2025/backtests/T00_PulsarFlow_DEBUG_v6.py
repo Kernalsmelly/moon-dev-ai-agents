@@ -168,7 +168,7 @@ class PulsarFlow(Strategy):
         if not self.position:
             # Filters
             if volume < 0.5 * self.avg_volume.iloc[current_i]:
-                print(f"🌙 Moon Dev: Volume too low, skipping entry 📉")
+                print("🌙 Moon Dev: Volume too low, skipping entry 📉")
                 return
             if self.adx.iloc[current_i] < 20:
                 print(f"🌙 Moon Dev: ADX too low ({self.adx.iloc[current_i]:.2f}), choppy market, skipping 🚫")
@@ -195,7 +195,7 @@ class PulsarFlow(Strategy):
                             print(f"🌙 Moon Dev: LONG entry signal at {entry_price:.2f}, size {size}, SL {sl:.2f}, TP {self.take_profit:.2f} 🚀")
                             return
                 else:
-                    print(f"🌙 Moon Dev: No bullish divergence for LONG entry 🚫")
+                    print("🌙 Moon Dev: No bullish divergence for LONG entry 🚫")
             
             # Short entry
             if close < self.ema.iloc[current_i] and self.mfi.iloc[current_i] >= self.overbought:
@@ -218,7 +218,7 @@ class PulsarFlow(Strategy):
                             print(f"🌙 Moon Dev: SHORT entry signal at {entry_price:.2f}, size {size}, SL {sl:.2f}, TP {self.take_profit:.2f} 📉")
                             return
                 else:
-                    print(f"🌙 Moon Dev: No bearish divergence for SHORT entry 🚫")
+                    print("🌙 Moon Dev: No bearish divergence for SHORT entry 🚫")
 
 bt = Backtest(data, PulsarFlow, cash=1000000, commission=0.001, exclusive_orders=True)
 stats = bt.run()

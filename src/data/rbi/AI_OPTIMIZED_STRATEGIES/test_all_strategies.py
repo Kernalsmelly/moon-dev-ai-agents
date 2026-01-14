@@ -2,12 +2,9 @@
 # Comprehensive testing of all three optimized strategies
 
 import pandas as pd
-import numpy as np
 import pandas_ta as ta
 from backtesting import Backtest, Strategy
 import warnings
-import sys
-import os
 from datetime import datetime
 warnings.filterwarnings('ignore')
 
@@ -237,7 +234,7 @@ def test_strategy(strategy_class, strategy_name):
         print(f"🎯 Win Rate: {metrics['Win Rate (%)']:.2f}%")
         
         # Validation
-        print(f"\n✅ VALIDATION:")
+        print("\n✅ VALIDATION:")
         print(f"📊 Trade Count (>100): {'✅ PASS' if metrics['Trade Requirement (>100)'] else '❌ FAIL'}")
         print(f"📈 Sharpe Ratio (>2.0): {'✅ PASS' if metrics['Sharpe Requirement (>2.0)'] else '❌ FAIL'}")
         print(f"🏆 Overall: {'✅ SUCCESS' if metrics['Overall Success'] else '❌ NEEDS WORK'}")
@@ -274,25 +271,25 @@ def run_all_tests():
         results.append(result)
     
     # Generate summary report
-    print(f"\n🌙 COMPREHENSIVE SUMMARY REPORT")
+    print("\n🌙 COMPREHENSIVE SUMMARY REPORT")
     print("=" * 80)
     
     successful_strategies = [r for r in results if r.get('Overall Success', False)]
     failed_strategies = [r for r in results if not r.get('Overall Success', False)]
     
-    print(f"\n📊 OVERALL RESULTS:")
+    print("\n📊 OVERALL RESULTS:")
     print(f"✅ Successful Strategies: {len(successful_strategies)}/3")
     print(f"❌ Failed Strategies: {len(failed_strategies)}/3")
     
     if successful_strategies:
-        print(f"\n🏆 SUCCESSFUL STRATEGIES:")
+        print("\n🏆 SUCCESSFUL STRATEGIES:")
         for result in successful_strategies:
             if 'Error' not in result:
                 print(f"   ✅ {result['Strategy']}: {result['Total Trades']} trades, "
                       f"{result['Sharpe Ratio']:.2f} Sharpe, {result['Total Return (%)']:.2f}% return")
     
     if failed_strategies:
-        print(f"\n⚠️ STRATEGIES NEEDING OPTIMIZATION:")
+        print("\n⚠️ STRATEGIES NEEDING OPTIMIZATION:")
         for result in failed_strategies:
             if 'Error' in result:
                 print(f"   ❌ {result['Strategy']}: ERROR - {result['Error']}")
@@ -305,7 +302,7 @@ def run_all_tests():
                 print(f"   ❌ {result['Strategy']}: {', '.join(issues)}")
     
     # Detailed comparison table
-    print(f"\n📊 DETAILED COMPARISON:")
+    print("\n📊 DETAILED COMPARISON:")
     print("-" * 80)
     print(f"{'Strategy':<25} {'Trades':<8} {'Return%':<9} {'Sharpe':<8} {'Drawdown%':<11} {'Success':<8}")
     print("-" * 80)
@@ -324,7 +321,7 @@ def run_all_tests():
     print("-" * 80)
     
     # Final assessment
-    print(f"\n🎯 FINAL ASSESSMENT:")
+    print("\n🎯 FINAL ASSESSMENT:")
     if len(successful_strategies) == 3:
         print("🏆 MISSION ACCOMPLISHED! All 3 strategies meet requirements!")
         print("   ✅ >100 trades per strategy")
@@ -343,7 +340,7 @@ def run_all_tests():
         print("   ❌ All strategies need parameter adjustment")
         print("   🔄 Consider running individual optimizations")
     
-    print(f"\n🌙 Test Suite completed successfully! ✨")
+    print("\n🌙 Test Suite completed successfully! ✨")
     return results
 
 if __name__ == "__main__":

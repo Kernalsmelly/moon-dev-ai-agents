@@ -87,7 +87,7 @@ class LiquidationPivot(Strategy):
                             tp=self.swing_low[-1],
                             tag="Liquidation Cascade Short")
                     
-                    print(f"🚀 SHORT INITIATED! 🌙")
+                    print("🚀 SHORT INITIATED! 🌙")
                     print(f"   Size: {position_size} units")
                     print(f"   Entry: {self.data.Close[-1]:.2f}")
                     print(f"   SL: {sl_price:.2f} | TP: {self.swing_low[-1]:.2f} ✨")

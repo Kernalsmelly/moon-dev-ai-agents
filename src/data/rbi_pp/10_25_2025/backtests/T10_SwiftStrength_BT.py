@@ -2,7 +2,6 @@ import pandas as pd
 from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import talib
-import numpy as np
 
 # Load and clean data
 path = '/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv'
@@ -54,11 +53,11 @@ class SwiftStrength(Strategy):
         # Exit on opposite MACD crossover
         if self.position.is_long and crossover(self.macdsignal, self.macd):
             self.position.close()
-            print(f"🌙 Moon Dev: Exit long on MACD bearish reversal 🔄")
+            print("🌙 Moon Dev: Exit long on MACD bearish reversal 🔄")
             return
         if self.position.is_short and crossover(self.macd, self.macdsignal):
             self.position.close()
-            print(f"🌙 Moon Dev: Exit short on MACD bullish reversal 🔄")
+            print("🌙 Moon Dev: Exit short on MACD bullish reversal 🔄")
             return
 
         # Entry logic only if no position

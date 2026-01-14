@@ -18,7 +18,6 @@ Required Setup:
 import subprocess
 import json
 from pathlib import Path
-from anthropic import Anthropic
 import openai
 
 # Core imports only
@@ -42,9 +41,7 @@ AI_TEMPERATURE = 0.7
 AI_MAX_TOKENS = 4000
 
 # Import model factory with proper path handling
-from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-import sys
 sys.path.append(str(PROJECT_ROOT))
 
 try:
@@ -808,9 +805,9 @@ def process_trading_idea_with_execution(idea: str) -> None:
 
 def main():
     """Main function - process ideas from file"""
-    cprint(f"\n🌟 Moon Dev's RBI AI v2.0 Starting Up!", "green")
+    cprint("\n🌟 Moon Dev's RBI AI v2.0 Starting Up!", "green")
     cprint(f"📅 Today's Date: {TODAY_DATE}", "magenta")
-    cprint(f"🔄 EXECUTION LOOP ENABLED!", "yellow")
+    cprint("🔄 EXECUTION LOOP ENABLED!", "yellow")
     cprint(f"🐍 Using conda env: {CONDA_ENV}", "cyan")
     cprint(f"🔧 Max debug iterations: {MAX_DEBUG_ITERATIONS}", "cyan")
     

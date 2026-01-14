@@ -1,7 +1,6 @@
 # 🌙 Moon Dev's GammaReversion Backtest 🌙
 import pandas as pd
 import talib
-import pandas_ta as ta
 from backtesting import Backtest, Strategy
 
 # Data Preparation
@@ -61,7 +60,7 @@ class GammaReversion(Strategy):
             position_size = int(round(risk_amount / risk_per_unit))
             
             if position_size > 0:
-                print(f"🌙✨ MOON SHORT SIGNAL DETECTED! ✨🌙")
+                print("🌙✨ MOON SHORT SIGNAL DETECTED! ✨🌙")
                 print(f"🌙 SHORT ENTRY @ {current_close:.2f}")
                 print(f"🚀 Size: {position_size} | SL: {stop_loss:.2f} | TP: {take_profit:.2f}")
                 self.sell(size=position_size, sl=stop_loss, tp=take_profit)

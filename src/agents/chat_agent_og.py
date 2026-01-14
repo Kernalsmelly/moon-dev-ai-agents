@@ -22,10 +22,7 @@ from src.config import *
 from src.models import model_factory
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import json
 import threading
-import shutil
-import itertools
 import random
 import selenium
 from selenium import webdriver
@@ -33,15 +30,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-import base64
-from PIL import Image
-import io
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import csv
-import websocket  # Add this import for Restream WebSocket
-import requests
 
 # Load environment variables from the project root
 env_path = Path(project_root) / '.env'
@@ -210,7 +202,7 @@ class ChatScraper:
                 # Check if we're actually on a live stream
                 current_url = self.driver.current_url
                 if "/live" in current_url or "/watch" in current_url:
-                    cprint(f"✨ Found live stream!", "green")
+                    cprint("✨ Found live stream!", "green")
                     return current_url
                 else:
                     cprint("❌ Channel is not live", "yellow")
@@ -351,7 +343,7 @@ class YouTubeChatMonitor:
                     self._init_fallback()
                 url = self.scraper.get_live_stream_url(channel_id)
                 if url:
-                    cprint(f"✨ Successfully connected to live stream via Selenium!", "green")
+                    cprint("✨ Successfully connected to live stream via Selenium!", "green")
                     cprint(f"🔗 Stream URL: {url[:60]}...", "cyan")
                     return "fallback"
                 else:
@@ -517,7 +509,7 @@ class RestreamChatHandler:
             self.driver.set_page_load_timeout(30)
             
             embed_url = f"https://chat.restream.io/embed?token={self.embed_token}"
-            cprint(f"🌐 Loading chat URL", "cyan")
+            cprint("🌐 Loading chat URL", "cyan")
             self.driver.get(embed_url)
             
             # Wait for page to load

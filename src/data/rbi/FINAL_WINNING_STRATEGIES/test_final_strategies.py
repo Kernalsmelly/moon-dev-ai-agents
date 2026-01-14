@@ -5,10 +5,8 @@
 
 import pandas as pd
 import numpy as np
-from backtesting import Backtest, Strategy
+from backtesting import Backtest
 import warnings
-import sys
-import os
 from datetime import datetime
 import importlib.util
 
@@ -104,7 +102,7 @@ def test_single_strategy(strategy_class, strategy_name, data, run_optimization=T
             'overall_success': stats_default['# Trades'] > 100 and stats_default['Sharpe Ratio'] > 2.0
         }
         
-        print(f"📊 Default Results:")
+        print("📊 Default Results:")
         print(f"   Trades: {default_results['trades']}")
         print(f"   Return: {default_results['return_pct']:.2f}%")
         print(f"   Sharpe: {default_results['sharpe_ratio']:.2f}")
@@ -170,7 +168,7 @@ def test_single_strategy(strategy_class, strategy_name, data, run_optimization=T
                     'overall_success': stats_opt['# Trades'] > 100 and stats_opt['Sharpe Ratio'] > 2.0
                 }
                 
-                print(f"📊 Optimized Results:")
+                print("📊 Optimized Results:")
                 print(f"   Trades: {optimized_results['trades']}")
                 print(f"   Return: {optimized_results['return_pct']:.2f}%")
                 print(f"   Sharpe: {optimized_results['sharpe_ratio']:.2f}")
@@ -184,7 +182,7 @@ def test_single_strategy(strategy_class, strategy_name, data, run_optimization=T
         # Validation summary
         best_results = optimized_results if optimized_results else default_results
         
-        print(f"\n✅ VALIDATION SUMMARY:")
+        print("\n✅ VALIDATION SUMMARY:")
         print(f"📊 Trade Count (>100): {'✅ PASS' if best_results['trade_requirement'] else '❌ FAIL'} ({best_results['trades']} trades)")
         print(f"📈 Sharpe Ratio (>2.0): {'✅ PASS' if best_results['sharpe_requirement'] else '❌ FAIL'} ({best_results['sharpe_ratio']:.2f})")
         print(f"🏆 Overall Success: {'✅ SUCCESS' if best_results['overall_success'] else '❌ NEEDS WORK'}")
@@ -202,10 +200,10 @@ def run_comprehensive_test_suite():
     print("                        COMPREHENSIVE TEST SUITE")
     print("🌙" + "="*78 + "🌙")
     print(f"📅 Test Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"🎯 Target: 100+ trades AND 2.0+ Sharpe ratio")
+    print("🎯 Target: 100+ trades AND 2.0+ Sharpe ratio")
     
     # Load data
-    print(f"\n📊 Loading BTC-USD 15m data...")
+    print("\n📊 Loading BTC-USD 15m data...")
     data = load_btc_data(data_path)
     print(f"✅ Data loaded: {len(data)} bars from {data.index[0]} to {data.index[-1]}")
     
@@ -269,16 +267,16 @@ def run_comprehensive_test_suite():
                 print(f"⚠️ {strategy_config['name']} needs further optimization")
     
     # Generate comprehensive summary report
-    print(f"\n🌙 FINAL COMPREHENSIVE RESULTS SUMMARY")
+    print("\n🌙 FINAL COMPREHENSIVE RESULTS SUMMARY")
     print("=" * 80)
     
-    print(f"\n📈 OVERALL PERFORMANCE:")
+    print("\n📈 OVERALL PERFORMANCE:")
     print(f"✅ Strategies Tested: {len(strategies)}")
     print(f"🏆 Successful Strategies: {len(successful_strategies)}/3")
     print(f"📊 Total Backtests Run: {len(all_results)}")
     
     if successful_strategies:
-        print(f"\n🏆 SUCCESSFUL STRATEGIES (Meeting Both Requirements):")
+        print("\n🏆 SUCCESSFUL STRATEGIES (Meeting Both Requirements):")
         print("-" * 80)
         print(f"{'Strategy':<25} {'Trades':<8} {'Return%':<9} {'Sharpe':<8} {'DrawDn%':<9} {'WinRate%':<9}")
         print("-" * 80)
@@ -293,7 +291,7 @@ def run_comprehensive_test_suite():
         print("-" * 80)
     
     # Detailed comparison table
-    print(f"\n📊 DETAILED STRATEGY COMPARISON:")
+    print("\n📊 DETAILED STRATEGY COMPARISON:")
     print("-" * 90)
     print(f"{'Strategy':<25} {'Type':<10} {'Trades':<8} {'Return%':<9} {'Sharpe':<8} {'MaxDD%':<8} {'Success':<8}")
     print("-" * 90)
@@ -310,7 +308,7 @@ def run_comprehensive_test_suite():
     print("-" * 90)
     
     # Requirements analysis
-    print(f"\n📋 REQUIREMENTS ANALYSIS:")
+    print("\n📋 REQUIREMENTS ANALYSIS:")
     trade_passers = [r for r in all_results if r['trade_requirement']]
     sharpe_passers = [r for r in all_results if r['sharpe_requirement']]
     
@@ -324,13 +322,13 @@ def run_comprehensive_test_suite():
         avg_sharpe = np.mean([r['sharpe_ratio'] for r in all_results if not np.isnan(r['sharpe_ratio'])])
         avg_return = np.mean([r['return_pct'] for r in all_results])
         
-        print(f"\n📊 AVERAGE PERFORMANCE METRICS:")
+        print("\n📊 AVERAGE PERFORMANCE METRICS:")
         print(f"   📊 Average Trades: {avg_trades:.0f}")
         print(f"   📈 Average Sharpe Ratio: {avg_sharpe:.2f}")
         print(f"   💰 Average Return: {avg_return:.2f}%")
     
     # Final assessment
-    print(f"\n🎯 FINAL MISSION ASSESSMENT:")
+    print("\n🎯 FINAL MISSION ASSESSMENT:")
     success_rate = len(successful_strategies) / len(strategies) * 100 if strategies else 0
     
     if len(successful_strategies) == 3:
@@ -355,7 +353,7 @@ def run_comprehensive_test_suite():
         print("   📊 Consider different approaches or market conditions")
     
     # Recommendations
-    print(f"\n💡 STRATEGIC RECOMMENDATIONS:")
+    print("\n💡 STRATEGIC RECOMMENDATIONS:")
     if successful_strategies:
         best_strategy = max(successful_strategies, key=lambda x: x['sharpe_ratio'])
         print(f"🏆 Best Performing Strategy: {best_strategy['strategy']}")
@@ -363,15 +361,15 @@ def run_comprehensive_test_suite():
         print(f"   📊 Trade Count: {best_strategy['trades']}")
         print(f"   💰 Return: {best_strategy['return_pct']:.2f}%")
         
-        print(f"\n🚀 DEPLOYMENT RECOMMENDATIONS:")
+        print("\n🚀 DEPLOYMENT RECOMMENDATIONS:")
         print("   1. Implement successful strategies in paper trading")
         print("   2. Monitor performance in different market conditions")
         print("   3. Consider portfolio diversification with multiple strategies")
         print("   4. Implement robust risk management systems")
         print("   5. Regular performance monitoring and reoptimization")
     
-    print(f"\n🌙 Final Winning Strategies Test Suite completed! ✨")
-    print(f"📊 Total Runtime: Testing completed successfully")
+    print("\n🌙 Final Winning Strategies Test Suite completed! ✨")
+    print("📊 Total Runtime: Testing completed successfully")
     
     return all_results, successful_strategies
 

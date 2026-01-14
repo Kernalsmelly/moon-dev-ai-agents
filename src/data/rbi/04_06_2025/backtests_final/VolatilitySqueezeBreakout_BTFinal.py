@@ -1,6 +1,5 @@
-import pandas as pd
 import numpy as np
-from backtesting import Backtest, Strategy
+from backtesting import Strategy
 import talib
 
 class VolatilitySqueezeBreakout(Strategy):

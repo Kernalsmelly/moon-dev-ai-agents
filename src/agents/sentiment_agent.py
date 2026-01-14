@@ -34,7 +34,6 @@ import sys
 from termcolor import cprint
 import time
 from datetime import datetime, timedelta
-import csv 
 from random import randint
 import pathlib
 import asyncio
@@ -92,7 +91,7 @@ def patched_client(*args, **kwargs):
 httpx.Client = patched_client
 
 # imports 
-from twikit import Client, TooManyRequests, BadRequest
+from twikit import Client, TooManyRequests
 
 class SentimentAgent:
     def __init__(self):

@@ -61,7 +61,7 @@ class VolatilityFade(Strategy):
             # Update trailing stop
             if high > self.highest_high:
                 self.highest_high = high
-                print(f"🌕 New High! Updating SL...")
+                print("🌕 New High! Updating SL...")
 
             new_sl = self.highest_high + 1.5 * self.atr[-1]
             self.position.sl = new_sl

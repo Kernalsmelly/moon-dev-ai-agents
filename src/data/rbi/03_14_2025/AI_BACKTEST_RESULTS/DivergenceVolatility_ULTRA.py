@@ -9,7 +9,6 @@ Target: Beat 127.77% buy & hold return
 import pandas as pd
 import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -319,9 +318,9 @@ print(stats)
 print(f"\n🚀 Strategy Details: {stats._strategy}")
 
 # Key metrics
-print(f"\n⭐ ULTRA Performance Metrics:")
+print("\n⭐ ULTRA Performance Metrics:")
 print(f"💰 Total Return: {stats['Return [%]']:.2f}%")
-print(f"🎯 Buy & Hold Target: 127.77%")
+print("🎯 Buy & Hold Target: 127.77%")
 print(f"📈 Sharpe Ratio: {stats['Sharpe Ratio']:.2f}")
 print(f"📉 Max Drawdown: {stats['Max. Drawdown [%]']:.2f}%")
 print(f"🎯 Win Rate: {stats['Win Rate [%]']:.2f}%")
@@ -329,11 +328,11 @@ print(f"📊 Total Trades: {stats['# Trades']}")
 
 # Success check
 if stats['Return [%]'] > 127.77 and stats['# Trades'] >= 5:
-    print(f"\n🏆 SUCCESS! Strategy beats buy & hold!")
+    print("\n🏆 SUCCESS! Strategy beats buy & hold!")
     print(f"   Strategy: {stats['Return [%]']:.2f}% vs Buy & Hold: 127.77%")
     print(f"   Trades: {stats['# Trades']} (Required: 5+)")
 else:
-    print(f"\n❌ Need more optimization...")
+    print("\n❌ Need more optimization...")
     print(f"   Return: {stats['Return [%]']:.2f}% (Target: >127.77%)")
     print(f"   Trades: {stats['# Trades']} (Required: 5+)")
 

@@ -9,7 +9,6 @@ import webbrowser
 import time
 import psutil
 import os
-import sys
 
 # Configuration Constants
 FILE_PATH = "/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/private_data/bigfollow.csv"

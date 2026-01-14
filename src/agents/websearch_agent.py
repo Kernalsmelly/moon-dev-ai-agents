@@ -535,7 +535,7 @@ def generate_search_query_with_glm():
         # Print API configuration
         print("\n" + "─" * min(70, TERM_WIDTH))
         cprint("📡 API CONFIGURATION:", "white", "on_blue")
-        cprint(f"  Provider: OpenRouter", "yellow")
+        cprint("  Provider: OpenRouter", "yellow")
         cprint(f"  Model: {GLM_MODEL}", "yellow")
         cprint(f"  API Key: {'✓ Configured' if OPENROUTER_API_KEY else '✗ Missing'}", "green" if OPENROUTER_API_KEY else "red")
         print("─" * min(70, TERM_WIDTH))
@@ -696,8 +696,8 @@ def search_web_with_openai(search_query: str):
         # Print API configuration
         print("\n" + "─" * min(70, TERM_WIDTH))
         cprint("📡 API CONFIGURATION:", "white", "on_blue")
-        cprint(f"  Provider: OpenAI", "yellow")
-        cprint(f"  Endpoint: /v1/chat/completions", "yellow")
+        cprint("  Provider: OpenAI", "yellow")
+        cprint("  Endpoint: /v1/chat/completions", "yellow")
         cprint(f"  Model: {OPENAI_WEB_SEARCH_MODEL}", "yellow")
         cprint(f"  API Key: {'✓ Configured' if OPENAI_API_KEY else '✗ Missing'}", "green" if OPENAI_API_KEY else "red")
         print("─" * min(70, TERM_WIDTH))
@@ -942,8 +942,8 @@ def extract_strategies_with_glm(md_filepath: Path, source_url: str = "") -> Opti
         print("\n" + "─" * min(70, TERM_WIDTH))
         cprint("📡 API CONFIGURATION:", "white", "on_blue")
         cprint(f"  Model: {GLM_MODEL}", "yellow")
-        cprint(f"  Temperature: 0.5", "yellow")
-        cprint(f"  Max Tokens: 4000", "yellow")
+        cprint("  Temperature: 0.5", "yellow")
+        cprint("  Max Tokens: 4000", "yellow")
         print("─" * min(70, TERM_WIDTH))
 
         cprint("\n⏳ Sending to GLM for extraction...", "cyan")
@@ -1040,7 +1040,7 @@ def save_extracted_strategy(strategy_data: Dict, original_filename: str, strateg
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
 
-        cprint(f"✅ Saved to final_strategies/", "green")
+        cprint("✅ Saved to final_strategies/", "green")
 
         # Log to index
         with open(FINAL_STRATEGIES_INDEX_CSV, 'a', newline='', encoding='utf-8') as f:

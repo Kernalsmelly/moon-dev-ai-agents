@@ -96,7 +96,7 @@ class DivergentConvergence(Strategy):
 
         # Entry Logic - Added volume, ADX, and dual SMA filters for higher quality setups 📊
         if not self.position and self.div_bar is not None and stoch_converge and current_price > self.sma200[-1] and current_price > self.sma50[-1] and self.sma50[-1] > self.sma200[-1] and self.data.Volume[-1] > (self.vol_mult * self.avg_vol[-1]) and self.adx[-1] > self.adx_threshold:
-            print(f"🌙 Moon Dev: All entry conditions met with filters! Attempting LONG entry... 🚀")
+            print("🌙 Moon Dev: All entry conditions met with filters! Attempting LONG entry... 🚀")
             # Calculate SL: below div low with reduced buffer for better RR
             div_low = self.div_low
             atr_val = self.atr[-1]
@@ -131,7 +131,7 @@ class DivergentConvergence(Strategy):
             # Trend filter exit: Close if below SMA50
             if current_price < self.sma50[-1]:
                 self.position.close()
-                print(f"🌙 Moon Dev: EXIT below SMA50 trend line! 📉")
+                print("🌙 Moon Dev: EXIT below SMA50 trend line! 📉")
                 return
 
             # Trailing stop update for longs - Update SL to capture profits dynamically 🔒
@@ -151,11 +151,11 @@ class DivergentConvergence(Strategy):
             # Dynamic exits - Tightened RSI exit threshold
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 return
             if rsi_now > 75:  # Tightened to >75 for holding through minor overbought 📈
                 self.position.close()
-                print(f"🌙 Moon Dev: RSI Overbought >75! EXIT 📈")
+                print("🌙 Moon Dev: RSI Overbought >75! EXIT 📈")
                 return
 
             print(f"🌙 Moon Dev: Position held. Bars: {bars_held}, Price: {current_price}, RSI: {rsi_now}, %K: {self.slowk[-1]} ✨")

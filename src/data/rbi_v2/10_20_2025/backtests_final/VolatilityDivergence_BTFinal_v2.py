@@ -48,7 +48,7 @@ class VolatilityDivergence(Strategy):
         self.flat_ema = self.I(lambda d, a: d < 0.5 * a, self.ema_diff, self.atr)
         self.consol_count = 0
         self.bars_in_trade = 0
-        print(f"🌙 Moon Dev: Initialized VolatilityDivergence Strategy with talib indicators ✨")
+        print("🌙 Moon Dev: Initialized VolatilityDivergence Strategy with talib indicators ✨")
 
     def next(self):
         if len(self.data) < self.sma200_period + self.div_lookback + self.prev_lookback:
@@ -125,10 +125,10 @@ class VolatilityDivergence(Strategy):
         # EMA cross exit
         if self.position.is_long and self.data.Close[-1] < self.ema9[-1]:
             self.position.close()
-            print(f"🌙 Moon Dev: Exit LONG on EMA9 cross below ❌")
+            print("🌙 Moon Dev: Exit LONG on EMA9 cross below ❌")
         elif self.position.is_short and self.data.Close[-1] > self.ema9[-1]:
             self.position.close()
-            print(f"🌙 Moon Dev: Exit SHORT on EMA9 cross above ❌")
+            print("🌙 Moon Dev: Exit SHORT on EMA9 cross above ❌")
 
     def adjust_trade(self, trade):
         atr_val = self.atr[-1]

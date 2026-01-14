@@ -1,7 +1,6 @@
 from backtesting import Backtest, Strategy
 import talib
 import pandas as pd
-import numpy as np
 
 class BandedStochastic(Strategy):
     risk_per_trade = 0.01  # 1% risk per trade

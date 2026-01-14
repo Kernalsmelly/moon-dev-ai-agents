@@ -71,7 +71,7 @@ class ConfluentHarmonics(Strategy):
                 print(f"🌙 Early Short Exit: ADX Weakening at {self.data.index[-1]} ✨ Price: {price}")
 
         # 🌙 New: Trailing stops to let winners run while protecting gains (only updates in favorable direction)
-        if self.position and not self.position.sl is None:  # Ensure SL exists
+        if self.position and self.position.sl is not None:  # Ensure SL exists
             if self.position.is_long:
                 trail_dist = self.trail_mult * atr_val
                 new_sl = price - trail_dist

@@ -1,4 +1,4 @@
-from backtesting import Backtest, Strategy
+from backtesting import Strategy
 import pandas as pd
 import numpy as np
 import talib

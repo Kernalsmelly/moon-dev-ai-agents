@@ -1,7 +1,6 @@
 from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import pandas as pd
-import numpy as np
 
 class SqueezeSurge(Strategy):
     def init(self):

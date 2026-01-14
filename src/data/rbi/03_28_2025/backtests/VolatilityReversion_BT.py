@@ -1,7 +1,6 @@
 import pandas as pd
 import talib
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover, crossunder
 
 # Data preprocessing
 data_path = "/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv"
@@ -89,7 +88,7 @@ class VolatilityReversion(Strategy):
 
             if exit_condition:
                 self.position.close()
-                print(f"🌙🌙🌙 MOON DEV TRADE CLOSED 🌙🌙🌙")
+                print("🌙🌙🌙 MOON DEV TRADE CLOSED 🌙🌙🌙")
 
 # Run backtest 💻
 bt = Backtest(data, VolatilityReversion, cash=1_000_000, commission=.002)

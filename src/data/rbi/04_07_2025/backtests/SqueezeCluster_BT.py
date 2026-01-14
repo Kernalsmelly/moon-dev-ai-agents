@@ -3,7 +3,6 @@ import pandas as pd
 from backtesting import Backtest, Strategy
 import talib
 import pandas_ta as ta
-import numpy as np
 
 # =====================
 # MOON DEV DATA PREP ✨

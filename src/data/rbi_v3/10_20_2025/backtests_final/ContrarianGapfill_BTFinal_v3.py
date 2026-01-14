@@ -75,7 +75,7 @@ class ContrarianGapfill(Strategy):
             not pd.isna(self.volume_sma[-1]) and self.data.Volume[-1] > self.volume_sma[-1] * self.volume_multiplier):
 
             # Additional debug for met conditions
-            print(f"🌙 All Entry Conditions Met! Proceeding to calculate size... 🚀")
+            print("🌙 All Entry Conditions Met! Proceeding to calculate size... 🚀")
 
             self.gap_level = prev_close
             entry = self.data.Close[-1]

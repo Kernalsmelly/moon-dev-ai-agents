@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
-import pandas_ta as ta
 import warnings
 warnings.filterwarnings('ignore')
 

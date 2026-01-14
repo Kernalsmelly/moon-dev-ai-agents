@@ -96,7 +96,7 @@ class DivergentConvergence(Strategy):
 
         # Entry Logic - Added SMA50 confirmation and ADX filter for better quality setups
         if not self.position and self.div_bar is not None and stoch_converge and current_price > self.sma200[-1] and current_price > self.sma50[-1] and self.adx[-1] > self.adx_threshold:
-            print(f"🌙 Moon Dev: All entry conditions met with trend and ADX filters! Attempting LONG entry... 🚀")
+            print("🌙 Moon Dev: All entry conditions met with trend and ADX filters! Attempting LONG entry... 🚀")
             # Improved SL: Use ATR multiple below entry instead of div low for better risk management in trends
             atr_val = self.atr[-1]
             entry_price = current_price
@@ -135,7 +135,7 @@ class DivergentConvergence(Strategy):
                     # In backtesting, manually enforce trailing by closing if below
                     if current_price < self.trailing_sl:
                         self.position.close()
-                        print(f"🌙 Moon Dev: Trailing SL hit! EXIT 📉")
+                        print("🌙 Moon Dev: Trailing SL hit! EXIT 📉")
                         return
 
             # Time-based exit
@@ -147,11 +147,11 @@ class DivergentConvergence(Strategy):
             # Dynamic exits - Lowered RSI exit to 75 for less aggressive early exits
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 return
             if rsi_now > 75:  # Adjusted from 70 to 75
                 self.position.close()
-                print(f"🌙 Moon Dev: RSI Overbought >75! EXIT 📈")
+                print("🌙 Moon Dev: RSI Overbought >75! EXIT 📈")
                 return
 
             print(f"🌙 Moon Dev: Position held. Bars: {bars_held}, Price: {current_price}, RSI: {rsi_now}, %K: {self.slowk[-1]} ✨ Trailing SL: {self.trailing_sl}")

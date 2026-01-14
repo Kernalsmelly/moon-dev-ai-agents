@@ -66,10 +66,10 @@ class VortexFlow(Strategy):
         else:
             if self.position.is_long and crossover(vi_m, vi_p):
                 self.position.close()
-                print(f"🌙✨ CLOSING LONG: Vortex Reversal Detected!")
+                print("🌙✨ CLOSING LONG: Vortex Reversal Detected!")
             elif self.position.is_short and crossover(vi_p, vi_m):
                 self.position.close()
-                print(f"🌙✨ CLOSING SHORT: Vortex Reversal Detected!")
+                print("🌙✨ CLOSING SHORT: Vortex Reversal Detected!")
 
 # Data preparation
 data = pd.read_csv("/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv")

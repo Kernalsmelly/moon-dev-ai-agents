@@ -10,9 +10,7 @@ Key insight: In a bull market like 2023, be more aggressive than buy & hold
 """
 
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -135,9 +133,9 @@ print("=" * 70)
 print(stats)
 
 # Key metrics
-print(f"\n⭐ Leveraged Trend Performance:")
+print("\n⭐ Leveraged Trend Performance:")
 print(f"💰 Total Return: {stats['Return [%]']:.2f}%")
-print(f"🎯 Buy & Hold Benchmark: 127.77%")
+print("🎯 Buy & Hold Benchmark: 127.77%")
 print(f"📈 Sharpe Ratio: {stats['Sharpe Ratio']:.2f}")
 print(f"📉 Max Drawdown: {stats['Max. Drawdown [%]']:.2f}%")
 print(f"🎯 Win Rate: {stats['Win Rate [%]']:.2f}%")
@@ -145,18 +143,18 @@ print(f"📊 Total Trades: {stats['# Trades']}")
 
 # Success check
 if stats['Return [%]'] > 127.77 and stats['# Trades'] >= 5:
-    print(f"\n🏆 SUCCESS! Trend Momentum ANNIHILATES buy & hold!")
+    print("\n🏆 SUCCESS! Trend Momentum ANNIHILATES buy & hold!")
     print(f"   Strategy: {stats['Return [%]']:.2f}% vs Buy & Hold: 127.77%")
     print(f"   Trades: {stats['# Trades']} (Required: 5+)")
     print(f"   Outperformance: {stats['Return [%]'] - 127.77:.2f}%")
-    print(f"   🔥 TREND MOMENTUM VICTORY! 🔥")
+    print("   🔥 TREND MOMENTUM VICTORY! 🔥")
 elif stats['# Trades'] >= 5:
-    print(f"\n✅ TRADE COUNT MET but return insufficient")
+    print("\n✅ TRADE COUNT MET but return insufficient")
     print(f"   Strategy: {stats['Return [%]']:.2f}% vs Buy & Hold: 127.77%")
     print(f"   Trades: {stats['# Trades']} (Required: 5+)")
     print(f"   Underperformance: {stats['Return [%]'] - 127.77:.2f}%")
 else:
-    print(f"\n❌ Requirements not met")
+    print("\n❌ Requirements not met")
     print(f"   Return: {stats['Return [%]']:.2f}% (Target: >127.77%)")
     print(f"   Trades: {stats['# Trades']} (Required: 5+)")
 

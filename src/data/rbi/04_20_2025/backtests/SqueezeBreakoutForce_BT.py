@@ -72,7 +72,7 @@ class SqueezeBreakoutForce(Strategy):
                 print(f"🌙🚨 COSMIC STOP TRIGGERED! Selling at {self.data.Close[-1]:.2f} ✨")
                 self.position.close()
             elif len(self.data) >= self.entry_bar + 5:
-                print(f"⏳ QUANTUM TIMEWARP EXIT! Holding period expired 🌌")
+                print("⏳ QUANTUM TIMEWARP EXIT! Holding period expired 🌌")
                 self.position.close()
 
 bt = Backtest(data, SqueezeBreakoutForce, cash=1_000_000, exclusive_orders=True)

@@ -2,7 +2,6 @@
 # Three strategies designed to meet both >100 trades and >2.0 Sharpe requirements
 
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
 import warnings
 warnings.filterwarnings('ignore')
@@ -266,7 +265,7 @@ def test_strategy(strategy_class, strategy_name):
     trade_req = stats['# Trades'] > 100
     sharpe_req = stats['Sharpe Ratio'] > 2.0
     
-    print(f"\n✅ VALIDATION:")
+    print("\n✅ VALIDATION:")
     print(f"📊 Trades (>100): {'✅ PASS' if trade_req else '❌ FAIL'} ({stats['# Trades']})")
     print(f"📈 Sharpe (>2.0): {'✅ PASS' if sharpe_req else '❌ FAIL'} ({stats['Sharpe Ratio']:.2f})")
     
@@ -304,20 +303,20 @@ for strategy_class, name in strategies:
     results.append(result)
 
 # Summary
-print(f"\n🌙 FINAL SUMMARY REPORT")
+print("\n🌙 FINAL SUMMARY REPORT")
 print("=" * 70)
 
 successful = [r for r in results if r['success']]
 print(f"✅ Successful Strategies: {len(successful)}/3")
 
 if successful:
-    print(f"\n🏆 SUCCESS STORIES:")
+    print("\n🏆 SUCCESS STORIES:")
     for r in successful:
         print(f"   ✅ {r['name']}: {r['trades']} trades, {r['sharpe']:.2f} Sharpe")
 
-print(f"\n📊 DETAILED RESULTS:")
+print("\n📊 DETAILED RESULTS:")
 for r in results:
     status = "✅ SUCCESS" if r['success'] else "❌ NEEDS WORK"
     print(f"{r['name']}: {r['trades']} trades, {r['sharpe']:.2f} Sharpe - {status}")
 
-print(f"\n🌙 All strategies tested successfully! ✨")
+print("\n🌙 All strategies tested successfully! ✨")

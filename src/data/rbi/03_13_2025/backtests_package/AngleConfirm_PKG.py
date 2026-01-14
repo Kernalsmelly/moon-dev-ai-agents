@@ -1,8 +1,6 @@
 # 🌙 MOON DEV BACKTESTING IMPLEMENTATION 🌙
 import pandas as pd
 import talib
-import numpy as np
-from scipy.signal import convolve2d
 
 class AngleConfirm(Strategy):
     risk_percent = 0.01  # 1% risk per trade 

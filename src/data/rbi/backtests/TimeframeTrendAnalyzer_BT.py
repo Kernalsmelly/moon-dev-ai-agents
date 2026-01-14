@@ -23,8 +23,6 @@ Plenty of Moon Dev-themed debug prints are included for easy tracing! 🌙✨�
 
 import os
 import pandas as pd
-import numpy as np
-import talib
 from backtesting import Backtest, Strategy
 
 # ============================================================================

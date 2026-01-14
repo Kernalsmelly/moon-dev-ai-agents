@@ -2,7 +2,6 @@ import pandas as pd
 from backtesting import Backtest, Strategy
 import talib
 import pandas_ta as ta
-import numpy as np
 
 # Load and preprocess data
 data_path = '/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv'
@@ -62,7 +61,7 @@ class VolatilityFade(Strategy):
             # Update trailing stop
             if high > self.highest_high:
                 self.highest_high = high
-                print(f"🌕 New High! Updating SL...")
+                print("🌕 New High! Updating SL...")
 
             new_sl = self.highest_high + 1.5 * self.atr[-1]
             self.position.sl = new_sl

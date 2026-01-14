@@ -11,14 +11,12 @@ import time
 import requests
 import logging
 from rich.console import Console
-from rich import print as rprint
 from dotenv import load_dotenv
 from termcolor import colored
 import random
 from src.nice_funcs import (
     token_overview, 
     token_security_info,
-    token_creation_info,
     token_price
 )
 

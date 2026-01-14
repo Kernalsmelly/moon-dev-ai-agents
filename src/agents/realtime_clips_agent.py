@@ -130,7 +130,6 @@ Output ONLY the title sentence, nothing else."""
 # END CONFIGURATION
 # ============================================================================
 
-import os
 import sys
 import subprocess
 import json
@@ -140,7 +139,6 @@ from termcolor import cprint
 import re
 import whisper
 import time
-import threading
 import webbrowser
 from urllib.parse import quote
 
@@ -240,7 +238,7 @@ class RealtimeClipsAgent:
             return None
 
         if duration < minutes * 60:
-            cprint(f"❌ Recording too short!", "red")
+            cprint("❌ Recording too short!", "red")
             cprint(f"   Need: {minutes} minutes ({minutes*60} seconds)", "red")
             cprint(f"   Have: {duration/60:.1f} minutes ({duration:.1f} seconds)", "red")
             return None
@@ -271,7 +269,7 @@ class RealtimeClipsAgent:
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            cprint(f"✅ Initial clip extracted successfully!", "green")
+            cprint("✅ Initial clip extracted successfully!", "green")
             return temp_file
         except subprocess.CalledProcessError as e:
             cprint(f"❌ FFmpeg error: {e}", "red")
@@ -284,7 +282,7 @@ class RealtimeClipsAgent:
     def transcribe_clip(self, video_file):
         """Transcribe audio with timestamps using local Whisper."""
         cprint(f"\n{'='*80}", "yellow")
-        cprint(f"STEP 2: TRANSCRIBING AUDIO (LOCAL WHISPER)", "yellow")
+        cprint("STEP 2: TRANSCRIBING AUDIO (LOCAL WHISPER)", "yellow")
         cprint(f"{'='*80}", "yellow")
         cprint("🎤 Running Whisper locally (free, no API costs)...", "cyan")
         cprint("   (This may take 30-60 seconds depending on clip length)", "cyan")
@@ -297,13 +295,13 @@ class RealtimeClipsAgent:
                 word_timestamps=True
             )
 
-            cprint(f"✅ Transcription complete!", "green")
+            cprint("✅ Transcription complete!", "green")
             cprint(f"📝 Total segments: {len(result['segments'])}", "cyan")
             cprint(f"📝 Full text length: {len(result['text'])} characters", "cyan")
 
             # Show first few words
             preview = result['text'][:150]
-            cprint(f"\n📄 Transcript preview (first 150 chars):", "cyan")
+            cprint("\n📄 Transcript preview (first 150 chars):", "cyan")
             cprint(f"   \"{preview}...\"", "yellow")
 
             return result
@@ -342,12 +340,12 @@ class RealtimeClipsAgent:
     def decide_if_worth_clipping(self, transcript_text):
         """Use AI to rate if this segment is worth clipping (1-5 scale)."""
         cprint(f"\n{'='*80}", "yellow")
-        cprint(f"STEP 4: AI RATING - HOW GOOD IS THIS CLIP? (1-5)", "yellow")
+        cprint("STEP 4: AI RATING - HOW GOOD IS THIS CLIP? (1-5)", "yellow")
         cprint(f"{'='*80}", "yellow")
 
         # Show transcript preview
         preview = transcript_text[:300]
-        cprint(f"📄 Transcript preview:", "cyan")
+        cprint("📄 Transcript preview:", "cyan")
         cprint(f"   \"{preview}...\"", "yellow")
         cprint(f"\n🤖 Asking {self.model.model_name} to rate this clip (1-5)...", "cyan")
 
@@ -361,7 +359,7 @@ class RealtimeClipsAgent:
                 cprint("❌ AI returned no response", "red")
                 return False, "AI decision failed"
 
-            cprint(f"\n🤖 AI Response:", "cyan")
+            cprint("\n🤖 AI Response:", "cyan")
             cprint(f"   {result_text}", "yellow")
 
             # Parse JSON response (remove markdown if present)
@@ -395,18 +393,18 @@ class RealtimeClipsAgent:
             cprint(f"❌ AI returned invalid JSON: {e}", "red")
             cprint(f"   Raw response: {result_text}", "red")
             # Default to skipping if AI fails (safer than clipping everything)
-            cprint(f"⚠️  Defaulting to SKIP (AI error)", "yellow")
+            cprint("⚠️  Defaulting to SKIP (AI error)", "yellow")
             return False, "AI decision failed"
         except Exception as e:
             cprint(f"❌ AI decision failed: {e}", "red")
             # Default to skipping if AI fails
-            cprint(f"⚠️  Defaulting to SKIP (AI error)", "yellow")
+            cprint("⚠️  Defaulting to SKIP (AI error)", "yellow")
             return False, "AI decision failed"
 
     def find_best_segment(self, transcript_obj):
         """Use AI to find the best segment to keep."""
         cprint(f"\n{'='*80}", "yellow")
-        cprint(f"STEP 3: AI ANALYSIS - FINDING BEST SEGMENT", "yellow")
+        cprint("STEP 3: AI ANALYSIS - FINDING BEST SEGMENT", "yellow")
         cprint(f"{'='*80}", "yellow")
 
         # Format transcript with timestamps
@@ -429,7 +427,7 @@ class RealtimeClipsAgent:
                 cprint("❌ AI returned no response", "red")
                 return None, None
 
-            cprint(f"\n🤖 AI Response:", "cyan")
+            cprint("\n🤖 AI Response:", "cyan")
             cprint(f"   {result_text}", "yellow")
 
             # Parse JSON response (remove markdown if present)
@@ -446,7 +444,7 @@ class RealtimeClipsAgent:
             reason = result['reason']
 
             duration = end - start
-            cprint(f"\n✅ Best segment identified:", "green")
+            cprint("\n✅ Best segment identified:", "green")
             cprint(f"   Start: {start:.1f}s", "cyan")
             cprint(f"   End: {end:.1f}s", "cyan")
             cprint(f"   Duration: {duration:.1f}s ({duration/60:.1f} minutes)", "cyan")
@@ -465,12 +463,12 @@ class RealtimeClipsAgent:
     def generate_title(self, transcript_text):
         """Generate a short title for the clip."""
         cprint(f"\n{'='*80}", "yellow")
-        cprint(f"STEP 6: GENERATING CLIP TITLE", "yellow")
+        cprint("STEP 6: GENERATING CLIP TITLE", "yellow")
         cprint(f"{'='*80}", "yellow")
 
         # Show transcript preview
         preview = transcript_text[:200]
-        cprint(f"📄 Transcript preview for title generation:", "cyan")
+        cprint("📄 Transcript preview for title generation:", "cyan")
         cprint(f"   \"{preview}...\"", "yellow")
         cprint(f"\n🤖 Asking {self.model.model_name} for a short title...", "cyan")
 
@@ -505,20 +503,20 @@ class RealtimeClipsAgent:
     def trim_clip(self, temp_file, start_time, end_time, output_name):
         """Create final trimmed clip."""
         cprint(f"\n{'='*80}", "yellow")
-        cprint(f"STEP 7: CREATING FINAL TRIMMED CLIPS (NORMAL + TALL)", "yellow")
+        cprint("STEP 7: CREATING FINAL TRIMMED CLIPS (NORMAL + TALL)", "yellow")
         cprint(f"{'='*80}", "yellow")
 
         duration = end_time - start_time
         output_file = self.clips_folder / f"{output_name}.mov"
         output_file_tall = self.clips_folder / f"tall_{output_name}.mov"
 
-        cprint(f"✂️  Trimming video:", "cyan")
+        cprint("✂️  Trimming video:", "cyan")
         cprint(f"   From: {start_time:.1f}s", "cyan")
         cprint(f"   To: {end_time:.1f}s", "cyan")
         cprint(f"   Duration: {duration:.1f}s ({duration/60:.1f} minutes)", "cyan")
 
         # Create normal version
-        cprint(f"\n📹 Creating normal version...", "cyan")
+        cprint("\n📹 Creating normal version...", "cyan")
         cprint(f"💾 Output: {output_file.name}", "cyan")
         cprint("⚙️  Running ffmpeg...", "cyan")
 
@@ -534,7 +532,7 @@ class RealtimeClipsAgent:
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            cprint(f"✅ Normal clip created successfully!", "green")
+            cprint("✅ Normal clip created successfully!", "green")
         except subprocess.CalledProcessError as e:
             cprint(f"❌ Normal clip failed: {e}", "red")
             cprint(f"   stderr: {e.stderr}", "red")
@@ -546,7 +544,7 @@ class RealtimeClipsAgent:
             return None
 
         # Create tall version (9:16 vertical format for Twitter/TikTok/Reels)
-        cprint(f"\n📱 Creating TALL version (9:16 vertical - 1080x1920)...", "cyan")
+        cprint("\n📱 Creating TALL version (9:16 vertical - 1080x1920)...", "cyan")
         cprint(f"💾 Output: {output_file_tall.name}", "cyan")
         cprint("⚙️  Running ffmpeg with 9:16 split + stack...", "cyan")
 
@@ -577,7 +575,7 @@ class RealtimeClipsAgent:
 
         try:
             result = subprocess.run(cmd_tall, capture_output=True, text=True, check=True)
-            cprint(f"✅ TALL clip created successfully!", "green")
+            cprint("✅ TALL clip created successfully!", "green")
 
             # Check file size
             file_size = output_file_tall.stat().st_size
@@ -585,26 +583,26 @@ class RealtimeClipsAgent:
 
             # Delete temp file
             temp_file.unlink()
-            cprint(f"🗑️  Deleted temporary file", "cyan")
+            cprint("🗑️  Deleted temporary file", "cyan")
 
             return output_file
 
         except subprocess.CalledProcessError as e:
             cprint(f"❌ TALL clip failed: {e}", "red")
             cprint(f"📄 STDERR: {e.stderr}", "red")
-            cprint(f"⚠️  Normal clip still saved, continuing...", "yellow")
+            cprint("⚠️  Normal clip still saved, continuing...", "yellow")
             temp_file.unlink()
             return output_file
         except Exception as e:
             cprint(f"❌ TALL clip failed: {e}", "red")
-            cprint(f"⚠️  Normal clip still saved, continuing...", "yellow")
+            cprint("⚠️  Normal clip still saved, continuing...", "yellow")
             temp_file.unlink()
             return output_file
 
     def create_clip(self, minutes):
         """Main workflow: extract, transcribe, analyze, trim, name."""
         cprint(f"\n{'='*80}", "green")
-        cprint(f"🎬 STARTING CLIP CREATION WORKFLOW", "green")
+        cprint("🎬 STARTING CLIP CREATION WORKFLOW", "green")
         cprint(f"{'='*80}", "green")
         cprint(f"Requested length: {minutes} minutes", "cyan")
         cprint(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", "cyan")
@@ -639,7 +637,7 @@ class RealtimeClipsAgent:
 
         if not should_clip:
             cprint(f"\n{'='*80}", "red")
-            cprint(f"⏭️  SKIPPING THIS SEGMENT", "red")
+            cprint("⏭️  SKIPPING THIS SEGMENT", "red")
             cprint(f"{'='*80}", "red")
             cprint(f"Reason: {reason}", "yellow")
             cprint(f"{'='*80}\n", "red")
@@ -654,7 +652,7 @@ class RealtimeClipsAgent:
 
         if final_file:
             cprint(f"\n{'='*80}", "green")
-            cprint(f"✅ CLIP CREATION COMPLETE!", "green")
+            cprint("✅ CLIP CREATION COMPLETE!", "green")
             cprint(f"{'='*80}", "green")
             cprint(f"📁 Normal: {final_file}", "cyan")
             cprint(f"📱 Tall: {self.clips_folder / f'tall_{title}.mov'}", "cyan")
@@ -672,7 +670,7 @@ class RealtimeClipsAgent:
 
     def open_twitter_compose(self, title, video_file):
         """Open Twitter compose window with title pre-filled."""
-        cprint(f"\n🐦 TWITTER AUTO-COMPOSE", "cyan")
+        cprint("\n🐦 TWITTER AUTO-COMPOSE", "cyan")
         cprint(f"{'='*80}", "cyan")
 
         # Convert underscores to spaces for readable title
@@ -685,11 +683,11 @@ class RealtimeClipsAgent:
         encoded_text = quote(tweet_text)
         twitter_url = f"https://twitter.com/intent/tweet?text={encoded_text}"
 
-        cprint(f"🌐 Opening Twitter in browser...", "cyan")
+        cprint("🌐 Opening Twitter in browser...", "cyan")
         webbrowser.open(twitter_url)
 
-        cprint(f"✅ Twitter opened!", "green")
-        cprint(f"💡 Drag and drop this file into the tweet:", "yellow")
+        cprint("✅ Twitter opened!", "green")
+        cprint("💡 Drag and drop this file into the tweet:", "yellow")
         cprint(f"   {video_file}", "yellow")
         cprint(f"{'='*80}\n", "cyan")
 
@@ -749,7 +747,7 @@ def autonomous_mode(agent):
     cprint("="*80, "green")
     cprint(f"⏰ Checking every {AUTO_CLIP_INTERVAL} seconds ({AUTO_CLIP_INTERVAL/60:.0f} minutes)", "cyan")
     cprint(f"✂️  Analyzing last {AUTO_CLIP_LENGTH} minutes each time", "cyan")
-    cprint(f"🧠 AI decides if segment is worth clipping", "cyan")
+    cprint("🧠 AI decides if segment is worth clipping", "cyan")
     cprint(f"📁 Recording folder: {agent.obs_folder}", "cyan")
     cprint(f"💾 Clips saved to: {agent.base_clips_folder}", "cyan")
     cprint(f"📅 Today's folder: {agent.clips_folder.name}", "cyan")
@@ -787,7 +785,7 @@ def autonomous_mode(agent):
 
         except KeyboardInterrupt:
             cprint("\n\n🛑 Autonomous mode stopped", "red")
-            cprint(f"📊 Final Stats:", "cyan")
+            cprint("📊 Final Stats:", "cyan")
             cprint(f"   Total checks: {check_count}", "cyan")
             cprint(f"   Clips created: {clips_created}", "green")
             cprint(f"   Clips skipped: {clips_skipped}", "yellow")

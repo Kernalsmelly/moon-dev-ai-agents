@@ -226,7 +226,7 @@ def check_open_orders(symbol):
 
 def cancel_all_orders(symbol):
     """Cancel all open orders"""
-    cprint(f"\n🗑️  STEP 4: Canceling All Orders...", "cyan", attrs=['bold'])
+    cprint("\n🗑️  STEP 4: Canceling All Orders...", "cyan", attrs=['bold'])
 
     try:
         result = api.cancel_all_orders(symbol)
@@ -246,7 +246,7 @@ def cancel_all_orders(symbol):
 
 def place_market_order(symbol):
     """Place a small market order"""
-    cprint(f"\n🚀 STEP 5: Placing Market Order...", "cyan", attrs=['bold'])
+    cprint("\n🚀 STEP 5: Placing Market Order...", "cyan", attrs=['bold'])
 
     try:
         # Set leverage first
@@ -274,7 +274,7 @@ def place_market_order(symbol):
         # Check position
         position = api.get_position(symbol)
         if position:
-            cprint(f"📊 Position opened:", "yellow")
+            cprint("📊 Position opened:", "yellow")
             cprint(f"  • Amount: {position['position_amount']}", "white")
             cprint(f"  • Entry Price: ${position['entry_price']:.2f}", "white")
             cprint(f"  • Mark Price: ${position['mark_price']:.2f}", "white")
@@ -288,7 +288,7 @@ def place_market_order(symbol):
 
 def close_position(symbol):
     """Close the open position"""
-    cprint(f"\n🔄 STEP 6: Closing Position...", "cyan", attrs=['bold'])
+    cprint("\n🔄 STEP 6: Closing Position...", "cyan", attrs=['bold'])
 
     try:
         # Get current position
@@ -302,7 +302,7 @@ def close_position(symbol):
         is_long = position['is_long']
 
         cprint(f"📊 Current position: {position_amt} ({'LONG' if is_long else 'SHORT'})", "yellow")
-        cprint(f"💰 Closing with MARKET order...", "green")
+        cprint("💰 Closing with MARKET order...", "green")
 
         # Determine close side and get precision
         close_side = 'SELL' if is_long else 'BUY'

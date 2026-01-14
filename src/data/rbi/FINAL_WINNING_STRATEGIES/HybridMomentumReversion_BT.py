@@ -390,7 +390,7 @@ print("\n🌙 HYBRID MOMENTUM REVERSION - DEFAULT RESULTS")
 print("=" * 80)
 print(stats)
 
-print(f"\n⭐ KEY METRICS:")
+print("\n⭐ KEY METRICS:")
 print(f"📊 Total Trades: {stats['# Trades']}")
 print(f"💰 Total Return: {stats['Return [%]']:.2f}%")
 print(f"📈 Sharpe Ratio: {stats['Sharpe Ratio']:.2f}")
@@ -398,7 +398,7 @@ print(f"📉 Max Drawdown: {stats['Max. Drawdown [%]']:.2f}%")
 print(f"🎯 Win Rate: {stats['Win Rate [%]']:.2f}%")
 
 # Run Optimization
-print(f"\n🔄 Running Parameter Optimization...")
+print("\n🔄 Running Parameter Optimization...")
 print("=" * 80)
 
 stats_opt = bt.optimize(
@@ -419,7 +419,7 @@ print("\n🌙 HYBRID MOMENTUM REVERSION - OPTIMIZED RESULTS")
 print("=" * 80)
 print(stats_opt)
 
-print(f"\n🚀 OPTIMIZED METRICS:")
+print("\n🚀 OPTIMIZED METRICS:")
 print(f"📊 Total Trades: {stats_opt['# Trades']}")
 print(f"💰 Total Return: {stats_opt['Return [%]']:.2f}%")
 print(f"📈 Sharpe Ratio: {stats_opt['Sharpe Ratio']:.2f}")
@@ -430,7 +430,7 @@ print(f"🎯 Win Rate: {stats_opt['Win Rate [%]']:.2f}%")
 trade_requirement = stats_opt['# Trades'] >= 50
 sharpe_requirement = stats_opt['Sharpe Ratio'] > 2.0
 
-print(f"\n✅ STRATEGY VALIDATION:")
+print("\n✅ STRATEGY VALIDATION:")
 print(f"📊 Trade Count Requirement (>50): {'✅ PASS' if trade_requirement else '❌ FAIL'} ({stats_opt['# Trades']} trades)")
 print(f"📈 Sharpe Ratio Requirement (>2.0): {'✅ PASS' if sharpe_requirement else '❌ FAIL'} ({stats_opt['Sharpe Ratio']:.2f})")
 

@@ -1,6 +1,6 @@
 import pandas as pd
 import talib
-from backtesting import Backtest, Strategy
+from backtesting import Strategy
 
 # Data preparation
 data = pd.read_csv(

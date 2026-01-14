@@ -11,7 +11,6 @@ Enjoy the Moon Dev debug vibes! 🌙✨🚀
 import pandas as pd
 import numpy as np
 import talib
-import pandas_ta as pta  # for additional indicators if needed
 from backtesting import Backtest, Strategy
 
 # --------------

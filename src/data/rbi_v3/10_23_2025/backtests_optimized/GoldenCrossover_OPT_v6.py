@@ -161,34 +161,34 @@ class GoldenCrossover(Strategy):
                 partial_size = self.position.size * 0.3
                 self.sell(size=partial_size)
                 self.partial_closed = True
-                print(f"🌙 Moon Dev: Partial close 30% at 1.5:1 RR, early profit lock! 🚀")
+                print("🌙 Moon Dev: Partial close 30% at 1.5:1 RR, early profit lock! 🚀")
 
             if self.partial_closed and not self.second_partial and unrealized_pnl >= 3 * risk:
                 partial_size = self.position.size * 0.5  # 50% of remaining
                 self.sell(size=partial_size)
                 self.second_partial = True
-                print(f"🌙 Moon Dev: Second partial 30% at 3:1 RR, scaling out! 🚀")
+                print("🌙 Moon Dev: Second partial 30% at 3:1 RR, scaling out! 🚀")
 
             if unrealized_pnl >= 4 * risk:  # 🌙 Reduced full TP from 5:1 to 4:1 for more frequent larger wins, realistic for BTC trends
-                print(f"🌙 Moon Dev: Full TP at 4:1 RR for optimized gains! 🚀")
+                print("🌙 Moon Dev: Full TP at 4:1 RR for optimized gains! 🚀")
                 self.position.close()
                 return
 
             # Bearish divergence: Tightened with RSI>65 (from 70), added volume fade check, and stricter MACD for reliable tops
             if rsi > 65 and len(self.data) > 2 and close > self.data.Close[-2] and rsi < self.rsi[-2] and macd < macd_signal and volume < avg_vol and adx > 25:
-                print(f"🌙 Moon Dev: Enhanced Bearish RSI/MACD/Volume Divergence, EXITING! 🚀")
+                print("🌙 Moon Dev: Enhanced Bearish RSI/MACD/Volume Divergence, EXITING! 🚀")
                 self.position.close()
                 return
 
             # Exit below EMA50 (from EMA20) for earlier trend break detection, reducing drawdowns
             if close < ema50:  # 🌙 Changed to EMA50 for proactive exits on trend weakness
-                print(f"🌙 Moon Dev: EXITING below EMA50 trend break 🚀")
+                print("🌙 Moon Dev: EXITING below EMA50 trend break 🚀")
                 self.position.close()
                 return
 
             # 🌙 Moon Dev Optimization: New exit if ADX weakens below 20 after entry, to avoid fading trends
             if adx < 20 and bars_since_entry > 10:
-                print(f"🌙 Moon Dev: EXITING due to weakening ADX <20 🚀")
+                print("🌙 Moon Dev: EXITING due to weakening ADX <20 🚀")
                 self.position.close()
                 return
 

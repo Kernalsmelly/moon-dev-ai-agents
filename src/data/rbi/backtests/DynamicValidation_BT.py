@@ -9,7 +9,6 @@ It uses TA‐Lib indicators through the self.I wrapper, with plenty of Moon Dev 
 
 import os
 import pandas as pd
-import numpy as np
 import talib
 from backtesting import Backtest, Strategy
 

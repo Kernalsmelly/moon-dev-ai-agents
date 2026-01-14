@@ -1,8 +1,6 @@
 import pandas as pd
-import numpy as np
 import talib
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 # 🌙 MOON DEV DATA PREPARATION
 data_path = '/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv'

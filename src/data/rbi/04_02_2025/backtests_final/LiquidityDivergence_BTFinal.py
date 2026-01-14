@@ -1,6 +1,5 @@
 # 🌙 Moon Dev's Liquidity Divergence Backtest 🌙
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
 
 # ========================

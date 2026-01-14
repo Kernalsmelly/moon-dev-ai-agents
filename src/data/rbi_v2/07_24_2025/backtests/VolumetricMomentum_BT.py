@@ -72,7 +72,7 @@ class VolumetricMomentum(Strategy):
         # Exit if trend weakens
         for trade in self.trades:
             if self.adx[-1] < 20:
-                print(f"✨ Moon Dev Exit: ADX weakening, closing trade")
+                print("✨ Moon Dev Exit: ADX weakening, closing trade")
                 trade.close()
 
 # Backtest execution

@@ -3,7 +3,6 @@ import pandas as pd
 import talib
 import pandas_ta as ta
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 class LiquidationRetrace(Strategy):
     risk_percent = 0.01  # 1% risk per trade

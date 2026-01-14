@@ -7,12 +7,8 @@ Built with love by Moon Dev 🚀
 from src.config import *
 from src import nice_funcs as n
 from src import nice_funcs_hyperliquid as hl
-from src import nice_funcs_aster as aster
-import pandas as pd
-from datetime import datetime
 import os
-from termcolor import colored, cprint
-import time
+from termcolor import cprint
 
 def collect_token_data(token, days_back=DAYSBACK_4_DATA, timeframe=DATA_TIMEFRAME, exchange="SOLANA"):
     """Collect OHLCV data for a single token

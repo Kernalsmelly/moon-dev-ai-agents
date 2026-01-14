@@ -3,7 +3,6 @@ from backtesting import Backtest, Strategy
 import pandas as pd
 import pandas_ta as ta
 import talib
-import numpy as np
 
 # 🚀 Data Preparation
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv', parse_dates=['datetime'])

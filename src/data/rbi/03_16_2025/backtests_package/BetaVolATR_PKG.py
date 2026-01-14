@@ -2,7 +2,6 @@
 import pandas as pd
 from backtesting import Backtest, Strategy
 import talib
-import numpy as np
 
 class BetaVolATR(Strategy):
     risk_per_trade = 0.01  # 1% of equity per trade 🌙

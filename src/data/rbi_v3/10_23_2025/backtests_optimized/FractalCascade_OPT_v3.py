@@ -136,14 +136,14 @@ class FractalCascade(Strategy):
                     self.current_sl = None
                     self.entry_price = None
                     self.tp = None
-                    print(f"🌙 Moon Dev: Long exit - below Teeth 📉")
+                    print("🌙 Moon Dev: Long exit - below Teeth 📉")
                     return
                 elif self.data.Close[-1] < self.jaw[-1]:
                     self.position.close()
                     self.current_sl = None
                     self.entry_price = None
                     self.tp = None
-                    print(f"🌙 Moon Dev: Long hard exit - below Jaw 😤")
+                    print("🌙 Moon Dev: Long hard exit - below Jaw 😤")
                     return
                 
                 # Trail stop for long - preserves original TP on re-entry
@@ -164,14 +164,14 @@ class FractalCascade(Strategy):
                     self.current_sl = None
                     self.entry_price = None
                     self.tp = None
-                    print(f"🌙 Moon Dev: Short exit - above Teeth 📈")
+                    print("🌙 Moon Dev: Short exit - above Teeth 📈")
                     return
                 elif self.data.Close[-1] > self.jaw[-1]:
                     self.position.close()
                     self.current_sl = None
                     self.entry_price = None
                     self.tp = None
-                    print(f"🌙 Moon Dev: Short hard exit - above Jaw 😤")
+                    print("🌙 Moon Dev: Short hard exit - above Jaw 😤")
                     return
                 
                 # Trail stop for short - preserves original TP on re-entry

@@ -1,7 +1,6 @@
 # 🌙✨ Moon Dev Backtest AI Debugged Code 🚀
 from backtesting import Backtest, Strategy
 import pandas as pd
-import numpy as np
 import talib
 
 class RangeBoundPut(Strategy):

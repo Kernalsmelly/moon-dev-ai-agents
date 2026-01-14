@@ -74,7 +74,7 @@ class ContrarianEarnings(Strategy):
                     self.buy(size=position_size, 
                             sl=stop_loss,
                             tp=take_profit,
-                            tag=f"🌙 Contrarian Entry")
+                            tag="🌙 Contrarian Entry")
                     print(f"🚀 ENTRY SIGNAL | Size: {position_size} | Entry: {entry_price:.2f} | SL: {stop_loss:.2f} | TP: {take_profit:.2f}")
 
         # Exit Logic: Time-based exit

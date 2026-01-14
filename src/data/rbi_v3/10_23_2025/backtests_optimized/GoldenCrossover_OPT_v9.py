@@ -166,27 +166,27 @@ class GoldenCrossover(Strategy):
                 partial_size = self.position.size * 0.5
                 self.sell(size=partial_size)
                 self.scale_level = 1
-                print(f"🌙 Moon Dev: Scaled out 50% at 2:1 RR, locking profits! 🚀")
+                print("🌙 Moon Dev: Scaled out 50% at 2:1 RR, locking profits! 🚀")
             elif self.scale_level == 1 and unrealized_pnl >= 3 * risk:
                 partial_size = self.position.size * 0.5  # Now 50% of remaining
                 self.sell(size=partial_size)
                 self.scale_level = 2
-                print(f"🌙 Moon Dev: Scaled out another 25% at 3:1 RR, trailing the rest! 🚀")
+                print("🌙 Moon Dev: Scaled out another 25% at 3:1 RR, trailing the rest! 🚀")
 
             if unrealized_pnl >= 7 * risk:  # 🌙 Moon Dev Optimization: Increased full TP to 7:1 for higher average win size in strong trends
-                print(f"🌙 Moon Dev: Full TP at 7:1 RR for maximum gains! 🚀")
+                print("🌙 Moon Dev: Full TP at 7:1 RR for maximum gains! 🚀")
                 self.position.close()
                 return
 
             # Bearish divergence: Enhanced with MACD histogram check for stronger reversal signal
             if rsi > 70 and len(self.data) > 2 and close > self.data.Close[-2] and rsi < self.rsi[-2] and macd_hist < 0 and adx > 25:  # 🌙 Moon Dev Optimization: Use MACD hist <0 and higher ADX for reliable exits
-                print(f"🌙 Moon Dev: Bearish RSI + MACD Histogram Divergence in overbought zone, EXITING! 🚀")
+                print("🌙 Moon Dev: Bearish RSI + MACD Histogram Divergence in overbought zone, EXITING! 🚀")
                 self.position.close()
                 return
 
             # Exit below EMA26 for quicker response in medium-term trends
             if close < ema26:  # 🌙 Moon Dev Optimization: Changed to below EMA26 to align with entry signals
-                print(f"🌙 Moon Dev: EXITING below EMA26 trail 🚀")
+                print("🌙 Moon Dev: EXITING below EMA26 trail 🚀")
                 self.position.close()
                 return
 

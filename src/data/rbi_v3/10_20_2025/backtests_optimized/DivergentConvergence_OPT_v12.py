@@ -95,7 +95,7 @@ class DivergentConvergence(Strategy):
 
         # Entry Logic - Optimized: Added ADX and volume filters for better entry quality; switched to SMA50
         if not self.position and self.div_bar is not None and stoch_converge and current_price > self.sma50[-1] and self.adx[-1] > self.adx_min and self.data.Volume[-1] > self.vol_sma[-1]:
-            print(f"🌙 Moon Dev: All entry conditions met! Attempting LONG entry... 🚀")
+            print("🌙 Moon Dev: All entry conditions met! Attempting LONG entry... 🚀")
             # Calculate SL: below div low with buffer
             div_low = self.div_low
             atr_val = self.atr[-1]
@@ -136,7 +136,7 @@ class DivergentConvergence(Strategy):
             # Optimized: Added trend filter exit if price falls below SMA50
             if current_price < self.sma50[-1]:
                 self.position.close()
-                print(f"🌙 Moon Dev: Price below SMA50! EXIT 📉")
+                print("🌙 Moon Dev: Price below SMA50! EXIT 📉")
                 return
 
             # Time-based exit
@@ -148,7 +148,7 @@ class DivergentConvergence(Strategy):
             # Dynamic exits
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 return
             # Removed: RSI >70 exit to let positions run longer in strong trends
 

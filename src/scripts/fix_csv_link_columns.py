@@ -61,7 +61,7 @@ def fix_csv_link_column(csv_path, link_column_name):
 
         # Save fixed CSV
         df.to_csv(csv_path, index=False)
-        cprint(f"   └─ ✅ Saved fixed CSV!", "green", attrs=['bold'])
+        cprint("   └─ ✅ Saved fixed CSV!", "green", attrs=['bold'])
 
     except Exception as e:
         cprint(f"❌ Error fixing {os.path.basename(csv_path)}: {e}", "red")

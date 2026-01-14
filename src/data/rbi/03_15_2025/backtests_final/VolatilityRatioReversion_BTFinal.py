@@ -4,7 +4,6 @@
 import pandas as pd
 import talib
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 class VolatilityRatioReversion(Strategy):
     # Strategy parameters

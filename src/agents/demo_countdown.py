@@ -7,13 +7,12 @@ Created with ❤️ by Moon Dev
 '''
 
 import time
-import random
-from termcolor import cprint, colored
+from termcolor import cprint
 
 def demo_countdown(seconds=15):
     """Demonstrate the colorful countdown animation"""
     # Fun waiting animation
-    cprint(f"\n⏱️ COOLDOWN PERIOD ACTIVATED", "white", "on_blue")
+    cprint("\n⏱️ COOLDOWN PERIOD ACTIVATED", "white", "on_blue")
     
     # Show a colorful countdown for the entire interval
     moon_emojis = ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"]

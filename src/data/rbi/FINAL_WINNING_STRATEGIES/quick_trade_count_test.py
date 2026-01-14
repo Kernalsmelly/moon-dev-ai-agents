@@ -4,7 +4,6 @@ Quick Trade Count Test - Verify strategies generate trades without optimization
 """
 
 import pandas as pd
-import numpy as np
 from backtesting import Backtest
 import warnings
 warnings.filterwarnings('ignore')
@@ -84,7 +83,7 @@ print("=" * 80)
 passing = sum(1 for r in results if r['trades'] >= 25)
 high_sharpe = sum(1 for r in results if r['sharpe'] >= 2.0)
 
-print(f"\n📊 SUMMARY:")
+print("\n📊 SUMMARY:")
 print(f"   Strategies with 25+ trades: {passing}/{len(strategies)}")
 print(f"   Strategies with 2.0+ Sharpe: {high_sharpe}/{len(strategies)}")
 

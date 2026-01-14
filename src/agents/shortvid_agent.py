@@ -208,7 +208,7 @@ class VideoAgent:
                 print("❌ No input text provided and couldn't read from file")
                 return None
             
-            print(f"\n📊 Text Analysis:")
+            print("\n📊 Text Analysis:")
             print(f"Total lines to process: {len(text_lines):,}")
             print("=" * 50)
             
@@ -269,7 +269,7 @@ class VideoAgent:
                     traceback.print_exc()
                     continue
             
-            print(f"\n🎉 Processing complete!")
+            print("\n🎉 Processing complete!")
             print(f"📂 Audio files saved in: {self.audio_dir}")
             print(f"🎬 Final videos saved in: {self.final_vids_dir}")
             

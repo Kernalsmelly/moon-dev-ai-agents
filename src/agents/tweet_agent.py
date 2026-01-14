@@ -6,7 +6,6 @@ This agent takes text input and generates tweets based on the content.
 """
 
 import os
-import pandas as pd
 import time
 from datetime import datetime
 from pathlib import Path
@@ -35,8 +34,7 @@ import openai
 import anthropic
 import traceback
 import math
-from termcolor import colored, cprint
-import sys
+from termcolor import cprint
 
 # AI Settings - Override config.py if set
 from src import config
@@ -170,7 +168,7 @@ class TweetAgent:
             total_chunks = math.ceil(total_chars / MAX_CHUNK_SIZE)
             total_tweets = total_chunks * TWEETS_PER_CHUNK
             
-            print(f"\n📊 Text Analysis:")
+            print("\n📊 Text Analysis:")
             print(f"Total characters: {total_chars:,}")
             print(f"Chunk size: {MAX_CHUNK_SIZE:,}")
             print(f"Number of chunks: {total_chunks:,}")

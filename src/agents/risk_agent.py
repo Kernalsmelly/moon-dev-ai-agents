@@ -45,12 +45,11 @@ import anthropic
 import os
 import pandas as pd
 import json
-from termcolor import colored, cprint
+from termcolor import cprint
 from dotenv import load_dotenv
 import openai
 from src import config
 from src import nice_funcs as n
-from src.data.ohlcv_collector import collect_all_tokens
 from datetime import datetime, timedelta
 import time
 from src.config import *
@@ -456,7 +455,7 @@ class RiskAgent(BaseAgent):
             # If AI confirmation is disabled, close positions immediately
             if not USE_AI_CONFIRMATION:
                 print(f"\n🚨 {breach_type} limit breached! Closing all positions immediately...")
-                print(f"💡 (AI confirmation disabled in config)")
+                print("💡 (AI confirmation disabled in config)")
                 self.close_all_positions()
                 return
                 

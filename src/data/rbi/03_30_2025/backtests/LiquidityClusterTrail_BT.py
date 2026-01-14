@@ -48,7 +48,7 @@ class LiquidityClusterTrail(Strategy):
                         if size > 0:
                             self.buy(size=size, sl=stop_price)
                             self.highest_high = self.data.High[-1]
-                            print(f"🌙✨ MOON DEV LONG ENTRY ✨")
+                            print("🌙✨ MOON DEV LONG ENTRY ✨")
                             print(f"Size: {size} | Entry: {price} | SL: {stop_price} 🚀")
         else:
             # Update trailing stop

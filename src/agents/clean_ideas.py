@@ -8,10 +8,8 @@ Created with ❤️ by Moon Dev
 '''
 
 import re
-import csv
 import time
 import random
-import sys
 from pathlib import Path
 import pandas as pd
 from termcolor import cprint, colored
@@ -141,20 +139,20 @@ def clean_ideas_file():
     IDEAS_TXT = DATA_DIR / "ideas.txt"
     IDEAS_CSV = DATA_DIR / "strategy_ideas.csv"
     
-    cprint(f"🔍 SCANNING FOR IDEAS FILES...", "white", "on_blue")
+    cprint("🔍 SCANNING FOR IDEAS FILES...", "white", "on_blue")
     time.sleep(0.5)
     
     if not IDEAS_TXT.exists():
         cprint(f"❌ IDEAS.TXT NOT FOUND AT {IDEAS_TXT}", "white", "on_red")
         return
     
-    cprint(f"✅ FOUND IDEAS.TXT!", "white", "on_green")
+    cprint("✅ FOUND IDEAS.TXT!", "white", "on_green")
     time.sleep(0.3)
     
     if IDEAS_CSV.exists():
-        cprint(f"✅ FOUND STRATEGY_IDEAS.CSV!", "white", "on_green")
+        cprint("✅ FOUND STRATEGY_IDEAS.CSV!", "white", "on_green")
     else:
-        cprint(f"⚠️ CSV FILE NOT FOUND - WILL ONLY CLEAN TXT FILE", "yellow", "on_blue")
+        cprint("⚠️ CSV FILE NOT FOUND - WILL ONLY CLEAN TXT FILE", "yellow", "on_blue")
     
     time.sleep(0.5)
     
@@ -168,14 +166,14 @@ def clean_ideas_file():
     cleaned_lines = []
     
     # Show progress animation
-    cprint(f"\n🧹 INITIATING CLEANING SEQUENCE...", "white", "on_cyan")
+    cprint("\n🧹 INITIATING CLEANING SEQUENCE...", "white", "on_cyan")
     time.sleep(0.5)
     
     # Count non-empty, non-comment lines
     valid_lines = [line for line in lines if line.strip() and not line.strip().startswith('#')]
     
     if not valid_lines:
-        cprint(f"⚠️ NO IDEAS FOUND TO CLEAN!", "yellow", "on_red")
+        cprint("⚠️ NO IDEAS FOUND TO CLEAN!", "yellow", "on_red")
         return
     
     cprint(f"🔍 FOUND {len(valid_lines)} IDEAS TO PROCESS", "white", "on_blue")
@@ -206,7 +204,7 @@ def clean_ideas_file():
         cleaned_lines.append(cleaned_idea)
     
     # Write back the cleaned content to ideas.txt
-    cprint(f"\n💾 SAVING CLEANED IDEAS...", "white", "on_blue")
+    cprint("\n💾 SAVING CLEANED IDEAS...", "white", "on_blue")
     
     with open(IDEAS_TXT, 'w') as f:
         f.write('# Moon Dev\'s Trading Strategy Ideas 🌙\n')
@@ -217,7 +215,7 @@ def clean_ideas_file():
     
     # Clean up the CSV file if it exists
     if IDEAS_CSV.exists():
-        cprint(f"\n📊 PROCESSING CSV FILE...", "white", "on_magenta")
+        cprint("\n📊 PROCESSING CSV FILE...", "white", "on_magenta")
         try:
             # Read the CSV file
             df = pd.read_csv(IDEAS_CSV)
@@ -233,7 +231,7 @@ def clean_ideas_file():
                 
                 # Write back the cleaned CSV
                 df.to_csv(IDEAS_CSV, index=False)
-                cprint(f"✅ CSV FILE CLEANED SUCCESSFULLY!", "white", "on_green")
+                cprint("✅ CSV FILE CLEANED SUCCESSFULLY!", "white", "on_green")
         except Exception as e:
             cprint(f"❌ ERROR CLEANING CSV FILE: {str(e)}", "white", "on_red")
     

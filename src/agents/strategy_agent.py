@@ -8,8 +8,6 @@ import json
 from termcolor import cprint
 import anthropic
 import os
-import importlib
-import inspect
 import time
 
 # Import exchange manager for unified trading
@@ -281,7 +279,7 @@ class StrategyAgent:
                                 n.ai_entry(token, target_size)
                             print(f"✅ Entry complete for {token}")
                         else:
-                            print(f"⏸️ Position already at or above target size")
+                            print("⏸️ Position already at or above target size")
 
                     elif direction == 'SELL':
                         if current_position > 0:
@@ -292,7 +290,7 @@ class StrategyAgent:
                                 n.chunk_kill(token, max_usd_order_size, slippage)
                             print(f"✅ Exit complete for {token}")
                         else:
-                            print(f"⏸️ No position to sell")
+                            print("⏸️ No position to sell")
                     
                     time.sleep(2)  # Small delay between trades
                     

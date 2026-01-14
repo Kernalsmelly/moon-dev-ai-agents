@@ -1,9 +1,7 @@
 # 🌙 Moon Dev's ForceChannel Breakout Strategy Backtest 🌙
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import talib
 import pandas as pd
-import numpy as np
 
 # 🚀 Data Preparation with Moon-Style Cleaning 🚀
 data_path = '/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv'

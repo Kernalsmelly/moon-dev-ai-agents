@@ -1,7 +1,6 @@
 import pandas as pd
 import talib
 from backtesting import Backtest, Strategy
-import numpy as np
 
 # Clean and prepare the data
 def prepare_data(filepath):

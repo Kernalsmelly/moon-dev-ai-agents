@@ -460,13 +460,13 @@ Here is the current top 15 altcoins by 24H VOLUME with volume changes:
         if vol_chg_4h is not None:
             prompt += f"   - 4H Volume Change: {vol_chg_4h:+.1f}%\n"
         else:
-            prompt += f"   - 4H Volume Change: NEW ENTRY (wasn't in top 15 last check)\n"
+            prompt += "   - 4H Volume Change: NEW ENTRY (wasn't in top 15 last check)\n"
 
         # 24H volume change
         if vol_chg_24h is not None:
             prompt += f"   - 24H Volume Change: {vol_chg_24h:+.1f}%\n"
         else:
-            prompt += f"   - 24H Volume Change: N/A (need more history)\n"
+            prompt += "   - 24H Volume Change: N/A (need more history)\n"
 
         # Rank movement
         if rank_chg is not None:
@@ -475,9 +475,9 @@ Here is the current top 15 altcoins by 24H VOLUME with volume changes:
             elif rank_chg < 0:
                 prompt += f"   - Rank Movement: DROPPED {abs(rank_chg)} spots\n"
             else:
-                prompt += f"   - Rank Movement: STABLE\n"
+                prompt += "   - Rank Movement: STABLE\n"
         else:
-            prompt += f"   - Rank Movement: NEW ENTRY\n"
+            prompt += "   - Rank Movement: NEW ENTRY\n"
 
     prompt += """\n\nBased on VOLUME DATA ONLY, which token would you buy right now?
 
@@ -559,7 +559,7 @@ def display_swarm_results(result):
     # Metadata summary
     if "metadata" in result:
         meta = result["metadata"]
-        cprint(f"\n\n📊 SWARM STATS:", "blue", attrs=['bold'])
+        cprint("\n\n📊 SWARM STATS:", "blue", attrs=['bold'])
         cprint(f"   ✅ Successful Responses: {meta.get('successful_responses', 0)}/{meta.get('total_models', 0)}", "green")
         cprint(f"   ⏱️  Total Analysis Time: {meta.get('total_time', 0):.2f}s", "cyan")
 
@@ -659,7 +659,7 @@ def run_check():
     previous_data = load_previous_snapshot()
     data_24h = load_24h_snapshot()
     changes = calculate_changes(current_tokens, previous_data, data_24h)
-    cprint(f"✅ Calculated changes\n", "green")
+    cprint("✅ Calculated changes\n", "green")
 
     # 3. Display changes
     display_changes(changes)
@@ -680,7 +680,7 @@ def run_check():
     cprint(f"✅ Logged to {DATA_DIR}/\n", "green")
 
     cprint("=" * 120, "magenta")
-    cprint(f"✅ Check complete! Next check in 4 hours...", "green", attrs=['bold'])
+    cprint("✅ Check complete! Next check in 4 hours...", "green", attrs=['bold'])
     cprint("=" * 120 + "\n", "magenta")
 
 def run_continuous():

@@ -101,7 +101,7 @@ class DivergentConvergence(Strategy):
             vol_confirm = self.data.Volume[-1] > self.vol_sma[-1] * 1.1  # Current volume > 1.1x 20-period avg
             trend_confirm = self.adx[-1] > 20  # ADX >20 indicates sufficient trend strength
             if vol_confirm and trend_confirm:
-                print(f"🌙 Moon Dev: All entry conditions met including volume & ADX! Attempting LONG entry... 🚀")
+                print("🌙 Moon Dev: All entry conditions met including volume & ADX! Attempting LONG entry... 🚀")
                 # Calculate SL: below div low with buffer
                 div_low = self.div_low
                 atr_val = self.atr[-1]
@@ -153,11 +153,11 @@ class DivergentConvergence(Strategy):
             # Dynamic exits
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 return
             if rsi_now > 70:
                 self.position.close()
-                print(f"🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
+                print("🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
                 return
 
             print(f"🌙 Moon Dev: Position held. Bars: {bars_held}, Price: {current_price}, RSI: {rsi_now}, %K: {self.slowk[-1]} ✨")

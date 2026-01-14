@@ -82,7 +82,7 @@ class DeltaSentiment(Strategy):
                 
                 if position_size > 0:
                     tp_price = current_close * (1 + self.take_profit_pct)
-                    print(f"🚀 BULLISH DELTA: Spread narrowing with high liquidity!")
+                    print("🚀 BULLISH DELTA: Spread narrowing with high liquidity!")
                     print(f"Entry: {current_close:.2f}, Size: {position_size}, SL: {sl_price:.2f}, TP: {tp_price:.2f}")
                     self.buy(size=position_size, sl=sl_price, tp=tp_price)
             
@@ -95,7 +95,7 @@ class DeltaSentiment(Strategy):
                 
                 if position_size > 0:
                     tp_price = current_close * (1 - self.take_profit_pct)
-                    print(f"📉 BEARISH DELTA: Spread widening with high liquidity!")
+                    print("📉 BEARISH DELTA: Spread widening with high liquidity!")
                     print(f"Entry: {current_close:.2f}, Size: {position_size}, SL: {sl_price:.2f}, TP: {tp_price:.2f}")
                     self.sell(size=position_size, sl=sl_price, tp=tp_price)
         else:

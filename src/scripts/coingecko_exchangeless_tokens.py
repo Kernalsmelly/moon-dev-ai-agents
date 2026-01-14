@@ -7,13 +7,12 @@ Runs every 24 hours to maintain an updated list.
 import os
 import requests
 import pandas as pd
-import json
 from typing import Dict, List, Optional
 from datetime import datetime
 import time
 from pathlib import Path
 from dotenv import load_dotenv
-from termcolor import colored, cprint
+from termcolor import cprint
 
 # Load environment variables
 load_dotenv()
@@ -182,7 +181,7 @@ class CoinGeckoTokenFinder:
                 print(f"⚠️ Error processing {token.get('name', 'Unknown')}: {str(e)}")
                 continue
                 
-        print(f"\n🎯 Filtering complete!")
+        print("\n🎯 Filtering complete!")
         print(f"✨ Found {len(filtered_tokens)} qualifying tokens")
         return filtered_tokens
         
@@ -239,7 +238,7 @@ def main():
             next_run_str = datetime.fromtimestamp(next_run).strftime('%Y-%m-%d %H:%M:%S')
             
             print(f"\n⏳ Next run in {HOURS_BETWEEN_RUNS} hours at {next_run_str}")
-            print(f"💡 Press Ctrl+C to stop")
+            print("💡 Press Ctrl+C to stop")
             
             # Sleep until next run
             time.sleep(HOURS_BETWEEN_RUNS * 3600)

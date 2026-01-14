@@ -1,5 +1,4 @@
-from PIL import Image, ImageDraw, ImageFont
-import os
+from PIL import Image, ImageDraw
 
 def create_dummy_image(filename, text):
     # Create a 1280x720 image (16:9 aspect ratio)

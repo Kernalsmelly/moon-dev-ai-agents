@@ -51,7 +51,7 @@ class LiquidityClusterTrail(Strategy):
                         if size > 0:
                             self.buy(size=size, sl=stop_price)
                             self.highest_high = self.data.High[-1]
-                            print(f"🌙✨ MOON DEV LONG ENTRY SIGNAL ACTIVATED ✨")
+                            print("🌙✨ MOON DEV LONG ENTRY SIGNAL ACTIVATED ✨")
                             print(f"🌕 Position Size: {size} | Entry Price: {price} | Stop Loss: {stop_price}")
                             print(f"🚀 Launching trade with {self.risk_percent*100}% risk allocation!")
         else:

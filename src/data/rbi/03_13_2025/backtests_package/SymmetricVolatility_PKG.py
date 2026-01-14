@@ -1,7 +1,7 @@
 # 🌙 Moon Dev's SymmetricVolatility Backtest AI Implementation 🚀
 import pandas as pd
 import talib
-from backtesting import Backtest, Strategy
+from backtesting import Strategy
 
 # Clean and prepare data 🌌
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv')

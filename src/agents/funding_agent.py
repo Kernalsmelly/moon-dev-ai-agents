@@ -20,18 +20,15 @@ import os
 import pandas as pd
 import time
 from datetime import datetime, timedelta
-from termcolor import colored, cprint
+from termcolor import cprint
 from dotenv import load_dotenv
 import openai
 import anthropic
 from pathlib import Path
-from src import nice_funcs as n
 from src import nice_funcs_hyperliquid as hl
 from src.agents.api import MoonDevAPI
-from collections import deque
 from src.agents.base_agent import BaseAgent
 import traceback
-import numpy as np
 import re
 
 # Get the project root directory
@@ -303,12 +300,12 @@ class FundingAgent(BaseAgent):
                                     'confidence': analysis['confidence']
                                 }
                             
-                except Exception as e:
+                except Exception:
                     continue
             
             return opportunities if opportunities else None
             
-        except Exception as e:
+        except Exception:
             return None
 
     def _format_announcement(self, opportunities):
@@ -384,7 +381,7 @@ class FundingAgent(BaseAgent):
                 # Keep just one backup file
                 backup_file = self.data_dir / "funding_history_backup.csv"
                 os.rename(self.history_file, backup_file)
-                print(f"📦 Backed up old history file")
+                print("📦 Backed up old history file")
                 
         except Exception as e:
             print(f"❌ Error loading history: {str(e)}")

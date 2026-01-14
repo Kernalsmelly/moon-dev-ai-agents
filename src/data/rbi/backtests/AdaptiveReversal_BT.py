@@ -8,10 +8,8 @@ management with Moon Dev themed debug prints, then runs a backtest using backtes
 
 # 1. All necessary imports
 import pandas as pd
-import numpy as np
 import talib
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 # 2. Define the Adaptive Reversal Strategy Class
 class AdaptiveReversal(Strategy):

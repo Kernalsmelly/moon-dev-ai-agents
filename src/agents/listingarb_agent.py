@@ -104,11 +104,11 @@ For updates: https://github.com/moon-dev-ai-agents-for-trading
 import os
 import pandas as pd
 import json
-from typing import Dict, List
+from typing import Dict
 from datetime import datetime, timedelta
 import time
 from pathlib import Path
-from termcolor import colored, cprint
+from termcolor import cprint
 import anthropic
 from dotenv import load_dotenv
 import requests
@@ -574,7 +574,7 @@ class ListingArbSystem:
             
             # Skip if OHLCV data fetch failed
             if ohlcv_data.startswith("❌"):
-                print(f"⏭️ Skipping - Failed to get OHLCV data")
+                print("⏭️ Skipping - Failed to get OHLCV data")
                 return
             
             # Add OHLCV data to token_data for analysis
@@ -733,7 +733,7 @@ class ListingArbSystem:
 def main():
     """Main function to run the Listing Arb system"""
     print("\n🌙 Moon Dev's Listing Arb System Starting Up! 🚀")
-    print(f"⚙️ Configuration:")
+    print("⚙️ Configuration:")
     print(f"  • Hours between full runs: {HOURS_BETWEEN_RUNS}")
     print(f"  • Parallel processes: {PARALLEL_PROCESSES}")
     print(f"  • Minimum volume: ${MIN_VOLUME_USD:,.2f}")

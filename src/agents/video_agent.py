@@ -8,15 +8,13 @@ Built with love by Moon Dev 🚀
 """
 
 import os
-import sys
 import time
-import requests
 from datetime import datetime
 from pathlib import Path
 from threading import Thread, Lock
 from queue import Queue
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from termcolor import cprint
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -89,7 +87,7 @@ def create_video_job(prompt: str, resolution: str = DEFAULT_RESOLUTION, duration
     try:
         client = OpenAI(api_key=OPENAI_API_KEY)
 
-        cprint(f"\n🎬 Creating video job...", "cyan")
+        cprint("\n🎬 Creating video job...", "cyan")
         cprint(f"   Prompt: {prompt[:80]}{'...' if len(prompt) > 80 else ''}", "white")
         cprint(f"   Resolution: {resolution}", "white")
         cprint(f"   Duration: {duration}s", "white")
@@ -306,13 +304,13 @@ def display_status():
         completed = sum(1 for j in jobs.values() if j.status == "completed")
         failed = sum(1 for j in jobs.values() if j.status == "failed")
 
-        cprint(f"\n📈 Summary:", "white", attrs=['bold'])
+        cprint("\n📈 Summary:", "white", attrs=['bold'])
         cprint(f"   ⏳ Queued: {queued}", "yellow")
         cprint(f"   🎬 Generating: {generating}", "cyan")
         cprint(f"   ✅ Completed: {completed}", "green")
         cprint(f"   ❌ Failed: {failed}", "red")
 
-        cprint(f"\n📋 All Jobs:", "white", attrs=['bold'])
+        cprint("\n📋 All Jobs:", "white", attrs=['bold'])
 
         for job in sorted(jobs.values(), key=lambda j: j.created_at, reverse=True):
             # Status emoji
@@ -378,11 +376,11 @@ def main():
     cprint(f"   Model: {MODEL} | Resolution: {DEFAULT_RESOLUTION} | Duration: {DEFAULT_DURATION}s", "white")
     cprint(f"   Aspect Ratio: {DEFAULT_ASPECT_RATIO}", "yellow", attrs=['bold'])
     if DEFAULT_ASPECT_RATIO == "16:9":
-        cprint(f"   Format: Widescreen (YouTube, landscape)", "white")
+        cprint("   Format: Widescreen (YouTube, landscape)", "white")
     elif DEFAULT_ASPECT_RATIO == "9:16":
-        cprint(f"   Format: Vertical (TikTok, Reels, Shorts)", "white")
+        cprint("   Format: Vertical (TikTok, Reels, Shorts)", "white")
     elif DEFAULT_ASPECT_RATIO == "1:1":
-        cprint(f"   Format: Square (Instagram feed)", "white")
+        cprint("   Format: Square (Instagram feed)", "white")
 
     # Workers (lazy init - start on first video)
     workers = []
@@ -443,7 +441,7 @@ def main():
             if job:
                 # Add to queue
                 job_queue.put(job)
-                cprint(f"✅ Started video creation!", "green", attrs=['bold'])
+                cprint("✅ Started video creation!", "green", attrs=['bold'])
                 cprint(f"   Job ID: {job.job_id[:16]}...", "white")
 
                 # Quick status
@@ -453,7 +451,7 @@ def main():
                     completed = sum(1 for j in jobs.values() if j.status == "completed")
 
                 cprint(f"   Status: {queued} queued | {generating} generating | {completed} completed", "cyan")
-                cprint(f"\n💡 Your video is processing in the background!", "yellow")
+                cprint("\n💡 Your video is processing in the background!", "yellow")
 
                 # Small delay to let worker messages print before showing next prompt
                 time.sleep(0.5)

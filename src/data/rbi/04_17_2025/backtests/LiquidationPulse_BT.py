@@ -1,8 +1,6 @@
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 # Load and preprocess data
 data_path = "/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv"
@@ -63,7 +61,7 @@ class LiquidationPulse(Strategy):
                 print(f"🌑 FUNDING RATE EXIT: Turned positive ({self.funding_rate[-1]:.6f})")
             elif self.oi_diff[-1] < self.oi_diff[-2]:
                 self.position.close()
-                print(f"🌒 OI DECLINE EXIT: Open interest decreased")
+                print("🌒 OI DECLINE EXIT: Open interest decreased")
             elif price >= self.high_cluster[-1]:
                 self.position.close()
                 print(f"🌓 RESISTANCE EXIT: Reached high cluster {self.high_cluster[-1]:.2f}")

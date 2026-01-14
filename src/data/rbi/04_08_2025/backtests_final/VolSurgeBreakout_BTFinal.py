@@ -1,5 +1,4 @@
 # Lunar imports for celestial calculations 🌙
-import numpy as np
 from backtesting import Strategy
 
 class VolSurgeBreakout(Strategy):

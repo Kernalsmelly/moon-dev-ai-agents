@@ -102,7 +102,7 @@ class DivergentConvergence(Strategy):
 
         # Entry Logic - Added new filters for higher quality setups
         if not self.position and self.div_bar is not None and stoch_converge and uptrend and trending and vol_confirm:
-            print(f"🌙 Moon Dev: All entry conditions met including filters! Attempting LONG entry... 🚀")
+            print("🌙 Moon Dev: All entry conditions met including filters! Attempting LONG entry... 🚀")
             # Calculate SL: below div low with increased buffer
             div_low = self.div_low
             atr_val = self.atr[-1]
@@ -147,7 +147,7 @@ class DivergentConvergence(Strategy):
                 if not self.breakeven_hit:
                     self.trail_sl = self.entry_price  # Breakeven
                     self.breakeven_hit = True
-                    print(f"🌙 Moon Dev: Moved to breakeven trail! 🌟")
+                    print("🌙 Moon Dev: Moved to breakeven trail! 🌟")
                 else:
                     new_trail = current_price - (atr_val * self.trail_mult)  # Trail by 2 ATR
                     if new_trail > self.trail_sl:
@@ -169,11 +169,11 @@ class DivergentConvergence(Strategy):
             # Dynamic exits
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 return
             if rsi_now > 70:
                 self.position.close()
-                print(f"🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
+                print("🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
                 return
 
             print(f"🌙 Moon Dev: Position held. Bars: {bars_held}, Price: {current_price}, RSI: {rsi_now}, %K: {self.slowk[-1]}, Trail SL: {self.trail_sl} ✨")

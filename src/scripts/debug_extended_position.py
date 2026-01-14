@@ -35,7 +35,7 @@ def debug_position():
 
         for pos in positions:
             cprint(f"\n{'='*70}", "cyan")
-            cprint(f"🎯 Position Object Attributes:", "cyan", attrs=['bold'])
+            cprint("🎯 Position Object Attributes:", "cyan", attrs=['bold'])
             cprint(f"{'='*70}", "cyan")
 
             # Show all attributes
@@ -49,7 +49,7 @@ def debug_position():
                         pass
 
             cprint(f"\n{'='*70}", "green")
-            cprint(f"🔍 Raw Position Data:", "green", attrs=['bold'])
+            cprint("🔍 Raw Position Data:", "green", attrs=['bold'])
             cprint(f"{'='*70}", "green")
             cprint(f"{pos}", "white")
 

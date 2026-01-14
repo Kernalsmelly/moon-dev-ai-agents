@@ -7,21 +7,16 @@ Chuck the Chart Agent generates and analyzes trading charts using AI vision capa
 
 import os
 import pandas as pd
-import numpy as np
 import mplfinance as mpf
-import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 import time
 from dotenv import load_dotenv
 import anthropic
 import openai
-from src import nice_funcs as n
 from src import nice_funcs_hyperliquid as hl
 from src.agents.base_agent import BaseAgent
 import traceback
-import base64
-from io import BytesIO
 import re
 
 # Get the project root directory
@@ -340,7 +335,7 @@ class ChartAnalysisAgent(BaseAgent):
             print("\n" + "╔" + "═" * 60 + "╗")
             print(f"║    🌙 Chart Data for {symbol} {timeframe} - Last 5 Candles    ║")
             print("╠" + "═" * 60 + "╣")
-            print(f"║ Time │ Open │ High │ Low │ Close │ Volume │")
+            print("║ Time │ Open │ High │ Low │ Close │ Volume │")
             print("╟" + "─" * 60 + "╢")
             
             # Print last 5 candles with proper timestamp formatting

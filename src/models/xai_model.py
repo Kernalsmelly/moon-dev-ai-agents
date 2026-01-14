@@ -101,7 +101,7 @@ class XAIModel(BaseModel):
 
             content = response.choices[0].message.content.strip()
 
-            cprint(f"✅ Grok response received! 🌙", "green")
+            cprint("✅ Grok response received! 🌙", "green")
 
             return ModelResponse(
                 content=content,

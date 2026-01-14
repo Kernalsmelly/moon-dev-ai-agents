@@ -9,7 +9,6 @@ Aggressive trend following to beat buy and hold
 import pandas as pd
 import pandas_ta as ta
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import numpy as np
 
 # Load and preprocess data

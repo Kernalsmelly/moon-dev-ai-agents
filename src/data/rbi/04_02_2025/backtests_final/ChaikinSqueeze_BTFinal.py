@@ -3,7 +3,6 @@ from backtesting import Backtest, Strategy
 import pandas as pd
 import talib
 import pandas_ta as ta
-import numpy as np
 
 class ChaikinSqueeze(Strategy):
     risk_per_trade = 0.01  # 1% risk per trade

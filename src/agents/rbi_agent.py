@@ -600,7 +600,7 @@ def clean_model_output(output, content_type="text"):
     
     # Step 1: Remove thinking tags if present
     if "<think>" in output and "</think>" in output:
-        cprint(f"🧠 Detected DeepSeek-R1 thinking tags, cleaning...", "yellow")
+        cprint("🧠 Detected DeepSeek-R1 thinking tags, cleaning...", "yellow")
         
         # First try: Get everything after the last </think> tag
         clean_content = output.split("</think>")[-1].strip()
@@ -1033,9 +1033,9 @@ def main():
 
 if __name__ == "__main__":
     try:
-        cprint(f"\n🌟 Moon Dev's RBI AI Starting Up!", "green")
+        cprint("\n🌟 Moon Dev's RBI AI Starting Up!", "green")
         cprint(f"📅 Today's Date: {TODAY_DATE} - All outputs will be saved in this folder", "magenta")
-        cprint(f"🧠 DeepSeek-R1 thinking tags will be automatically removed from outputs", "magenta")
+        cprint("🧠 DeepSeek-R1 thinking tags will be automatically removed from outputs", "magenta")
         cprint(f"📋 Processed ideas log: {PROCESSED_IDEAS_LOG}", "magenta")
         cprint("\n🤖 Model Configurations:", "cyan")
         cprint(f"📚 Research: {RESEARCH_CONFIG['type']} - {RESEARCH_CONFIG['name']}", "cyan")

@@ -6,11 +6,9 @@ Built with love by Moon Dev 🚀
 """
 
 import sys
-import os
 from pathlib import Path
-from termcolor import colored, cprint
+from termcolor import cprint
 from dotenv import load_dotenv
-import time
 
 # Add project root to path
 project_root = str(Path(__file__).parent.parent.parent)
@@ -22,7 +20,7 @@ load_dotenv()
 
 # Import the exchange manager
 from src.exchange_manager import ExchangeManager
-from src.config import EXCHANGE, get_active_tokens, max_usd_order_size, slippage
+from src.config import EXCHANGE, get_active_tokens
 
 class UnifiedTradingAgent:
     """
@@ -34,7 +32,7 @@ class UnifiedTradingAgent:
         # Create exchange manager (automatically uses config.EXCHANGE)
         self.em = ExchangeManager()
 
-        cprint(f"\n🤖 Unified Trading Agent Initialized", "cyan", attrs=['bold'])
+        cprint("\n🤖 Unified Trading Agent Initialized", "cyan", attrs=['bold'])
         cprint(f"📍 Active Exchange: {EXCHANGE.upper()}", "green")
 
         # Get the appropriate token list based on exchange

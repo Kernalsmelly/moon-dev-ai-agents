@@ -62,7 +62,7 @@ class LiquidationPulse(Strategy):
                 print(f"🌑 MOON DEV FUNDING RATE EXIT: Turned positive ({self.funding_rate[-1]:.6f})")
             elif self.oi_diff[-1] < self.oi_diff[-2]:
                 self.position.close()
-                print(f"🌒 MOON DEV OI DECLINE EXIT: Open interest decreased")
+                print("🌒 MOON DEV OI DECLINE EXIT: Open interest decreased")
             elif price >= self.high_cluster[-1]:
                 self.position.close()
                 print(f"🌓 MOON DEV RESISTANCE EXIT: Reached high cluster {self.high_cluster[-1]:.2f}")

@@ -126,7 +126,7 @@ class FractalCascade(Strategy):
                 if self.data.Close[-1] < self.teeth[-1]:
                     self.position.close()
                     self.current_sl = None
-                    print(f"🌙 Moon Dev: Long exit - below Teeth 📉")
+                    print("🌙 Moon Dev: Long exit - below Teeth 📉")
                     return
                 
                 # Trail stop for long: Replaced infrequent fractal trail with dynamic ATR trail for improved risk management ✨
@@ -142,7 +142,7 @@ class FractalCascade(Strategy):
                 if self.data.Close[-1] > self.teeth[-1]:
                     self.position.close()
                     self.current_sl = None
-                    print(f"🌙 Moon Dev: Short exit - above Teeth 📈")
+                    print("🌙 Moon Dev: Short exit - above Teeth 📈")
                     return
                 
                 # Trail stop for short: Replaced infrequent fractal trail with dynamic ATR trail ✨

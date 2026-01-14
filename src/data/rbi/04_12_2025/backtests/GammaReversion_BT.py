@@ -1,9 +1,7 @@
 # 🌙 Moon Dev's GammaReversion Backtest 🌙
 import pandas as pd
 import talib
-import pandas_ta as ta
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover, crossunder
 
 # Data Preparation
 def load_data(path):

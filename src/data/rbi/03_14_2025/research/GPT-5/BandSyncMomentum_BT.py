@@ -12,7 +12,7 @@ class BandSyncMomentum(Strategy):
     def init(self):
         # Calculate Bollinger Bands
         self.upper_band, self.middle_band, self.lower_band = self.I(talib.BBANDS, self.data.Close, timeperiod=20, nbdevup=2, nbdevdn=2, matype=0)
-        print(f"🌙 Bollinger Bands initialized 🚀")
+        print("🌙 Bollinger Bands initialized 🚀")
 
     def next(self):
         price = self.data.Close[-1]

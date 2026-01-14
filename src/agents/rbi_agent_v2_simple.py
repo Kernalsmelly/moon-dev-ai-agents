@@ -271,9 +271,9 @@ def execute_backtest(file_path: str, strategy_name: str) -> dict:
 
 def main():
     """Main function"""
-    cprint(f"\n🌟 Moon Dev's RBI AI v2.0 (Simplified) Starting Up!", "green")
+    cprint("\n🌟 Moon Dev's RBI AI v2.0 (Simplified) Starting Up!", "green")
     cprint(f"📅 Today's Date: {TODAY_DATE}", "magenta")
-    cprint(f"🔄 EXECUTION LOOP ENABLED!", "yellow")
+    cprint("🔄 EXECUTION LOOP ENABLED!", "yellow")
     
     # Test with first idea from file
     if not IDEAS_FILE.exists():
@@ -289,7 +289,7 @@ def main():
     
     # Process first idea as test
     idea = ideas[0]
-    cprint(f"\n🎯 Testing with first idea:", "cyan")
+    cprint("\n🎯 Testing with first idea:", "cyan")
     cprint(f"📝 {idea[:100]}...", "yellow")
     
     # Phase 1: Research

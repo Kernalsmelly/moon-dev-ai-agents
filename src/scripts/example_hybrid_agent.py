@@ -7,7 +7,6 @@ Built with love by Moon Dev 🚀
 
 import os
 import sys
-import time
 from termcolor import cprint
 from dotenv import load_dotenv
 import eth_account
@@ -19,7 +18,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv()
 
 # Import BOTH trading functions
-import nice_funcs as solana  # Solana spot trading
 import nice_funcs_hyperliquid as hl  # HyperLiquid perps
 
 def trade_on_solana():

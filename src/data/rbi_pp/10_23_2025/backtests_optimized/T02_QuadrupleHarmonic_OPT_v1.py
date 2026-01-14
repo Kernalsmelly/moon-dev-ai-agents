@@ -72,7 +72,7 @@ class QuadrupleHarmonic(Strategy):
             # Improved TP: Fixed 1:2 Risk-Reward ratio for better average returns 🌙 (replaced harmonic approx with standard RR)
             stop_distance = entry_price - sl_price
             if stop_distance <= 0:
-                print(f"🌙 Moon Dev Skip: Zero or negative stop distance 😔")
+                print("🌙 Moon Dev Skip: Zero or negative stop distance 😔")
                 return
             tp_price = entry_price + 2 * stop_distance
             

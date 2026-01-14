@@ -253,7 +253,7 @@ class DivergenceVolatilityEnhanced(Strategy):
                 if (current_low < prev_low * 0.998 and  # Significant lower low
                     current_macd > prev_macd * 1.05):    # Significant higher MACD
                     
-                    print(f'🌙 QUALITY DIVERGENCE DETECTED:')
+                    print('🌙 QUALITY DIVERGENCE DETECTED:')
                     print(f'   Price: {prev_low:.2f} -> {current_low:.2f} ({((current_low/prev_low-1)*100):.2f}%)')
                     print(f'   MACD: {prev_macd:.4f} -> {current_macd:.4f} ({((current_macd/prev_macd-1)*100):.2f}%)')
                     
@@ -375,7 +375,7 @@ class DivergenceVolatilityEnhanced(Strategy):
             
             r_r_ratio = (take_profit - current_close) / risk_per_unit
             
-            print(f'🚀 ENHANCED ENTRY EXECUTED:')
+            print('🚀 ENHANCED ENTRY EXECUTED:')
             print(f'   Size: {position_size} @ {current_close:.2f}')
             print(f'   SL: {stop_loss:.2f} | TP: {take_profit:.2f}')
             print(f'   Risk: {adjusted_risk*100:.1f}% | R:R: {r_r_ratio:.1f}:1')
@@ -461,7 +461,7 @@ print("\n🌙 ENHANCED DIVERGENCE VOLATILITY - DEFAULT RESULTS")
 print("=" * 80)
 print(stats)
 
-print(f"\n⭐ KEY METRICS:")
+print("\n⭐ KEY METRICS:")
 print(f"📊 Total Trades: {stats['# Trades']}")
 print(f"💰 Total Return: {stats['Return [%]']:.2f}%")
 print(f"📈 Sharpe Ratio: {stats['Sharpe Ratio']:.2f}")
@@ -469,7 +469,7 @@ print(f"📉 Max Drawdown: {stats['Max. Drawdown [%]']:.2f}%")
 print(f"🎯 Win Rate: {stats['Win Rate [%]']:.2f}%")
 
 # Run Optimization
-print(f"\n🔄 Running Parameter Optimization...")
+print("\n🔄 Running Parameter Optimization...")
 print("=" * 80)
 
 stats_opt = bt.optimize(
@@ -487,7 +487,7 @@ print("\n🌙 ENHANCED DIVERGENCE VOLATILITY - OPTIMIZED RESULTS")
 print("=" * 80)
 print(stats_opt)
 
-print(f"\n🚀 OPTIMIZED METRICS:")
+print("\n🚀 OPTIMIZED METRICS:")
 print(f"📊 Total Trades: {stats_opt['# Trades']}")
 print(f"💰 Total Return: {stats_opt['Return [%]']:.2f}%")
 print(f"📈 Sharpe Ratio: {stats_opt['Sharpe Ratio']:.2f}")
@@ -498,7 +498,7 @@ print(f"🎯 Win Rate: {stats_opt['Win Rate [%]']:.2f}%")
 trade_requirement = stats_opt['# Trades'] > 100
 sharpe_requirement = stats_opt['Sharpe Ratio'] > 2.0
 
-print(f"\n✅ STRATEGY VALIDATION:")
+print("\n✅ STRATEGY VALIDATION:")
 print(f"📊 Trade Count Requirement (>100): {'✅ PASS' if trade_requirement else '❌ FAIL'} ({stats_opt['# Trades']} trades)")
 print(f"📈 Sharpe Ratio Requirement (>2.0): {'✅ PASS' if sharpe_requirement else '❌ FAIL'} ({stats_opt['Sharpe Ratio']:.2f})")
 

@@ -1,5 +1,4 @@
 from backtesting import Strategy, Backtest
-from backtesting.test import GOOG
 import talib
 import pandas as pd
 
@@ -34,11 +33,11 @@ class DeltaSentiment(Strategy):
         
         # Exit Logic
         if self.position.is_long and sentiment > 0:
-            print(f"🌙 Moon Dev Alert: Exiting Long Position 🚀 | Sentiment Shifted to Bearish")
+            print("🌙 Moon Dev Alert: Exiting Long Position 🚀 | Sentiment Shifted to Bearish")
             self.position.close()
         
         if self.position.is_short and sentiment < 0:
-            print(f"🌙 Moon Dev Alert: Exiting Short Position 🚀 | Sentiment Shifted to Bullish")
+            print("🌙 Moon Dev Alert: Exiting Short Position 🚀 | Sentiment Shifted to Bullish")
             self.position.close()
 
 # Load and prepare data

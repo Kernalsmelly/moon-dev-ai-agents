@@ -90,12 +90,12 @@ class SwiftStrength(Strategy):
         # Exit on opposite MACD crossover
         if self.position.is_long and (self.macdsignal[-2] < self.macd[-2] and self.macdsignal[-1] > self.macd[-1]):
             self.position.close()
-            print(f"🌙 Moon Dev: Exit long on MACD bearish reversal 🔄")
+            print("🌙 Moon Dev: Exit long on MACD bearish reversal 🔄")
             self.entry_set = False
             return
         if self.position.is_short and (self.macd[-2] < self.macdsignal[-2] and self.macd[-1] > self.macdsignal[-1]):
             self.position.close()
-            print(f"🌙 Moon Dev: Exit short on MACD bullish reversal 🔄")
+            print("🌙 Moon Dev: Exit short on MACD bullish reversal 🔄")
             self.entry_set = False
             return
 
@@ -128,7 +128,7 @@ class SwiftStrength(Strategy):
                 sl = current_price - sl_distance
                 tp = current_price + (self.rr_ratio * sl_distance)
                 if sl >= current_price or tp <= current_price:
-                    print(f"🌙 Moon Dev: Invalid SL/TP for long, skipping 🚫")
+                    print("🌙 Moon Dev: Invalid SL/TP for long, skipping 🚫")
                     return
                 self.buy(size=position_size, sl=sl, tp=tp)  # 🌙 Removed limit for market entry at next open
                 self.entry_set = False  # Will be set next bar
@@ -145,7 +145,7 @@ class SwiftStrength(Strategy):
                 sl = current_price + sl_distance
                 tp = current_price - (self.rr_ratio * sl_distance)
                 if sl <= current_price or tp >= current_price:
-                    print(f"🌙 Moon Dev: Invalid SL/TP for short, skipping 🚫")
+                    print("🌙 Moon Dev: Invalid SL/TP for short, skipping 🚫")
                     return
                 self.sell(size=position_size, sl=sl, tp=tp)  # 🌙 Removed limit for market entry at next open
                 self.entry_set = False  # Will be set next bar

@@ -1,7 +1,6 @@
 from backtesting import Backtest, Strategy
 import talib
 import pandas as pd
-import numpy as np
 
 class VwapAdxSynergy(Strategy):
     risk_per_trade = 0.01
@@ -66,12 +65,12 @@ class VwapAdxSynergy(Strategy):
         else:
             # Exit conditions for long
             if self.position.is_long and (adx < 25 or (minus_di[-2] < plus_di[-2] and minus_di[-1] > plus_di[-1])):
-                print(f"✨ Moon Dev Closing LONG | ADX weakening or -DI crossing +DI")
+                print("✨ Moon Dev Closing LONG | ADX weakening or -DI crossing +DI")
                 self.position.close()
 
             # Exit conditions for short
             elif self.position.is_short and (adx < 25 or (plus_di[-2] < minus_di[-2] and plus_di[-1] > minus_di[-1])):
-                print(f"✨ Moon Dev Closing SHORT | ADX weakening or +DI crossing -DI")
+                print("✨ Moon Dev Closing SHORT | ADX weakening or +DI crossing -DI")
                 self.position.close()
 
 # Data preparation

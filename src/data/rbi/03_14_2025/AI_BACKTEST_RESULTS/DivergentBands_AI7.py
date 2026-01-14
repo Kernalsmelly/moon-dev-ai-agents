@@ -8,7 +8,6 @@ Moon Dev AI Trading Strategy Implementation
 import pandas as pd
 import pandas_ta as ta
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import numpy as np
 
 # Load and preprocess data

@@ -59,7 +59,7 @@ class VortexCompression(Strategy):
                 risk_per_share = entry_price - sl_price
                 
                 if risk_per_share <= 0:
-                    print(f"🌑 Moon Dev Alert: Negative risk detected! Aborting launch!")
+                    print("🌑 Moon Dev Alert: Negative risk detected! Aborting launch!")
                     return
                 
                 risk_amount = self.equity * self.risk_per_trade

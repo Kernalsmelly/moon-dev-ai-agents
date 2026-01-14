@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
 import talib
 
@@ -128,7 +127,7 @@ class MomentumSqueeze(Strategy):
                 self.entry_bar = current_bar  # 🌙 Moon Dev: Record entry bar
                 print(f"🌙 Moon Dev: LONG ENTRY at {entry}, SL: {sl}, TP: {tp}, Size: {pos_size:.2f}, Risk: {risk_amount:.2f} 🚀")
                 if bull_cross:
-                    print(f"📈 Bullish MACD cross confirmed!")
+                    print("📈 Bullish MACD cross confirmed!")
 
         # Short entry
         bars_since_short = current_bar - self.last_short_breakout if self.last_short_breakout >= 0 else 100
@@ -152,7 +151,7 @@ class MomentumSqueeze(Strategy):
                 self.entry_bar = current_bar  # 🌙 Moon Dev: Record entry bar
                 print(f"🌙 Moon Dev: SHORT ENTRY at {entry}, SL: {sl}, TP: {tp}, Size: {pos_size:.2f}, Risk: {risk_amount:.2f} 📉")
                 if bear_cross:
-                    print(f"📉 Bearish MACD cross confirmed!")
+                    print("📉 Bearish MACD cross confirmed!")
 
         # Manage open positions
         if self.position:
@@ -204,7 +203,7 @@ class MomentumSqueeze(Strategy):
                 if favorable_move >= 3 * self.initial_risk and self.partial_closed:
                     partial_size = self.position.size * 0.5  # 50% of remaining
                     self.sell(size=partial_size)
-                    print(f"🌙 Moon Dev: Scaled out additional 50% of remaining long at 3R 💰")
+                    print("🌙 Moon Dev: Scaled out additional 50% of remaining long at 3R 💰")
                 # Trailing stop after 1:1, tightened to EMA20 - 0.5 ATR for better protection after initial move (Exit Optimization)
                 if favorable_move >= self.initial_risk:
                     new_sl = max(self.sl, self.ema20[-1] - 0.5 * self.atr[-1])
@@ -214,7 +213,7 @@ class MomentumSqueeze(Strategy):
                 # MACD histogram reverse with divergence check for more reliable exits
                 if self.hist[-1] <= 0 and self.macd_line[-1] < self.macd_line[-5]:  # Added simple divergence filter
                     self.position.close()
-                    print(f"🌙 MACD histogram turned negative with bearish divergence, closing long 📊")
+                    print("🌙 MACD histogram turned negative with bearish divergence, closing long 📊")
                     self._reset_pos()
                     return
             else:  # short
@@ -227,7 +226,7 @@ class MomentumSqueeze(Strategy):
                 if favorable_move >= 3 * self.initial_risk and self.partial_closed:
                     partial_size = abs(self.position.size) * 0.5  # 50% of remaining
                     self.buy(size=partial_size)
-                    print(f"🌙 Moon Dev: Scaled out additional 50% of remaining short at 3R 💰")
+                    print("🌙 Moon Dev: Scaled out additional 50% of remaining short at 3R 💰")
                 # Trailing stop after 1:1, tightened to EMA20 + 0.5 ATR for better protection after initial move (Exit Optimization)
                 if favorable_move >= self.initial_risk:
                     new_sl = min(self.sl, self.ema20[-1] + 0.5 * self.atr[-1])
@@ -237,7 +236,7 @@ class MomentumSqueeze(Strategy):
                 # MACD histogram reverse with divergence check for more reliable exits
                 if self.hist[-1] >= 0 and self.macd_line[-1] > self.macd_line[-5]:  # Added simple divergence filter
                     self.position.close()
-                    print(f"🌙 MACD histogram turned positive with bullish divergence, closing short 📊")
+                    print("🌙 MACD histogram turned positive with bullish divergence, closing short 📊")
                     self._reset_pos()
                     return
 

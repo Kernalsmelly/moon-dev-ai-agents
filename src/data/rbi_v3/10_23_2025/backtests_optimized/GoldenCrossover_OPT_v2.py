@@ -148,19 +148,19 @@ class GoldenCrossover(Strategy):
 
             # 🌙 Moon Dev Optimization: Increased full TP to 4:1 RR to hold for bigger BTC moves, improving overall return potential
             if unrealized_pnl >= 4 * risk:
-                print(f"🌙 Moon Dev: Taking full profits at 4:1 RR! 🚀")
+                print("🌙 Moon Dev: Taking full profits at 4:1 RR! 🚀")
                 self.position.close()
                 return
 
             # Bearish divergence: Loosened RSI>65 for earlier warning in shorter timeframe
             if rsi > 65 and len(self.data) > 2 and close > self.data.Close[-2] and rsi < self.rsi[-2] and adx > 20:
-                print(f"🌙 Moon Dev: Bearish RSI Divergence detected in overbought zone with trend, EXITING! 🚀")
+                print("🌙 Moon Dev: Bearish RSI Divergence detected in overbought zone with trend, EXITING! 🚀")
                 self.position.close()
                 return
 
             # Exit below SMA20 for quicker response to trend weakness
             if close < sma20:
-                print(f"🌙 Moon Dev: EXITING below SMA20 trail 🚀")
+                print("🌙 Moon Dev: EXITING below SMA20 trail 🚀")
                 self.position.close()
                 return
 

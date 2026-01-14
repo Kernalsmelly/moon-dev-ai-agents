@@ -195,7 +195,7 @@ def place_limit_order_with_chase(symbol, side, quantity, leverage, max_attempts=
             # Get best bid/ask
             best_bid, best_ask = get_best_bid_ask(symbol)
             if not best_bid or not best_ask:
-                cprint(f"❌ Could not get order book", "red")
+                cprint("❌ Could not get order book", "red")
                 time.sleep(check_interval)
                 continue
 
@@ -439,7 +439,7 @@ def limit_buy(token, amount, slippage, leverage=DEFAULT_LEVERAGE):
         if order:
             return order
         else:
-            cprint(f"❌ Failed to fill buy order after chasing", "red")
+            cprint("❌ Failed to fill buy order after chasing", "red")
             return None
 
     except Exception as e:
@@ -605,7 +605,7 @@ def limit_sell(token, amount, slippage, leverage=DEFAULT_LEVERAGE):
             if order:
                 return order
             else:
-                cprint(f"❌ Failed to fill sell order after chasing", "red")
+                cprint("❌ Failed to fill sell order after chasing", "red")
                 return None
 
     except Exception as e:
@@ -682,7 +682,7 @@ def chunk_kill(token_mint_address, max_usd_order_size, slippage):
         # Verify position closed
         final_position = get_position(token_mint_address)
         if not final_position or abs(final_position['position_amount']) < 0.0001:
-            cprint(f"✅ Position closed successfully!", "green", attrs=['bold'])
+            cprint("✅ Position closed successfully!", "green", attrs=['bold'])
             return True
         else:
             cprint(f"⚠️  Position still has {final_position['position_amount']} remaining", "yellow")

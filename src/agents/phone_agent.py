@@ -10,19 +10,16 @@ import sys
 from pathlib import Path
 import os
 import time
-import json
 import wave
 import tempfile
 from flask import Flask, request
 from twilio.twiml.voice_response import VoiceResponse, Gather
-from twilio.rest import Client
 import openai
 from termcolor import cprint
 from dotenv import load_dotenv
 import asyncio
 import sounddevice as sd
 import numpy as np
-import wave
 import queue
 import threading
 import langdetect
@@ -167,7 +164,7 @@ class VoiceRecorder:
             
             # List available audio devices
             devices = sd.query_devices()
-            cprint(f"🎛️ Available audio devices:", "cyan")
+            cprint("🎛️ Available audio devices:", "cyan")
             default_input = None
             for i, device in enumerate(devices):
                 cprint(f"  {i}: {device['name']} (inputs: {device['max_input_channels']})", "cyan")
@@ -216,7 +213,7 @@ class VoiceRecorder:
             cprint("🎙️ Recording started!", "green")
             
             # Print current audio settings
-            cprint(f"🔊 Audio settings:", "cyan")
+            cprint("🔊 Audio settings:", "cyan")
             cprint(f"  Device: {devices[device_id]['name']}", "cyan")
             cprint(f"  Sample rate: {SAMPLE_RATE} Hz", "cyan")
             cprint(f"  Channels: {CHANNELS}", "cyan")

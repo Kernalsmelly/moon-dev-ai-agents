@@ -97,7 +97,7 @@ class DivergentConvergence(Strategy):
 
         # Entry Logic
         if not self.position and self.div_bar is not None and stoch_converge and current_price > self.sma200[-1] and self.data.Volume[-1] > 1.2 * self.vol_sma[-1] and self.adx[-1] > 18 and self.plus_di[-1] > self.minus_di[-1]:  # 🌙 Moon Dev Optimization: Refined filters - volume >1.2x SMA, ADX>18 for more trades, +DI > -DI for bullish regime confirmation, ensuring quality trending entries
-            print(f"🌙 Moon Dev: All entry conditions met! Attempting LONG entry... 🚀")
+            print("🌙 Moon Dev: All entry conditions met! Attempting LONG entry... 🚀")
             # Calculate SL: below div low with buffer
             div_low = self.div_low
             atr_val = self.atr[-1]
@@ -150,7 +150,7 @@ class DivergentConvergence(Strategy):
             # Stochastic cross exit
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 self.current_sl = None
                 self.highest_since_entry = None
                 return
@@ -158,7 +158,7 @@ class DivergentConvergence(Strategy):
             # RSI overbought exit
             if rsi_now > 70:
                 self.position.close()
-                print(f"🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
+                print("🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
                 self.current_sl = None
                 self.highest_since_entry = None
                 return

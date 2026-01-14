@@ -8,7 +8,6 @@ import numpy as np
 from backtesting import Backtest
 import warnings
 import sys
-import os
 
 # Suppress all warnings and prints
 warnings.filterwarnings('ignore')
@@ -69,7 +68,7 @@ for strategy_name in strategies:
             'win_rate': stats['Win Rate [%]'],
             'max_dd': stats['Max. Drawdown [%]']
         })
-    except Exception as e:
+    except Exception:
         results.append({
             'name': strategy_name,
             'trades': 0,
@@ -100,7 +99,7 @@ avg_sharpe = np.mean([r['sharpe'] for r in results if r['sharpe'] != 0])
 strategies_with_trades = sum(1 for r in results if r['trades'] > 0)
 strategies_meeting_req = sum(1 for r in results if r['trades'] >= 25 and r['sharpe'] >= 2.0)
 
-print(f"\n📊 SUMMARY:")
+print("\n📊 SUMMARY:")
 print(f"   Total Trades: {total_trades}")
 print(f"   Strategies with trades: {strategies_with_trades}/10")
 print(f"   Average Sharpe (non-zero): {avg_sharpe:.2f}")

@@ -172,16 +172,16 @@ class OpenRouterModel(BaseModel):
 
             # Handle rate limit errors (429)
             if "429" in error_str or "rate_limit" in error_str:
-                cprint(f"⚠️  OpenRouter rate limit exceeded", "yellow")
+                cprint("⚠️  OpenRouter rate limit exceeded", "yellow")
                 cprint(f"   Model: {self.model_name}", "yellow")
-                cprint(f"   💡 Skipping this model for this request...", "cyan")
+                cprint("   💡 Skipping this model for this request...", "cyan")
                 return None
 
             # Handle quota errors (402)
             if "402" in error_str or "insufficient" in error_str:
-                cprint(f"⚠️  OpenRouter credits insufficient", "yellow")
+                cprint("⚠️  OpenRouter credits insufficient", "yellow")
                 cprint(f"   Model: {self.model_name}", "yellow")
-                cprint(f"   💡 Add credits at: https://openrouter.ai/credits", "cyan")
+                cprint("   💡 Add credits at: https://openrouter.ai/credits", "cyan")
                 return None
 
             # Raise 503 errors (service unavailable)

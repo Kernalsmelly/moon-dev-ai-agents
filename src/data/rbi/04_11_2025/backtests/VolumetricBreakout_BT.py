@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Strategy
 from backtesting.lib import crossover
 from backtesting import Backtest

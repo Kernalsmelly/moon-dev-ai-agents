@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import talib
 from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
@@ -41,13 +40,13 @@ class LiquidationClimber(Strategy):
         
         # Emergency exit condition
         if self.position and liq < (liq_mean - liq_std):
-            print(f"🚨 Moon Dev Emergency Exit: Liquidation dropped below 1σ!")
+            print("🚨 Moon Dev Emergency Exit: Liquidation dropped below 1σ!")
             self.position.close()
             
         # Exit conditions
         if self.position:
             if crossover(self.atr, self.atr_sma):
-                print(f"🌪️ Moon Dev Exit: Volatility expansion detected!")
+                print("🌪️ Moon Dev Exit: Volatility expansion detected!")
                 self.position.close()
                 return
             if self.data.Close[-1] >= self.take_profit or self.data.Close[-1] <= self.stop_loss:

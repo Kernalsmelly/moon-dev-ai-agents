@@ -1,5 +1,5 @@
 # 🌙 Moon Dev's Short Squeeze Gap Backtest 🌙
-from backtesting import Backtest, Strategy
+from backtesting import Strategy
 import talib
 import pandas as pd
 import numpy as np

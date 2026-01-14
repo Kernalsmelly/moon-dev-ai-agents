@@ -1,9 +1,6 @@
 import pandas as pd
-import numpy as np
 import talib
-import pandas_ta as ta
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 class DivergentCloud(Strategy):
     risk_per_trade = 0.01  # 1% risk per trade

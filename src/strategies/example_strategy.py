@@ -5,7 +5,6 @@ Simple Moving Average Crossover Strategy
 
 from .base_strategy import BaseStrategy
 from src.config import MONITORED_TOKENS
-import pandas as pd
 from termcolor import cprint
 from src import nice_funcs as n
 

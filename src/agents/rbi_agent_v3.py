@@ -38,7 +38,6 @@ until it achieves your target return. Set realistic targets!
 import subprocess
 import json
 from pathlib import Path
-from anthropic import Anthropic
 import openai
 
 # Core imports only
@@ -62,9 +61,7 @@ AI_TEMPERATURE = 0.7
 AI_MAX_TOKENS = 4000
 
 # Import model factory with proper path handling
-from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-import sys
 sys.path.append(str(PROJECT_ROOT))
 
 try:
@@ -966,7 +963,7 @@ def process_trading_idea_with_execution(idea: str) -> None:
                     # Need to optimize! 🎯
                     gap = TARGET_RETURN - current_return
                     print(f"\n📈 Need to gain {gap}% more to hit target")
-                    print(f"🎯 Starting OPTIMIZATION LOOP...")
+                    print("🎯 Starting OPTIMIZATION LOOP...")
 
                     # Save the working version
                     working_file = FINAL_BACKTEST_DIR / f"{strategy_name}_BTFinal_WORKING_{current_return}pct.py"
@@ -1005,21 +1002,21 @@ def process_trading_idea_with_execution(idea: str) -> None:
                         opt_result = execute_backtest(opt_file, strategy_name)
 
                         if not opt_result['success']:
-                            print(f"⚠️ Optimized code failed to execute, trying again...")
+                            print("⚠️ Optimized code failed to execute, trying again...")
                             continue
 
                         if has_nan_results(opt_result):
-                            print(f"⚠️ Optimized code has no trades, trying again...")
+                            print("⚠️ Optimized code has no trades, trying again...")
                             continue
 
                         # Parse the new return
                         new_return = parse_return_from_output(opt_result['stdout'])
 
                         if new_return is None:
-                            print(f"⚠️ Could not parse return, trying again...")
+                            print("⚠️ Could not parse return, trying again...")
                             continue
 
-                        print(f"\n📊 Optimization Result:")
+                        print("\n📊 Optimization Result:")
                         print(f"  Previous: {best_return}%")
                         print(f"  New:      {new_return}%")
                         print(f"  Change:   {new_return - best_return:+.2f}%")
@@ -1045,7 +1042,7 @@ def process_trading_idea_with_execution(idea: str) -> None:
                                 print(f"✅ Target-hitting backtest saved to: {final_file}")
                                 return  # DONE!
                         else:
-                            print(f"⚠️ No improvement. Trying different optimization approach...")
+                            print("⚠️ No improvement. Trying different optimization approach...")
 
                     # Maxed out optimization attempts
                     print(f"\n⚠️ Reached max optimization iterations ({MAX_OPTIMIZATION_ITERATIONS})")
@@ -1099,9 +1096,9 @@ def process_trading_idea_with_execution(idea: str) -> None:
 
 def main():
     """Main function - process ideas from file"""
-    cprint(f"\n🌟 Moon Dev's RBI AI v3.0 Starting Up!", "green")
+    cprint("\n🌟 Moon Dev's RBI AI v3.0 Starting Up!", "green")
     cprint(f"📅 Today's Date: {TODAY_DATE}", "magenta")
-    cprint(f"🎯 OPTIMIZATION LOOP ENABLED!", "yellow")
+    cprint("🎯 OPTIMIZATION LOOP ENABLED!", "yellow")
     cprint(f"🎯 Target Return: {TARGET_RETURN}%", "green")
     cprint(f"🐍 Using conda env: {CONDA_ENV}", "cyan")
     cprint(f"🔧 Max debug iterations: {MAX_DEBUG_ITERATIONS}", "cyan")

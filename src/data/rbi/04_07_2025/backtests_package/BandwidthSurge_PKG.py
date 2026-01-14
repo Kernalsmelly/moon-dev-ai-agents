@@ -48,14 +48,14 @@ class BandwidthSurge(Strategy):
                 
                 if position_size > 0:
                     self.buy(size=position_size, sl=stop_loss)
-                    print(f"🌕 MOON DEV ALERT: Cosmic Breakout Detected! 🚀")
+                    print("🌕 MOON DEV ALERT: Cosmic Breakout Detected! 🚀")
                     print(f"Entry: {entry_price:.2f} | Size: {position_size} shares")
         
         else:
             # 🌠 Exit Conditions
             if self.sar[-1] > self.data.Close[-1]:
                 self.position.close()
-                print(f"🌑 SAR Reversal Signal: Returning to Base Station 🛸")
+                print("🌑 SAR Reversal Signal: Returning to Base Station 🛸")
 
 # 🛰️ Data Loading & Preparation
 data = pd.read_csv("/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv")

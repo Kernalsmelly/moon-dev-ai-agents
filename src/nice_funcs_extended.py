@@ -616,7 +616,7 @@ def chunk_kill(symbol: str, max_chunk_size: float = 999999, slippage: int = None
 
         # Check if position is closed
         if not position or position['position_amount'] == 0:
-            cprint(f"✅ Position FULLY closed (verified)", "green")
+            cprint("✅ Position FULLY closed (verified)", "green")
             time.sleep(0.3)
 
             # Double-check closure
@@ -672,7 +672,7 @@ def chunk_kill(symbol: str, max_chunk_size: float = 999999, slippage: int = None
                 if order_result:
                     last_price = close_price
                     last_size = remaining_size
-                    cprint(f"✅ Close order placed", "green")
+                    cprint("✅ Close order placed", "green")
             except Exception as e:
                 cprint(f"⚠️  Close order error: {e}", "yellow")
 
@@ -759,7 +759,7 @@ def limit_buy(symbol: str, usd_amount: float, limit_price: float, leverage: int 
             cprint(f"❌ Invalid asset size: {asset_size}", "red")
             return None
 
-        cprint(f"📈 Placing limit BUY order", "cyan")
+        cprint("📈 Placing limit BUY order", "cyan")
         cprint(f"   Symbol: {symbol}", "white")
         cprint(f"   Size: {asset_size} ({usd_amount} USD)", "white")
         cprint(f"   Price: ${limit_price:,.2f}", "white")
@@ -769,10 +769,10 @@ def limit_buy(symbol: str, usd_amount: float, limit_price: float, leverage: int 
         result = api.buy_limit(symbol, asset_size, limit_price, leverage=leverage)
 
         if result:
-            cprint(f"✅ Limit buy order placed!", "green")
+            cprint("✅ Limit buy order placed!", "green")
             return result
         else:
-            cprint(f"⚠️  Order placement returned no result", "yellow")
+            cprint("⚠️  Order placement returned no result", "yellow")
             return None
 
     except Exception as e:
@@ -797,7 +797,7 @@ def limit_sell(symbol: str, usd_amount: float, limit_price: float, leverage: int
             cprint(f"❌ Invalid asset size: {asset_size}", "red")
             return None
 
-        cprint(f"📉 Placing limit SELL order", "cyan")
+        cprint("📉 Placing limit SELL order", "cyan")
         cprint(f"   Symbol: {symbol}", "white")
         cprint(f"   Size: {asset_size} ({usd_amount} USD)", "white")
         cprint(f"   Price: ${limit_price:,.2f}", "white")
@@ -807,10 +807,10 @@ def limit_sell(symbol: str, usd_amount: float, limit_price: float, leverage: int
         result = api.sell_limit(symbol, asset_size, limit_price, leverage=leverage)
 
         if result:
-            cprint(f"✅ Limit sell order placed!", "green")
+            cprint("✅ Limit sell order placed!", "green")
             return result
         else:
-            cprint(f"⚠️  Order placement returned no result", "yellow")
+            cprint("⚠️  Order placement returned no result", "yellow")
             return None
 
     except Exception as e:

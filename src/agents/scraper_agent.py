@@ -32,7 +32,6 @@ Usage:
 Built with love by Moon Dev 🚀
 """
 
-import os
 import sys
 import re
 import time
@@ -46,7 +45,6 @@ import threading
 from urllib.parse import urlparse
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 
 # 🌙 Moon Dev: Dynamic path calculation
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -189,7 +187,7 @@ class ScraperAgent:
             driver.set_page_load_timeout(REQUEST_TIMEOUT)
 
             # Navigate to URL
-            cprint(f"🚀 Loading page with headless browser...", "yellow")
+            cprint("🚀 Loading page with headless browser...", "yellow")
             driver.get(url)
 
             # Wait for page to fully load (including JS)
@@ -440,7 +438,7 @@ Content:
                 else:
                     f.write(f"ERROR: {scraped_data['error']}")
 
-            cprint(f"\n💾 Results saved:", "green", attrs=['bold'])
+            cprint("\n💾 Results saved:", "green", attrs=['bold'])
             cprint(f"   📄 JSON: {json_filepath.name}", "white")
             cprint(f"   📝 Human Readable: {txt_filepath.name}", "white")
             cprint(f"   🔍 Raw Scrape: raw_scrapes/{raw_filepath.name}", "white")
@@ -601,7 +599,7 @@ Content:
                 if custom_prompt:
                     cprint(f"\n🔴 CUSTOM PROMPT: {custom_prompt}", "white", "on_red", attrs=['bold'])
                 else:
-                    cprint(f"\n📝 Using default prompt", "blue")
+                    cprint("\n📝 Using default prompt", "blue")
 
                 # Process all URLs in parallel
                 start_time = time.time()
@@ -663,7 +661,7 @@ Content:
                 successful = sum(1 for r in results if r["success"])
                 cprint(f"✅ Completed: {successful}/{len(results)} URLs", "green", attrs=['bold'])
                 cprint(f"⏱️  Total Time: {elapsed:.2f}s", "cyan")
-                cprint(f"💾 Results saved to: src/data/scraper_agent/", "blue")
+                cprint("💾 Results saved to: src/data/scraper_agent/", "blue")
                 cprint(f"{'='*60}\n", "green")
 
             except KeyboardInterrupt:

@@ -4,7 +4,6 @@ Print Stats for All 10 Strategies - Proof of Working Strategies
 """
 
 import pandas as pd
-import numpy as np
 from backtesting import Backtest
 import warnings
 import sys
@@ -88,13 +87,13 @@ for i, (strategy_name, module_name) in enumerate(strategies_to_test, 1):
         trades_ok = "✅" if stats['# Trades'] >= 25 else "❌"
         sharpe_ok = "✅" if stats['Sharpe Ratio'] >= 2.0 else "❌"
         
-        print(f"\n🎯 REQUIREMENTS CHECK:")
+        print("\n🎯 REQUIREMENTS CHECK:")
         print(f"  25+ Trades: {trades_ok} ({stats['# Trades']} trades)")
         print(f"  2.0+ Sharpe: {sharpe_ok} ({stats['Sharpe Ratio']:.2f} Sharpe)")
         
     except Exception as e:
         print(f"❌ ERROR running {strategy_name}: {str(e)[:100]}")
-        print(f"   This might be due to import issues or strategy initialization")
+        print("   This might be due to import issues or strategy initialization")
 
 print(f"\n{'='*100}")
 print("📊 SUMMARY OF ALL 10 STRATEGIES")

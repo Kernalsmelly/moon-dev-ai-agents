@@ -74,7 +74,7 @@ class BandDivergence(Strategy):
             if position_size > 0:
                 self.sell(size=position_size, sl=stop_price, tp=take_profit)
                 self.trade_duration = 0
-                print(f"🌙✨ MOON SHORT ACTIVATED! ✨")
+                print("🌙✨ MOON SHORT ACTIVATED! ✨")
                 print(f"Entry: {entry_price:.2f} | SL: {stop_price:.2f} | TP: {take_profit:.2f}")
                 print(f"Cosmic Position Size: {position_size} units 🚀")
 
@@ -83,7 +83,7 @@ class BandDivergence(Strategy):
             self.trade_duration += 1
             if self.trade_duration >= 10:
                 self.position.close()
-                print(f"⏳🌙 TIME PORTAL CLOSED after 10 cycles")
+                print("⏳🌙 TIME PORTAL CLOSED after 10 cycles")
 
 # Launch Backtest Rocket 🚀📊
 bt = Backtest(data, BandDivergence, cash=1_000_000, commission=.002)

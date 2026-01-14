@@ -1,9 +1,7 @@
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import pandas as pd
 import talib
 import pandas_ta as ta
-import numpy as np
 
 # Load and preprocess data
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv')

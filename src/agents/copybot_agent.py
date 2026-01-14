@@ -14,14 +14,12 @@ Need an API key? for a limited time, bootcamp members get free api keys for clau
 import os
 import pandas as pd
 import anthropic
-from termcolor import colored, cprint
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
 import time
 from pathlib import Path
 from src.config import *
 from src import nice_funcs as n
-from src.data.ohlcv_collector import collect_all_tokens, collect_token_data
+from src.data.ohlcv_collector import collect_token_data
 
 # 🌙 Moon Dev: Calculate paths dynamically
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -192,7 +190,7 @@ class CopyBotAgent:
             print(f"\n📊 Summary for {position_data['name'].values[0]}:")
             print(f"Action: {action}")
             print(f"Confidence: {confidence}%")
-            print(f"🎯 Position Analysis Complete!")
+            print("🎯 Position Analysis Complete!")
             return response
             
         except Exception as e:

@@ -132,7 +132,7 @@ class FractalCascade(Strategy):
                 if self.data.Close[-1] < self.jaw[-1]:
                     self.position.close()
                     self.current_sl = None
-                    print(f"🌙 Moon Dev: Long hard exit - below Jaw 😤")
+                    print("🌙 Moon Dev: Long hard exit - below Jaw 😤")
                     return
                 
                 # 🌙 Moon Dev: ATR-based trailing stop for smoother, more frequent adjustments in trends
@@ -150,7 +150,7 @@ class FractalCascade(Strategy):
                 if self.data.Close[-1] > self.jaw[-1]:
                     self.position.close()
                     self.current_sl = None
-                    print(f"🌙 Moon Dev: Short hard exit - above Jaw 😤")
+                    print("🌙 Moon Dev: Short hard exit - above Jaw 😤")
                     return
                 
                 # 🌙 Moon Dev: ATR-based trailing stop for shorts

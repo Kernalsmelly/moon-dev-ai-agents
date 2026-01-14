@@ -1,6 +1,5 @@
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 
@@ -36,14 +35,14 @@ class VortexCycloneStrategy(Strategy):
                     print(f"🌙✨ LONG exit at {self.data.Close[-1]} (VI-/DPO exit)")
                 elif len(self.data) - trade.entry_bar >= self.max_trade_duration:
                     trade.close()
-                    print(f"🌙⏳ LONG exit (max duration)")
+                    print("🌙⏳ LONG exit (max duration)")
             else:
                 if crossover(self.vi_plus, self.vi_minus) or crossover(-self.dpo, upper_exit):
                     trade.close()
                     print(f"🌙✨ SHORT exit at {self.data.Close[-1]} (VI+/DPO exit)")
                 elif len(self.data) - trade.entry_bar >= self.max_trade_duration:
                     trade.close()
-                    print(f"🌙⏳ SHORT exit (max duration)")
+                    print("🌙⏳ SHORT exit (max duration)")
         
         # Entry conditions
         if not self.position:

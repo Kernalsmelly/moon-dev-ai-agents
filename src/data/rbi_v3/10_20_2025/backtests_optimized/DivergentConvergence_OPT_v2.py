@@ -94,7 +94,7 @@ class DivergentConvergence(Strategy):
 
         # Entry Logic - Added volume, ADX, and SMA50 filters for higher quality setups
         if not self.position and self.div_bar is not None and stoch_converge and current_price > self.sma200[-1] and current_price > self.sma50[-1] and current_vol > self.vol_sma[-1] and self.adx[-1] > 20:
-            print(f"🌙 Moon Dev: All entry conditions met! Attempting LONG entry... 🚀")
+            print("🌙 Moon Dev: All entry conditions met! Attempting LONG entry... 🚀")
             # Calculate SL: below div low with adjusted buffer, fallback to ATR-based if invalid
             div_low = self.div_low
             atr_val = self.atr[-1]
@@ -138,16 +138,16 @@ class DivergentConvergence(Strategy):
             # Dynamic exits
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 return
             if rsi_now > 70:
                 self.position.close()
-                print(f"🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
+                print("🌙 Moon Dev: RSI Overbought >70! EXIT 📈")
                 return
             # Additional trend break exit
             if current_price < self.sma50[-1]:
                 self.position.close()
-                print(f"🌙 Moon Dev: Price below SMA50! Trend break EXIT 📉")
+                print("🌙 Moon Dev: Price below SMA50! Trend break EXIT 📉")
                 return
 
             # Trailing Stop Implementation - Activates after 1 ATR profit, trails at 2 ATR below current

@@ -1,8 +1,6 @@
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 # Load and prepare data
 path = '/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv'
@@ -33,7 +31,7 @@ class DynamicOversold(Strategy):
     max_trades = 5  # Approximate max exposure
 
     def init(self):
-        print(f"🌙 Moon Dev: Initializing DynamicOversold strategy 🚀")
+        print("🌙 Moon Dev: Initializing DynamicOversold strategy 🚀")
         self.rsi = self.I(talib.RSI, self.data.Close, timeperiod=self.rsi_period)
         self.sma5 = self.I(talib.SMA, self.data.Close, timeperiod=self.sma_short)
         self.ema50 = self.I(talib.EMA, self.data.Close, timeperiod=self.ema_long)
@@ -44,7 +42,7 @@ class DynamicOversold(Strategy):
         self.bb_width = self.bb_upper - self.bb_lower
         self.avg_width = self.I(talib.SMA, self.bb_width, timeperiod=self.width_period)
         self.swing_low = self.I(talib.MIN, self.data.Low, timeperiod=self.swing_period)
-        print(f"🌙 Moon Dev: Indicators initialized successfully ✨")
+        print("🌙 Moon Dev: Indicators initialized successfully ✨")
 
     def next(self):
         if len(self.rsi) < self.ema_long:
@@ -118,7 +116,7 @@ class DynamicOversold(Strategy):
             risk_per_unit = entry_price - stop_price
 
             if risk_per_unit <= 0:
-                print(f"🌙 Moon Dev: Invalid stop, skipping entry ⚠️")
+                print("🌙 Moon Dev: Invalid stop, skipping entry ⚠️")
                 return
 
             risk_amount = self.equity * risk_pct

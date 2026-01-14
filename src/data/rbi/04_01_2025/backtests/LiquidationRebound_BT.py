@@ -1,6 +1,5 @@
 # 🌙 Moon Dev's LiquidationRebound Backtest Script
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import pandas as pd
 import pandas_ta as ta
 import talib

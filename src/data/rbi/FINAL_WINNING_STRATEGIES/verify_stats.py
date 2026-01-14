@@ -4,7 +4,6 @@ Verify Stats - Run ONLY default backtests (no optimization) for all 10 strategie
 """
 
 import pandas as pd
-import numpy as np
 from backtesting import Backtest
 import warnings
 warnings.filterwarnings('ignore')
@@ -134,7 +133,7 @@ print("-" * 120)
 successful = sum(1 for r in results if r['trades'] > 0)
 meeting_req = sum(1 for r in results if r['trades'] >= 25 and r['sharpe'] >= 2.0)
 
-print(f"\n📊 SUMMARY:")
+print("\n📊 SUMMARY:")
 print(f"   Strategies with trades: {successful}/{len(strategies)}")
 print(f"   Strategies meeting requirements (25+ trades, 2+ Sharpe): {meeting_req}/{len(strategies)}")
 

@@ -22,9 +22,7 @@ NOTE: If you get login errors, try:
 - Checking if your account needs verification
 """
 
-from datetime import datetime
 import time
-import requests
 import os
 import asyncio
 

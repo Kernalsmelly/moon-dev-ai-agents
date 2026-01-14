@@ -1,6 +1,5 @@
 # 🌙 Moon Dev Backtest Implementation for VolatilityBackwardation Strategy 🌙
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import pandas as pd
 import talib
 

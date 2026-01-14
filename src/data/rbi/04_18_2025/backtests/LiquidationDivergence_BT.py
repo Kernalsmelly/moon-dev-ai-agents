@@ -1,7 +1,6 @@
 import pandas as pd
 import talib
 from backtesting import Strategy, Backtest
-from backtesting.lib import crossover
 
 # Moon Dev Data Preparation 🌙
 def load_data(path):

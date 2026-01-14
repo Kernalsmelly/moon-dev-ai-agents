@@ -39,11 +39,9 @@ Created with ❤️ by Moon Dev
 
 import os
 import time
-import json
 from datetime import datetime
 from pathlib import Path
 from termcolor import cprint, colored
-import sys
 import shutil
 import textwrap
 from typing import Optional
@@ -496,9 +494,9 @@ def interactive_mode():
         cprint("=" * min(70, TERM_WIDTH), "cyan")
         cprint(" 👋 SHUTTING DOWN ", "white", "on_yellow")
         cprint("=" * min(70, TERM_WIDTH), "cyan")
-        cprint(f"\n📊 Session Stats:", "yellow")
+        cprint("\n📊 Session Stats:", "yellow")
         cprint(f"   Prompts Enhanced: {prompt_count}", "white")
-        cprint(f"   Saved to: src/data/prompt_agent/", "cyan")
+        cprint("   Saved to: src/data/prompt_agent/", "cyan")
         cprint("\n🌙 Thanks for using Moon Dev's Prompt Enhancement Agent!", "white", "on_magenta")
         cprint("🚀 May your prompts be forever clear and effective!\n", "cyan")
 

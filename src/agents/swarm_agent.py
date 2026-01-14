@@ -33,7 +33,6 @@ Usage:
 Built with love by Moon Dev 🚀
 """
 
-import os
 import sys
 import json
 import time
@@ -41,10 +40,9 @@ import re
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
-from termcolor import colored, cprint
+from typing import Dict, Optional, Any, Tuple
+from termcolor import cprint
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 
 # Add project root to path
 project_root = str(Path(__file__).parent.parent.parent)
@@ -226,7 +224,7 @@ class SwarmAgent:
         cprint(f"📝 Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}", "blue")
 
         # Show which models are being called in parallel
-        cprint(f"\n🚀 Calling models in parallel:", "yellow", attrs=['bold'])
+        cprint("\n🚀 Calling models in parallel:", "yellow", attrs=['bold'])
         for provider, model_info in self.active_models.items():
             cprint(f"   → {provider.upper()}: {model_info['name']}", "cyan")
 
@@ -292,7 +290,7 @@ class SwarmAgent:
 
             except TimeoutError as timeout_error:
                 # as_completed timed out waiting for all futures
-                cprint(f"\n⏰ Overall timeout reached - some models didn't respond", "yellow")
+                cprint("\n⏰ Overall timeout reached - some models didn't respond", "yellow")
                 cprint(f"⚠️ {str(timeout_error)}", "yellow")
                 # Mark any remaining futures as timed out
                 for future, provider in futures.items():
@@ -303,7 +301,7 @@ class SwarmAgent:
                             "model": "timeout",
                             "response": None,
                             "success": False,
-                            "error": f"Global timeout - no response received",
+                            "error": "Global timeout - no response received",
                             "response_time": MODEL_TIMEOUT
                         }
                 # 🌙 Moon Dev - Don't raise, continue with partial results
@@ -445,7 +443,7 @@ class SwarmAgent:
             else:
                 consensus_summary = str(review_response).strip()
 
-            cprint(f"✅ Consensus summary generated!", "green")
+            cprint("✅ Consensus summary generated!", "green")
 
             return consensus_summary, model_mapping
 
@@ -482,7 +480,7 @@ class SwarmAgent:
             cprint("\n🧠 AI CONSENSUS SUMMARY:", "magenta", attrs=['bold'])
             cprint(f"{result['consensus_summary']}\n", "white")
 
-        cprint(f"⚡ Performance:", "cyan")
+        cprint("⚡ Performance:", "cyan")
         cprint(f"   Total Time: {metadata['total_time']}s", "white")
         cprint(f"   Success Rate: {metadata['successful_responses']}/{metadata['total_models']}", "white")
 

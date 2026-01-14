@@ -1,7 +1,6 @@
 # 🌙 Moon Dev's CoTrendalNeutral Backtest - AI5 Implementation 🌙
 from backtesting import Backtest, Strategy
 import pandas as pd
-import pandas_ta as ta
 
 # Data Preparation
 print("🌙 Loading BTC-USD 15m data for CoTrendalNeutral strategy...")

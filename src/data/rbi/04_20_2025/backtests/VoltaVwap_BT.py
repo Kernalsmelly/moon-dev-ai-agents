@@ -1,5 +1,4 @@
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import talib
 import pandas_ta as ta
 import pandas as pd

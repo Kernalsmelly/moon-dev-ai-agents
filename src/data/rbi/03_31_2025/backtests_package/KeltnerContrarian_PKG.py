@@ -3,7 +3,6 @@
 import pandas as pd
 from backtesting import Backtest, Strategy
 import talib
-import numpy as np
 
 class KeltnerContrarian(Strategy):
     ema_period = 20

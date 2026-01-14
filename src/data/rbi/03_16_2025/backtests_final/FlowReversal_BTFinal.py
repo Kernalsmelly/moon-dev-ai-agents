@@ -1,7 +1,6 @@
 # 🌙 Moon Dev's FlowReversal Backtest Implementation
 import pandas as pd
-import numpy as np
-from backtesting import Backtest, Strategy
+from backtesting import Strategy
 import talib
 import pandas_ta as ta
 

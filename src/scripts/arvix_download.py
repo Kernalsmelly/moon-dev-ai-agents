@@ -14,7 +14,6 @@ import argparse
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
-from pathlib import Path
 import random
 
 # ============= CONFIGURATION SETTINGS (EDIT THESE) =============
@@ -302,7 +301,7 @@ def download_paper(paper, download_dir, show_progress=True):
             
             # Create a progress bar
             progress_bar = tqdm(total=file_size, unit='B', unit_scale=True, 
-                               desc=f"🌙 Moon Dev's Download", ncols=100)
+                               desc="🌙 Moon Dev's Download", ncols=100)
             
             # Download with progress
             with open(filepath, 'wb') as f:

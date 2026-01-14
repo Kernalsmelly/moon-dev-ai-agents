@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
 from backtesting.test import SMA
 
@@ -140,7 +139,7 @@ if __name__ == '__main__':
     buy_hold_return = stats['Buy & Hold Return [%]']
     num_trades = stats['# Trades']
     
-    print(f"\nSTRATEGY PERFORMANCE:")
+    print("\nSTRATEGY PERFORMANCE:")
     print(f"Strategy Return: {strategy_return:.2f}%")
     print(f"Buy & Hold Return: {buy_hold_return:.2f}%") 
     print(f"Number of Trades: {num_trades}")

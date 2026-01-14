@@ -1,7 +1,10 @@
 # Bandwidth‑Surge v8  –  high‑frequency breakout, 6‑dial optimiser
 # ---------------------------------------------------------------
 from backtesting import Backtest, Strategy
-import pandas as pd, numpy as np, math, talib
+import pandas as pd
+import numpy as np
+import math
+import talib
 
 # ── 1) Load BTC‑USD 15 min data ──────────────────────────────────────
 data = pd.read_csv(

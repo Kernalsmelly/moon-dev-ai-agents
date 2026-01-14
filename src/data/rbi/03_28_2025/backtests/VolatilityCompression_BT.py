@@ -3,7 +3,6 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 class VolatilityCompression(Strategy):
     risk_pct = 0.01  # 1% risk per trade 🌙

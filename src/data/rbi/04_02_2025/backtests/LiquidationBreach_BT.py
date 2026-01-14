@@ -1,9 +1,7 @@
 # 🌙 Moon Dev's LiquidationBreach Backtest Script
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 class LiquidationBreach(Strategy):
     risk_pct = 0.01  # 1% risk per trade 🌕
@@ -35,7 +33,7 @@ class LiquidationBreach(Strategy):
             # Time-based Exit
             if len(self.data) - self.position.entry_bar >= self.max_holding_bars:
                 self.position.close()
-                print(f"🌗 Time Exit: 4hr Limit Reached. Returning to Orbit 🕒")
+                print("🌗 Time Exit: 4hr Limit Reached. Returning to Orbit 🕒")
                 return
             
         else:

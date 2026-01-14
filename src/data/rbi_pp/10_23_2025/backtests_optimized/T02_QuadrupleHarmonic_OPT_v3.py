@@ -100,7 +100,7 @@ class QuadrupleHarmonic(Strategy):
             # 🌙 Optimized: Improved TP to 1:3 RR for higher return potential, combined with trailing for risk control
             stop_distance = entry_price - sl_price
             if stop_distance <= 0:
-                print(f"🌙 Moon Dev Skip: Zero or negative stop distance 😔")
+                print("🌙 Moon Dev Skip: Zero or negative stop distance 😔")
                 return
             tp_price = entry_price + 3 * stop_distance
             

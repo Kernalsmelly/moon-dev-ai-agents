@@ -1,6 +1,5 @@
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Backtest, Strategy
 
 class BandBreakoutATR(Strategy):

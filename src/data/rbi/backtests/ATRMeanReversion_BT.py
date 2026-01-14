@@ -7,10 +7,7 @@ It looks for when price pokes outside a Keltner Channel, then checks for a rever
 
 import os
 import pandas as pd
-import talib
 from backtesting import Backtest, Strategy
-import numpy as np
-from backtesting.lib import crossover
 import datetime
 
 # Define directory paths

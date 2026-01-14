@@ -8,7 +8,7 @@ it uses the helius rpc so for RPC_ENDPOINT you need to set the helius rpc endpoi
 import os
 import json
 import requests
-from typing import List, Dict
+from typing import Dict
 import time
 
 # List of wallets to track - Add your wallet addresses here! 🎯
@@ -22,7 +22,7 @@ class TokenAccountTracker:
         self.rpc_endpoint = os.getenv("RPC_ENDPOINT")
         if not self.rpc_endpoint:
             raise ValueError("⚠️ Please set RPC_ENDPOINT environment variable!")
-        print(f"🌐 Connected to Helius RPC endpoint... Moon Dev is ready! 🚀")
+        print("🌐 Connected to Helius RPC endpoint... Moon Dev is ready! 🚀")
 
     def get_token_accounts(self, wallet_address: str) -> Dict:
         """Get all token accounts for a specific wallet address"""
@@ -53,7 +53,7 @@ class TokenAccountTracker:
 
     def track_all_wallets(self):
         """Track token accounts for all wallets in the WALLETS_TO_TRACK list"""
-        print(f"🚀 Moon Dev's Token Tracker starting up...")
+        print("🚀 Moon Dev's Token Tracker starting up...")
         print(f"📋 Tracking {len(WALLETS_TO_TRACK)} wallets...")
         
         results = {}

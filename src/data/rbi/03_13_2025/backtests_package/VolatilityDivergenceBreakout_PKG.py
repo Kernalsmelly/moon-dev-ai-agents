@@ -2,11 +2,9 @@
 
 # Required imports
 import pandas as pd
-import numpy as np
 import talib
 import pandas_ta as ta
 from backtesting import Backtest, Strategy
-import os
 
 # Data preparation
 data_path = "/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv"
@@ -38,7 +36,7 @@ class VolatilityDivergenceBreakout(Strategy):
         self.av = self.I(talib.ATR, self.data.High, self.data.Low, self.data.Close, timeperiod=14, name='AV_14')
         
         print("🌙✨ Strategy Indicators Initialized:")
-        print(f"RSI(14), MA(50), HV(20), ATR(14)")
+        print("RSI(14), MA(50), HV(20), ATR(14)")
 
     def next(self):
         if not self.position:

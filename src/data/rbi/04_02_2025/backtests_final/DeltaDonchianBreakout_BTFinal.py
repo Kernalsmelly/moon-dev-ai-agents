@@ -1,10 +1,8 @@
 # 🌙 Moon Dev's DeltaDonchianBreakout Backtest 🌙
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import pandas as pd
 import talib
 import pandas_ta as ta
-import numpy as np
 
 # 🌌 Data Preparation Magic 🌌
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv')
@@ -44,9 +42,9 @@ class DeltaDonchianBreakout(Strategy):
         
         # 🌙 Moon Dev Debug Initialization
         print("🌙✨ Strategy Indicators Initialized:")
-        print(f" - Delta Volume Oscillator: Online")
-        print(f" - Donchian Channels (20): Online")
-        print(f" - VWMA (20): Online\n")
+        print(" - Delta Volume Oscillator: Online")
+        print(" - Donchian Channels (20): Online")
+        print(" - VWMA (20): Online\n")
         
     def next(self):
         price = self.data.Close[-1]

@@ -1,7 +1,6 @@
 from backtesting import Backtest, Strategy
 import talib
 import pandas as pd
-import numpy as np
 
 class FibroVoltaic(Strategy):
     ema_period = 50
@@ -76,7 +75,7 @@ class FibroVoltaic(Strategy):
                 self.take_profit = fib_1618
                 self.buy(size=position_size, sl=self.stop_loss)
                 self.in_position = True
-                print(f"🌙 MOON DEV ENTRY SIGNAL 🌙")
+                print("🌙 MOON DEV ENTRY SIGNAL 🌙")
                 print(f"✨ Price: {current_close:.2f} | Fib Zone: {fib_50:.2f}-{fib_618:.2f}")
                 print(f"🚀 ATR: {self.atr[-1]:.2f} (contracting) | Stop: {self.stop_loss:.2f}")
                 
@@ -86,21 +85,21 @@ class FibroVoltaic(Strategy):
             if current_high >= self.take_profit:
                 self.position.close()
                 self.in_position = False
-                print(f"🌙 MOON DEV PROFIT TAKEN 🌙")
+                print("🌙 MOON DEV PROFIT TAKEN 🌙")
                 print(f"🎯 Target hit at {self.take_profit:.2f} | ATR: {self.atr[-1]:.2f}")
             
             # Check for stop loss
             elif current_low <= self.stop_loss:
                 self.position.close()
                 self.in_position = False
-                print(f"🌙 MOON DEV STOP OUT 🌙")
+                print("🌙 MOON DEV STOP OUT 🌙")
                 print(f"🛑 Stop hit at {self.stop_loss:.2f} | ATR: {self.atr[-1]:.2f}")
             
             # Emergency volatility exit
             elif self.atr[-1] > self.entry_atr * 1.2:
                 self.position.close()
                 self.in_position = False
-                print(f"🌙 MOON DEV VOLATILITY EXIT 🌙")
+                print("🌙 MOON DEV VOLATILITY EXIT 🌙")
                 print(f"⚡ ATR expanded >20% | Current: {self.atr[-1]:.2f} vs Entry: {self.entry_atr:.2f}")
             
             # Trail stop with 3x ATR
@@ -108,7 +107,7 @@ class FibroVoltaic(Strategy):
                 new_stop = current_close - (3 * self.atr[-1])
                 if new_stop > self.stop_loss:
                     self.stop_loss = new_stop
-                    print(f"🌙 MOON DEV TRAILING STOP 🌙")
+                    print("🌙 MOON DEV TRAILING STOP 🌙")
                     print(f"📈 New stop: {self.stop_loss:.2f} | ATR: {self.atr[-1]:.2f}")
 
 # Load and prepare data

@@ -13,7 +13,6 @@ project_root = str(Path(__file__).parent.parent.parent)
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-import os
 import time
 from datetime import datetime, timedelta
 from termcolor import cprint
@@ -21,7 +20,6 @@ from dotenv import load_dotenv
 import pandas as pd
 from src.config import *
 from src.models import model_factory
-import threading
 
 # Load environment variables from the project root
 env_path = Path(project_root) / '.env'
@@ -167,7 +165,7 @@ class ChatQuestionGenerator:
         print("="*60)
         
         if username_context:
-            cprint(f"Context: Recent messages from viewers", "green")
+            cprint("Context: Recent messages from viewers", "green")
             print()
         
         # Display questions
@@ -181,7 +179,7 @@ class ChatQuestionGenerator:
     def run_continuous(self):
         """Run continuously, generating questions at intervals"""
         self.running = True
-        cprint(f"\n🚀 Starting continuous question generation...", "cyan")
+        cprint("\n🚀 Starting continuous question generation...", "cyan")
         cprint(f"📊 Analyzing last {MINUTES_TO_ANALYZE} minutes of chat", "cyan")
         cprint(f"⏰ Refreshing every {REFRESH_INTERVAL} seconds", "cyan")
         print()

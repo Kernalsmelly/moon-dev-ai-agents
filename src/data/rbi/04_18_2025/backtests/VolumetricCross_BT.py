@@ -5,7 +5,6 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 # ======== DATA PREPARATION ========
 # Load and clean cryptocurrency data 🌌

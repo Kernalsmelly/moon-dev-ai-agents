@@ -16,10 +16,8 @@ This was my first O3 Mini test here and it only took me two different tries in o
 """
 
 import pandas as pd
-import numpy as np
 import yfinance as yf
 from backtesting import Backtest, Strategy
-import matplotlib.pyplot as plt
 
 def vwap_indicator(high, low, close, volume, window=14):
     """

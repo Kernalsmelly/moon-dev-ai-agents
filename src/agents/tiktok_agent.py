@@ -97,7 +97,6 @@ probably grab the link...
 ✅ FIXED: Now detects live videos by checking URL and skips processing them entirely!
 """
 
-import pyautogui
 import time
 from pathlib import Path
 from termcolor import cprint
@@ -251,7 +250,7 @@ def move_mouse_cg(x, y, debug=True):
                     cprint("\n🖥️ Display Information:", "cyan")
                     for i, display in enumerate(displays, 1):
                         cprint(f"  ├─ Display {i}: Origin({display['x']}, {display['y']}) Size({display['width']}x{display['height']})", "cyan")
-            except Exception as e:
+            except Exception:
                 # Suppress this error message to reduce noise
                 pass
         
@@ -361,7 +360,7 @@ def capture_screenshot(video_number):
             cprint(f"📝 Screenshot will be saved to: {screenshot_path}", "cyan")
             
             # Create CGImage of specified region
-            cprint(f"\n📸 Capturing TikTok screenshot...", "cyan")
+            cprint("\n📸 Capturing TikTok screenshot...", "cyan")
             cprint(f"🎯 Capture region: x={SCREENSHOT_X}, y={SCREENSHOT_Y}, width={SCREENSHOT_WIDTH}, height={SCREENSHOT_HEIGHT}", "cyan")
             
             # Ensure we have valid coordinates
@@ -858,7 +857,7 @@ def copy_current_url():
                     move_mouse_cg(BROWSER_X, BROWSER_Y)
                     
                     # Add a fun Moon Dev easter egg message
-                    cprint(f"🌙 Moon Dev says: URL captured successfully! 🔗", "magenta")
+                    cprint("🌙 Moon Dev says: URL captured successfully! 🔗", "magenta")
                     
                     return clipboard_content
                 else:
@@ -1141,7 +1140,7 @@ def scrape_tiktok():
                 cprint(f"✅ Screenshot saved for video #{video_number}", "green")
                 
                 # 2. Analyze screenshot with AI and pass the video URL
-                cprint(f"\n🧠 Analyzing screenshot with AI...", "cyan")
+                cprint("\n🧠 Analyzing screenshot with AI...", "cyan")
                 analysis = analyze_screenshot(screenshot_path, video_number, current_url)
                 if not analysis:
                     cprint(f"⚠️ Failed to analyze screenshot for video #{video_number}, but continuing...", "yellow")
@@ -1164,7 +1163,7 @@ def scrape_tiktok():
                 # 4. Scroll to next video (if not the last video)
                 if video_number < MAX_VIDEOS:
                     # Make sure browser is active by clicking on browser area twice
-                    cprint(f"\n🎮 Activating browser window with double-click...", "cyan")
+                    cprint("\n🎮 Activating browser window with double-click...", "cyan")
                     if not move_mouse_cg(BROWSER_X, BROWSER_Y):
                         cprint("❌ Failed to move to browser area!", "red")
                         continue
@@ -1187,7 +1186,7 @@ def scrape_tiktok():
                     time.sleep(ACTIVATION_PAUSE)
                     
                     # Now press down arrow to move to next video
-                    cprint(f"\n⬇️ Scrolling to next video...", "cyan")
+                    cprint("\n⬇️ Scrolling to next video...", "cyan")
                     if not press_down_arrow():
                         cprint("❌ Failed to press down arrow!", "red")
                         continue

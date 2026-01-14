@@ -1,8 +1,5 @@
 import pandas as pd
 from talib import *
-import numpy as np
-import pandas_ta as ta
-import matplotlib.pyplot as plt  # for plotting (optional)
 
 # Clean and prepare data
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv')

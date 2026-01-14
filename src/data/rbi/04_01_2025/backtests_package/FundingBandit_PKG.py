@@ -2,7 +2,6 @@
 from backtesting import Strategy, Backtest
 import talib
 import pandas as pd
-import numpy as np
 
 class FundingBandit(Strategy):
     # Strategy parameters 🌙

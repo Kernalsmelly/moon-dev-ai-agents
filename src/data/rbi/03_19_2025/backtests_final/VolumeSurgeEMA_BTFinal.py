@@ -47,7 +47,7 @@ class VolumeSurgeEMA(Strategy):
                                 size=position_size,
                                 sl=stop_price,
                                 tp=tp_price,
-                                tag=f"Moon Surge Entry 🚀"
+                                tag="Moon Surge Entry 🚀"
                             )
                             print(f"🌙🚀 MOON DEV ALERT! Buying {position_size} shares")
                             print(f"   Entry: {entry_price:.2f}, SL: {stop_price:.2f}, TP: {tp_price:.2f}")

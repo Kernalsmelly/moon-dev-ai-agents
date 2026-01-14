@@ -2,7 +2,6 @@
 import pandas as pd
 import talib
 from backtesting import Strategy, Backtest
-import numpy as np
 
 # 🌙 MOON DEV DATA PREPARATION 🌙
 def load_data(path):

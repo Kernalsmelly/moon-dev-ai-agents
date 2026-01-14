@@ -34,7 +34,7 @@ async def retry_request(func, *args, **kwargs) -> Optional[dict]:
             last_error = e
             print(f"❌ Attempt {attempt + 1} failed: {str(e)}")
             if attempt < MAX_RETRIES - 1:
-                print(f"🌙 Moon Dev says: Don't worry, we'll try again! 🚀")
+                print("🌙 Moon Dev says: Don't worry, we'll try again! 🚀")
             
     print(f"❌ All {MAX_RETRIES} attempts failed. Last error: {str(last_error)}")
     raise last_error

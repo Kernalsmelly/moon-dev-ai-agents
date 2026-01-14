@@ -32,7 +32,7 @@ class VolatilityReversion(Strategy):
         self.rsi = self.I(talib.RSI, self.data.Close, 14)
         
         print("🌙✨ Moon Dev Strategy Activated! Initialized with:")
-        print(f"ATR(20) | SMA200 | RSI(14) | ATR Percentile(10)")
+        print("ATR(20) | SMA200 | RSI(14) | ATR Percentile(10)")
     
     def next(self):
         # Moon Dev Debug Prints

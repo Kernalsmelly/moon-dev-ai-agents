@@ -3,7 +3,6 @@
 Built with love by Moon Dev 🚀
 """
 
-from groq import Groq
 from termcolor import cprint
 from .base_model import BaseModel, ModelResponse
 import time
@@ -90,23 +89,29 @@ class GroqModel(BaseModel):
     
     def initialize_client(self, **kwargs) -> None:
         """Initialize the Groq client"""
-        self.client = Groq(api_key=self.api_key)
+        try:
+            # Import Groq SDK lazily to allow running without the SDK installed
+            from groq import Groq  # type: ignore
+            self.client = Groq(api_key=self.api_key)
 
-        # Get list of available models
-        available_models = self.client.models.list()
-        api_models = [model.id for model in available_models.data]
+            # Get list of available models
+            available_models = self.client.models.list()
+            api_models = [model.id for model in available_models.data]
 
-        if self.model_name not in api_models:
-            self.model_name = "mixtral-8x7b-32768"
+            if self.model_name not in api_models:
+                self.model_name = "mixtral-8x7b-32768"
 
-        # Test the connection
-        test_response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=10
-        )
+            # Test the connection
+            self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[{"role": "user", "content": "Hello"}],
+                max_tokens=10
+            )
 
-        cprint(f"✨ Initialized {self.model_name}", "green")
+            cprint(f"✨ Initialized {self.model_name}", "green")
+        except Exception as e:
+            cprint(f"❌ Failed to initialize Groq client: {e}", "red")
+            self.client = None
     
     def generate_response(self, system_prompt, user_content, temperature=0.7, max_tokens=None):
         """Generate response with no caching"""
@@ -154,7 +159,7 @@ class GroqModel(BaseModel):
 
             # Handle rate limit errors (413)
             if "413" in error_str or "rate_limit_exceeded" in error_str:
-                cprint(f"⚠️  Groq rate limit exceeded (request too large)", "yellow")
+                cprint("⚠️  Groq rate limit exceeded (request too large)", "yellow")
                 cprint(f"   Model: {self.model_name}", "yellow")
                 if "Requested" in error_str and "Limit" in error_str:
                     # Extract token info from error message
@@ -163,7 +168,7 @@ class GroqModel(BaseModel):
                     requested_match = re.search(r'Requested (\d+)', error_str)
                     if limit_match and requested_match:
                         cprint(f"   Limit: {limit_match.group(1)} tokens | Requested: {requested_match.group(1)} tokens", "yellow")
-                cprint(f"   💡 Skipping this model for this request...", "cyan")
+                cprint("   💡 Skipping this model for this request...", "cyan")
                 return None
 
             # Raise 503 errors (service unavailable)

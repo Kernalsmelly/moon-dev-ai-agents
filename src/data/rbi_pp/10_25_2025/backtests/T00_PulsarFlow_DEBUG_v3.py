@@ -168,7 +168,7 @@ class PulsarFlow(Strategy):
         if not self.position:
             # Filters
             if volume < 0.5 * self.avg_volume[current_i]:
-                print(f"🌙 Moon Dev: Volume too low, skipping entry 📉")
+                print("🌙 Moon Dev: Volume too low, skipping entry 📉")
                 return
             if self.adx[current_i] < 20:
                 print(f"🌙 Moon Dev: ADX too low ({self.adx[current_i]:.2f}), choppy market, skipping 🚫")

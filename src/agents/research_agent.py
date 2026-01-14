@@ -47,12 +47,10 @@ from pathlib import Path
 from termcolor import cprint, colored
 import pandas as pd
 import sys
-import threading
 import shutil
 import textwrap
 
 # Import model factory from RBI agent
-import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.models import model_factory
 
@@ -206,7 +204,7 @@ def generate_idea(model_config):
     try:
         # Fun animated header
         print("\n" + "=" * min(60, TERM_WIDTH))
-        cprint(f" 🧙‍♂️ MOON DEV'S IDEA GENERATOR 🧙‍♂️ ", "white", "on_magenta")
+        cprint(" 🧙‍♂️ MOON DEV'S IDEA GENERATOR 🧙‍♂️ ", "white", "on_magenta")
         print("=" * min(60, TERM_WIDTH))
         
         cprint(f"\n🧠 Using {model_config['type']} - {model_config['name']}...", "cyan")
@@ -243,7 +241,7 @@ def generate_idea(model_config):
             return None
         
         # Show generation in progress message
-        cprint(f"\n⏳ GENERATING TRADING STRATEGY IDEA...", "black", "on_white")
+        cprint("\n⏳ GENERATING TRADING STRATEGY IDEA...", "black", "on_white")
         time.sleep(0.5)  # Pause for readability
         
         # Generate response
@@ -391,7 +389,7 @@ def log_idea(idea, model_config):
     time.sleep(0.2)
     cprint(f"🤖 Model used: {model_name}", "white", "on_blue")
     time.sleep(0.2)
-    cprint(f"📝 Added to ideas.txt", "white", "on_magenta")
+    cprint("📝 Added to ideas.txt", "white", "on_magenta")
     
     # Show the idea with a fancy border - ensure no duplication
     border = "★" * min(60, TERM_WIDTH)
@@ -437,14 +435,14 @@ def run_idea_generation_loop(interval=10):
             if idea:
                 # Check if it's a duplicate
                 if is_duplicate(idea, existing_ideas):
-                    cprint(f"🔄 DUPLICATE DETECTED!", "white", "on_red")
+                    cprint("🔄 DUPLICATE DETECTED!", "white", "on_red")
                     cprint(f"Skipping: {idea}", "yellow")
                 else:
                     # Log the new idea
                     log_idea(idea, model_config)
             
             # Fun waiting animation - exactly 10 seconds
-            cprint(f"\n⏱️ COOLDOWN PERIOD ACTIVATED", "white", "on_blue")
+            cprint("\n⏱️ COOLDOWN PERIOD ACTIVATED", "white", "on_blue")
             time.sleep(0.5)  # Pause for readability
             
             # Show a colorful countdown - simplified for terminal
@@ -507,7 +505,7 @@ def test_run(num_ideas=1, interval=10):
             if idea:
                 # Check if it's a duplicate
                 if is_duplicate(idea, existing_ideas):
-                    cprint(f"🔄 DUPLICATE DETECTED!", "white", "on_red")
+                    cprint("🔄 DUPLICATE DETECTED!", "white", "on_red")
                     cprint(f"Skipping: {idea}", "yellow")
                 else:
                     # Log the new idea
@@ -517,7 +515,7 @@ def test_run(num_ideas=1, interval=10):
             
             if ideas_generated < num_ideas:
                 # Fun waiting animation - always 10 seconds
-                cprint(f"\n⏱️ COOLDOWN PERIOD ACTIVATED", "white", "on_blue")
+                cprint("\n⏱️ COOLDOWN PERIOD ACTIVATED", "white", "on_blue")
                 time.sleep(0.5)  # Pause for readability
                 
                 # Show a colorful countdown - simplified for terminal
@@ -540,7 +538,7 @@ def test_run(num_ideas=1, interval=10):
                 print()
         
         # Success animation
-        cprint(f"\n✅ TEST COMPLETED SUCCESSFULLY!", "white", "on_green")
+        cprint("\n✅ TEST COMPLETED SUCCESSFULLY!", "white", "on_green")
         time.sleep(0.5)  # Pause for readability
         cprint(f"Generated {ideas_generated} ideas", "yellow")
         

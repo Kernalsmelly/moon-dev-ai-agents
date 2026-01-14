@@ -51,7 +51,7 @@ class OpenReversal(Strategy):
         # Exit on "OI reversal": Volume increase >5% (proxy for OI rise signaling renewed pressure)
         if self.position and self.data.Volume[-1] > (self.oi_reversal_threshold * self.data.Volume[-2]):
             self.position.close()
-            print(f"🌙 Moon Dev Exit: OI Reversal Signal | Volume Surge Detected ✨🔄")
+            print("🌙 Moon Dev Exit: OI Reversal Signal | Volume Surge Detected ✨🔄")
 
 # Run backtest with initial cash (e.g., 10M USD for large size feasibility)
 bt = Backtest(data, OpenReversal, cash=10000000, commission=0.001, exclusive_orders=True)

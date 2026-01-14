@@ -1,0 +1,8 @@
+# Ruff configuration to avoid linting large generated/backtest datasets
+# and to set sane defaults for this repository.
+line-length = 88
+extend-ignore = ["E203"]
+exclude = ["data/**", "src/data/**", "docs/**"]
+
+# Enable fixes for common issues
+fix = true

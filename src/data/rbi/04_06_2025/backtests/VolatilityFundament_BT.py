@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import talib
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 class VolatilityFundament(Strategy):
     multiplier = 1  # VSMA multiplier for ATR

@@ -2,7 +2,6 @@
 from backtesting import Backtest, Strategy
 import pandas as pd
 import talib
-import numpy as np
 
 # ========================
 # DATA PREPARATION 🌐

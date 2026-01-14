@@ -153,22 +153,22 @@ class GoldenCrossover(Strategy):
                 partial_size = self.position.size * 0.4
                 self.sell(size=partial_size)
                 self.partial_closed = True
-                print(f"🌙 Moon Dev: Partial close 40% at 1.5:1 RR, securing early profits! 🚀")
+                print("🌙 Moon Dev: Partial close 40% at 1.5:1 RR, securing early profits! 🚀")
 
             if unrealized_pnl >= 4 * risk:
-                print(f"🌙 Moon Dev: Full TP at 4:1 RR for optimized gains! 🚀")
+                print("🌙 Moon Dev: Full TP at 4:1 RR for optimized gains! 🚀")
                 self.position.close()
                 return
 
             # Bearish divergence: Enhanced with MACD check for stronger signal
             if rsi > 70 and len(self.data) > 2 and close > self.data.Close[-2] and rsi < self.rsi[-2] and macd < macd_signal and adx > 20:
-                print(f"🌙 Moon Dev: Bearish RSI + MACD Divergence in overbought zone, EXITING! 🚀")
+                print("🌙 Moon Dev: Bearish RSI + MACD Divergence in overbought zone, EXITING! 🚀")
                 self.position.close()
                 return
 
             # Exit below EMA12 trail for faster response with quicker EMA
             if close < ema12:
-                print(f"🌙 Moon Dev: EXITING below EMA12 trail 🚀")
+                print("🌙 Moon Dev: EXITING below EMA12 trail 🚀")
                 self.position.close()
                 return
 
@@ -179,7 +179,7 @@ class GoldenCrossover(Strategy):
 
             # 🌙 Moon Dev Optimization: Added time-based exit after 50 bars if RR < 0.5 to avoid stagnation in ranging conditions
             if bars_since_entry > 50 and rr < 0.5:
-                print(f"🌙 Moon Dev: Time-based EXIT after 50 bars with low RR 🚀")
+                print("🌙 Moon Dev: Time-based EXIT after 50 bars with low RR 🚀")
                 self.position.close()
                 return
 

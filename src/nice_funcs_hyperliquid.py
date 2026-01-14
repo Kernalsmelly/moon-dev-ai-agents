@@ -16,12 +16,10 @@ import json
 import time
 import requests
 import pandas as pd
-import numpy as np
 import pandas_ta as ta
 import datetime
 from datetime import timedelta
 from termcolor import colored, cprint
-from eth_account.signers.local import LocalAccount
 import eth_account
 from hyperliquid.info import Info
 from hyperliquid.exchange import Exchange
@@ -214,7 +212,7 @@ def limit_order(coin, is_buy, sz, limit_px, reduce_only, account):
     rounding = get_sz_px_decimals(coin)[0]
     sz = round(sz, rounding)
 
-    print(f"🌙 Moon Dev placing order:")
+    print("🌙 Moon Dev placing order:")
     print(f"Symbol: {coin}")
     print(f"Side: {'BUY' if is_buy else 'SELL'}")
     print(f"Size: {sz}")
@@ -226,7 +224,7 @@ def limit_order(coin, is_buy, sz, limit_px, reduce_only, account):
     if isinstance(order_result, dict) and 'response' in order_result:
         print(f"✅ Order placed with status: {order_result['response']['data']['statuses'][0]}")
     else:
-        print(f"✅ Order placed")
+        print("✅ Order placed")
 
     return order_result
 
@@ -487,7 +485,7 @@ def _get_ohlcv(symbol, interval, start_time, end_time, batch_size=BATCH_SIZE):
         }
     }
 
-    print(f'\n📤 API Request Payload:')
+    print('\n📤 API Request Payload:')
     print(f'   URL: {BASE_URL}')
     print(f'   Payload: {request_payload}')
 
@@ -500,7 +498,7 @@ def _get_ohlcv(symbol, interval, start_time, end_time, batch_size=BATCH_SIZE):
                 timeout=10
             )
 
-            print(f'\n📥 API Response:')
+            print('\n📥 API Response:')
             print(f'   Status Code: {response.status_code}')
             print(f'   Response Text: {response.text[:500]}...' if len(response.text) > 500 else f'   Response Text: {response.text}')
 
@@ -730,7 +728,7 @@ def test_market_info():
                 print(f"❓ Unexpected response type: {type(info)}")
     except Exception as e:
         print(f"❌ Error in market info test: {str(e)}")
-        print(f"🔍 Full error traceback:")
+        print("🔍 Full error traceback:")
         traceback.print_exc()
 
 # ============================================================================
@@ -812,7 +810,7 @@ def test_funding_rates():
 
     except Exception as e:
         print(f"❌ Error in funding rates test: {str(e)}")
-        print(f"🔍 Full error traceback:")
+        print("🔍 Full error traceback:")
         traceback.print_exc()
 
 # ============================================================================
@@ -913,7 +911,7 @@ def open_short(token, amount, slippage=None, leverage=DEFAULT_LEVERAGE, account=
         exchange = Exchange(account, constants.MAINNET_API_URL)
         order_result = exchange.order(token, False, pos_size, sell_price, {"limit": {"tif": "Ioc"}}, reduce_only=False)
 
-        print(colored(f'✅ Short position opened!', 'green'))
+        print(colored('✅ Short position opened!', 'green'))
         return order_result
 
     except Exception as e:

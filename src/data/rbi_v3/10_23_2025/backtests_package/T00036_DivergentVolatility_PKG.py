@@ -69,7 +69,7 @@ class DivergentVolatility(Strategy):
         if self.state == 'post_cross' and self.death_cross_bar != -1:
             bars_since_cross = i - self.death_cross_bar
             if bars_since_cross > 10:
-                print(f"🌙 No divergence within 10 bars, resetting... 😔")
+                print("🌙 No divergence within 10 bars, resetting... 😔")
                 self.reset_state()
                 return
 
@@ -85,7 +85,7 @@ class DivergentVolatility(Strategy):
             # If divergence confirmed and within 5-10 bars, move to waiting breakout
             if self.divergence_confirmed and 5 <= bars_since_cross <= 10:
                 self.state = 'waiting_breakout'
-                print(f"✨ Divergence confirmed, now waiting for volatility breakout! 🌙")
+                print("✨ Divergence confirmed, now waiting for volatility breakout! 🌙")
 
         # Waiting for breakout after divergence
         elif self.state == 'waiting_breakout' and self.divergence_confirmed:

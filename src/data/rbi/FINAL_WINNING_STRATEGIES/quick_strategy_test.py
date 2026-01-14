@@ -98,14 +98,14 @@ def check_strategy_parameters():
             if not params_found:
                 print(f"   Missing: {', '.join(strategy['expected_changes'])}")
             if not constraint_removed:
-                print(f"   Still has constraint parameter")
+                print("   Still has constraint parameter")
             if not maximize_added:
-                print(f"   Missing maximize='Sharpe Ratio'")
+                print("   Missing maximize='Sharpe Ratio'")
                 
         except FileNotFoundError:
             print(f"{strategy['file'][:-3]:<30} {'❌ FILE NOT FOUND':<25} {'❌':<20} {'❌ ERROR'}")
             all_good = False
-        except Exception as e:
+        except Exception:
             print(f"{strategy['file'][:-3]:<30} {'❌ ERROR':<25} {'❌':<20} {'❌ ERROR'}")
             all_good = False
     

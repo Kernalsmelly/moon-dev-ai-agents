@@ -129,7 +129,7 @@ class CascadeReversal(Strategy):
                 if not trend_filter:
                     print(f"🌙 Moon Dev: Trend filter failed - pre-streak close {pre_streak_close} <= SMA {pre_streak_sma}! 🚫")
                     return
-                print(f"🌙 Moon Dev: Trend filter passed - bullish bias pre-streak! 📈✅")
+                print("🌙 Moon Dev: Trend filter passed - bullish bias pre-streak! 📈✅")
             else:
                 trend_filter = True
 

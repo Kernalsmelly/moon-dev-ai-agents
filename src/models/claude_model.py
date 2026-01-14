@@ -3,7 +3,6 @@
 Built with love by Moon Dev 🚀
 """
 
-from anthropic import Anthropic
 from termcolor import cprint
 from .base_model import BaseModel, ModelResponse
 
@@ -32,6 +31,9 @@ class ClaudeModel(BaseModel):
     def initialize_client(self, **kwargs) -> None:
         """Initialize the Anthropic client"""
         try:
+            # Import the Anthropic SDK lazily so the module can be imported even
+            # when the SDK is not installed (useful for dry-run/debug environments).
+            from anthropic import Anthropic  # type: ignore
             self.client = Anthropic(api_key=self.api_key)
             cprint(f"✨ Initialized Claude model: {self.model_name}", "green")
         except Exception as e:

@@ -1,4 +1,3 @@
-import pandas as pd
 import numpy as np
 from talib import GANNAAngLine, MA_Type as MA_TYPE
 

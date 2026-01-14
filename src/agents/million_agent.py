@@ -5,7 +5,6 @@ This agent is a simple LLM where you can ask back and forth questions based off 
 Set up a knowledge base in the data folder called million_agent. 
 """
 
-import os
 from pathlib import Path
 import glob
 from termcolor import cprint

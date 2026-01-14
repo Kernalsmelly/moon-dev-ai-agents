@@ -3,10 +3,8 @@
 # Updated parameters for increased trade frequency
 
 import pandas as pd
-import numpy as np
-from backtesting import Backtest, Strategy
+from backtesting import Backtest
 import warnings
-import traceback
 warnings.filterwarnings('ignore')
 
 # Import all strategy classes
@@ -218,7 +216,7 @@ passing_strategies = sum(1 for r in results if r['status'] == '✅ PASS')
 failing_strategies = sum(1 for r in results if r['status'] in ['❌ TOO FEW', '⚠️ TOO MANY'])
 error_strategies = sum(1 for r in results if r['status'] == 'ERROR')
 
-print(f"\n📊 SUMMARY RESULTS:")
+print("\n📊 SUMMARY RESULTS:")
 print(f"📈 Total Strategies Tested: {total_strategies}")
 print(f"✅ Passing (25-100 trades): {passing_strategies}")
 print(f"❌ Failing (outside range): {failing_strategies}")  
@@ -234,7 +232,7 @@ else:
     print(f"\n⚠️ MORE WORK NEEDED ({passing_strategies}/{total_strategies} passing)")
     print("🔧 Several strategies require additional parameter tuning")
 
-print(f"\n💡 FIXES APPLIED:")
+print("\n💡 FIXES APPLIED:")
 for strategy_config in strategies:
     print(f"   • {strategy_config['name']}: {strategy_config['changes']}")
 
@@ -243,4 +241,4 @@ print("   • Removed constraint parameter from all bt.optimize() calls")
 print("   • Added maximize='Sharpe Ratio' to all optimizations")
 print("   • Adjusted parameter ranges for better trade generation")
 
-print(f"\n🌙 Fixed strategies test completed! ✨")
+print("\n🌙 Fixed strategies test completed! ✨")

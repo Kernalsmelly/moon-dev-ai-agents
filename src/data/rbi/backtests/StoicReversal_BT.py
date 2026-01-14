@@ -11,7 +11,6 @@ trading approach with risk management and parameter optimization.
 # 1. All necessary imports
 # ─────────────────────────────────────────────────────────────
 import os
-import numpy as np
 import pandas as pd
 import talib
 from backtesting import Backtest, Strategy

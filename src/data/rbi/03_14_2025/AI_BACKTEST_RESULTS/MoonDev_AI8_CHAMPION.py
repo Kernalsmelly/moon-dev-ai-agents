@@ -5,7 +5,6 @@
 import pandas as pd
 from backtesting import Backtest, Strategy
 import talib
-import numpy as np
 
 # Load and preprocess data with lunar precision 🌕
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv')
@@ -152,7 +151,7 @@ if __name__ == "__main__":
         print(f"\n📊 {stats['# Trades']} trades completed with {stats['Return [%]']:.1f}% return")
     
     # Detailed analysis
-    print(f"\n📈 CHAMPION Analysis:")
+    print("\n📈 CHAMPION Analysis:")
     print(f"   💰 Strategy Return: {stats['Return [%]']:.1f}%")
     print(f"   📊 Buy & Hold Return: {stats['Buy & Hold Return [%]']:.1f}%")
     print(f"   🎯 Performance Ratio: {stats['Return [%]'] / stats['Buy & Hold Return [%]'] * 100:.1f}%")

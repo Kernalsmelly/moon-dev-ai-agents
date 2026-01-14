@@ -2,7 +2,6 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import talib
 import pandas as pd
-import numpy as np
 
 class MACDonchianBreakout(Strategy):
     # Define strategy parameters

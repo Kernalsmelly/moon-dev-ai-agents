@@ -1,7 +1,6 @@
 import talib
 import pandas as pd
 from backtesting import Backtest, Strategy
-from backtesting.test import SMA
 
 class VoltaicBreakout(Strategy):
     n1 = 20

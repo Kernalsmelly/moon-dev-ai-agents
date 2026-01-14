@@ -2,7 +2,6 @@
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
-import numpy as np
 import time
 from pathlib import Path
 
@@ -41,7 +40,7 @@ def adjust_timestamp(dt):
 
 def get_ohlcv2(symbol, interval, start_time, end_time, batch_size=BATCH_SIZE):
     global timestamp_offset
-    print(f'\n🔍 Requesting data:')
+    print('\n🔍 Requesting data:')
     print(f'📊 Batch Size: {batch_size}')
     print(f'🚀 Start: {start_time.strftime("%Y-%m-%d %H:%M:%S")} UTC')
     print(f'🎯 End: {end_time.strftime("%Y-%m-%d %H:%M:%S")} UTC')
@@ -183,9 +182,9 @@ if not all_data.empty:
     print("\n" + "="*80)
     print("🌙 MOON DEV'S DATA PREVIEW 🌙")
     print("="*80)
-    print(f"\n📊 First 10 rows:")
+    print("\n📊 First 10 rows:")
     print(all_data.head(10).to_string(index=False))
-    print(f"\n📊 Last 10 rows:")
+    print("\n📊 Last 10 rows:")
     print(all_data.tail(10).to_string(index=False))
     print("\n" + "="*80)
     print(f"📈 Total rows: {len(all_data)}")

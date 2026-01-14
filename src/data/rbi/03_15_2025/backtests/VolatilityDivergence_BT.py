@@ -72,7 +72,7 @@ class VolatilityDivergence(Strategy):
                         self.sell(size=position_size, sl=sl_price, 
                                  tp=entry_price - atr,
                                  tag=f"LunarSpread_{current_spread:.1f}%")
-                        print(f"🌘 Moon Dev Signal: Volatility divergence detected! 🌗")
+                        print("🌘 Moon Dev Signal: Volatility divergence detected! 🌗")
                         print(f"   Entry: {entry_price:.2f} | Size: {position_size}")
                         print(f"   SL: {sl_price:.2f} | Risk: {self.risk_pct*100:.0f}% of equity 🌌")
 

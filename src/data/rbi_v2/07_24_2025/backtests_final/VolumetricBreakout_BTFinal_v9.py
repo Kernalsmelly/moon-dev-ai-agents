@@ -62,7 +62,7 @@ class VolumetricBreakout(Strategy):
             stop_loss = entry_price - stop_distance
             take_profit_price = entry_price + take_profit
             
-            print(f"🚀 MOON DEV LONG SIGNAL! 🌕")
+            print("🚀 MOON DEV LONG SIGNAL! 🌕")
             print(f"📈 Price: {entry_price:.2f}, SL: {stop_loss:.2f}, TP: {take_profit_price:.2f}")
             print(f"💵 Position Size: {position_size:.4f} of equity")
             
@@ -80,7 +80,7 @@ class VolumetricBreakout(Strategy):
             stop_loss = entry_price + stop_distance
             take_profit_price = entry_price - take_profit
             
-            print(f"🌑 MOON DEV SHORT SIGNAL! 🌘")
+            print("🌑 MOON DEV SHORT SIGNAL! 🌘")
             print(f"📉 Price: {entry_price:.2f}, SL: {stop_loss:.2f}, TP: {take_profit_price:.2f}")
             print(f"💵 Position Size: {position_size:.4f} of equity")
             

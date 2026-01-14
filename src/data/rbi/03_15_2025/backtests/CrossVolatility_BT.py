@@ -2,7 +2,6 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 class CrossVolatilityStrategy(Strategy):
     risk_per_trade = 0.01  # 1% risk per trade

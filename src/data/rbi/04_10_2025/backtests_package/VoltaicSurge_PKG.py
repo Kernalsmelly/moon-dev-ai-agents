@@ -4,7 +4,6 @@
 import pandas as pd
 from backtesting import Backtest, Strategy
 import talib
-import numpy as np
 
 # ===== DATA PREPARATION =====
 data_path = "/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv"

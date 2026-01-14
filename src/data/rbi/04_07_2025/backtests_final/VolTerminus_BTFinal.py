@@ -1,6 +1,5 @@
 # 🌙 Moon Dev Backtest AI Implementation for VolTerminus Strategy 🚀
 import pandas as pd
-import numpy as np
 import talib
 from backtesting import Backtest, Strategy
 import pandas_ta as ta

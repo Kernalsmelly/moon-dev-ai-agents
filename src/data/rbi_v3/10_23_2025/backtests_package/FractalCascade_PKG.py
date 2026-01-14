@@ -110,10 +110,10 @@ class FractalCascade(Strategy):
                 # Exit conditions
                 if self.data.Close[-1] < self.teeth[-1]:
                     self.position.close()
-                    print(f"🌙 Moon Dev: Long exit - below Teeth 📉")
+                    print("🌙 Moon Dev: Long exit - below Teeth 📉")
                 elif self.data.Close[-1] < self.jaw[-1]:
                     self.position.close()
-                    print(f"🌙 Moon Dev: Long hard exit - below Jaw 😤")
+                    print("🌙 Moon Dev: Long hard exit - below Jaw 😤")
             
             elif self.position.is_short:
                 # Trail stop for short
@@ -126,10 +126,10 @@ class FractalCascade(Strategy):
                 # Exit conditions
                 if self.data.Close[-1] > self.teeth[-1]:
                     self.position.close()
-                    print(f"🌙 Moon Dev: Short exit - above Teeth 📈")
+                    print("🌙 Moon Dev: Short exit - above Teeth 📈")
                 elif self.data.Close[-1] > self.jaw[-1]:
                     self.position.close()
-                    print(f"🌙 Moon Dev: Short hard exit - above Jaw 😤")
+                    print("🌙 Moon Dev: Short hard exit - above Jaw 😤")
 
 if __name__ == '__main__':
     data_path = '/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv'

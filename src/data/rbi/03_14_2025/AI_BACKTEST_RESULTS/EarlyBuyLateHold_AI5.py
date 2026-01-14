@@ -1,6 +1,5 @@
 # 🌙 Moon Dev's Early Buy Late Hold Strategy
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
 
 # Data Preparation
@@ -72,7 +71,7 @@ print("\n" + "="*60)
 print("🌙 MOON DEV EARLY BUY LATE HOLD STRATEGY RESULTS 🌙")
 print("="*60)
 print(stats)
-print(f"\n🎯 Buy and Hold Benchmark: 127.77% return ($2,277,687)")
+print("\n🎯 Buy and Hold Benchmark: 127.77% return ($2,277,687)")
 print(f"🚀 Strategy Return: {stats['Return [%]']:.2f}%")
 print(f"💰 Strategy Final Value: ${stats['Equity Final [$]']:,.2f}")
 print(f"📊 Total Trades: {stats['# Trades']}")

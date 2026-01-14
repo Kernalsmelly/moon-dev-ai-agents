@@ -50,7 +50,6 @@ import traceback
 import logging
 
 # Import MoonDevAPI from this project
-from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 from src.agents.api import MoonDevAPI
@@ -596,7 +595,7 @@ async def get_backtests_by_date(date: str):
         if 'Time' not in df.columns or len(df) == 0:
             return JSONResponse({
                 "data": [],
-                "message": f"No Time data found"
+                "message": "No Time data found"
             })
 
         # Filter by date (format: "MM/DD HH:MM")
@@ -841,7 +840,7 @@ async def run_backtest(request: BacktestRunRequest):
         csv_before_path = TEMPLATE_BASE_DIR / f"temp_csv_before_{run_name}.csv"
         if STATS_CSV.exists():
             shutil.copy(STATS_CSV, csv_before_path)
-            print(f"📸 Created CSV snapshot for comparison")
+            print("📸 Created CSV snapshot for comparison")
 
         # Function to run in background
         def run_backtest_background():
@@ -865,11 +864,11 @@ async def run_backtest(request: BacktestRunRequest):
                 print(f"{'='*60}")
                 print(f"Return code: {result.returncode}")
                 if result.returncode != 0:
-                    print(f"⚠️ Script exited with non-zero code")
+                    print("⚠️ Script exited with non-zero code")
 
                 # Show last 50 lines of output
                 stdout_lines = result.stdout.split('\n')
-                print(f"\n📊 Last 50 lines of output:")
+                print("\n📊 Last 50 lines of output:")
                 print('\n'.join(stdout_lines[-50:]))
 
                 if result.stderr:
@@ -878,7 +877,7 @@ async def run_backtest(request: BacktestRunRequest):
                 # Clean up temp file
                 if temp_ideas_file.exists():
                     temp_ideas_file.unlink()
-                    print(f"\n🗑️ Cleaned up temp ideas file")
+                    print("\n🗑️ Cleaned up temp ideas file")
 
                 # Auto-add results to folder
                 print(f"\n{'='*60}")
@@ -1091,7 +1090,7 @@ async def liquidations_page(request: Request):
 async def get_recent_liquidations(hours: int = 24):
     """🌙 Moon Dev: Get stats from historical API data"""
     try:
-        print(f"🌙 Moon Dev: Loading liquidations for stats calculation...")
+        print("🌙 Moon Dev: Loading liquidations for stats calculation...")
 
         # Initialize MoonDev API
         api = MoonDevAPI()
@@ -1234,9 +1233,9 @@ async def websocket_liquidations(websocket: WebSocket):
 
                             try:
                                 await websocket.send_json(liq_event)
-                            except Exception as send_error:
+                            except Exception:
                                 # Client disconnected, stop trying to send
-                                print(f"🔌 Client disconnected, stopping stream")
+                                print("🔌 Client disconnected, stopping stream")
                                 client_connected = False
                                 break
 
@@ -1274,14 +1273,14 @@ def auto_add_to_folder(run_name: str, csv_before_path: str) -> int:
 
         # Read main CSV
         if not STATS_CSV.exists():
-            print(f"❌ Main CSV not found")
+            print("❌ Main CSV not found")
             return 0
 
         df_after = pd.read_csv(STATS_CSV)
 
         # Read CSV snapshot from before run
         if not Path(csv_before_path).exists():
-            print(f"❌ Before-run CSV snapshot not found")
+            print("❌ Before-run CSV snapshot not found")
             return 0
 
         df_before = pd.read_csv(csv_before_path)
@@ -1315,7 +1314,7 @@ def auto_add_to_folder(run_name: str, csv_before_path: str) -> int:
 
         # Clean up snapshot
         Path(csv_before_path).unlink()
-        print(f"🗑️ Cleaned up CSV snapshot")
+        print("🗑️ Cleaned up CSV snapshot")
 
         return new_count
 
@@ -1370,14 +1369,14 @@ if __name__ == "__main__":
     print(f"\n📊 CSV Path: {STATS_CSV}")
     print(f"📁 Templates: {TEMPLATE_BASE_DIR}")
     print(f"📂 Data Downloads: {DATA_DIR}")
-    print(f"🌐 Starting server at: http://localhost:8002")
-    print(f"\n💡 Page 1 (Analysis): http://localhost:8002/")
-    print(f"💡 Page 2 (Data Portal): http://localhost:8002/data")
+    print("🌐 Starting server at: http://localhost:8002")
+    print("\n💡 Page 1 (Analysis): http://localhost:8002/")
+    print("💡 Page 2 (Data Portal): http://localhost:8002/data")
     if TEST_MODE:
-        print(f"\n🧪 TEST MODE: Data portal will use sample data")
-        print(f"   Set TEST_MODE = False in backtestdashboard.py for real data")
-    print(f"\n💡 NOTE: Make sure you've run rbi_agent_pp_multi.py first to generate backtest data!")
-    print(f"💡 Port 8002 is used to avoid conflict with other services")
+        print("\n🧪 TEST MODE: Data portal will use sample data")
+        print("   Set TEST_MODE = False in backtestdashboard.py for real data")
+    print("\n💡 NOTE: Make sure you've run rbi_agent_pp_multi.py first to generate backtest data!")
+    print("💡 Port 8002 is used to avoid conflict with other services")
     print("\nPress CTRL+C to stop\n")
 
     uvicorn.run(app, host="0.0.0.0", port=8002, log_level="info")

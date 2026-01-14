@@ -1,5 +1,4 @@
 from backtesting import Backtest, Strategy
-from backtesting.test import GOOG
 import talib
 import pandas as pd
 

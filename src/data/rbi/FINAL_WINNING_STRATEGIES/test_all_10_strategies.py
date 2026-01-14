@@ -2,12 +2,10 @@
 # 🌙 Moon Dev's 10 Strategy Test Runner 🌙
 # Tests all 10 working strategies and compiles comprehensive results
 
-import sys
 import os
 import importlib.util
 import warnings
 from datetime import datetime
-import pandas as pd
 import numpy as np
 warnings.filterwarnings('ignore')
 
@@ -208,7 +206,7 @@ def main():
         opt_trades = [r['optimized']['trades'] for r in successful_results if r['optimized']['trades']]
         
         if opt_sharpes and opt_returns and opt_trades:
-            print(f"\n📊 SUCCESSFUL STRATEGIES STATISTICS:")
+            print("\n📊 SUCCESSFUL STRATEGIES STATISTICS:")
             print(f"   Average Sharpe Ratio: {np.mean(opt_sharpes):.2f}")
             print(f"   Median Sharpe Ratio: {np.median(opt_sharpes):.2f}")
             print(f"   Average Return: {np.mean(opt_returns):.1f}%")

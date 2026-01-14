@@ -6,7 +6,6 @@ Moon Dev Trading System 🌙
 """
 
 import pandas as pd
-import numpy as np
 
 # Load data
 data_path = '/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv'
@@ -28,11 +27,11 @@ print(f"Buy & Hold Return: {buy_hold_return:.2f}%")
 print(f"Total Bars: {len(data)}")
 
 # Current strategy performance comparison
-print(f"\n📊 Strategy vs Buy & Hold Comparison:")
+print("\n📊 Strategy vs Buy & Hold Comparison:")
 print(f"Buy & Hold: {buy_hold_return:.2f}%")
-print(f"DivergenceVolatility (Best): 10.79%")
-print(f"DivergenceAnchor: 6.48%") 
-print(f"DivergenceBand: 4.66%")
+print("DivergenceVolatility (Best): 10.79%")
+print("DivergenceAnchor: 6.48%") 
+print("DivergenceBand: 4.66%")
 
 if buy_hold_return > 10.79:
     print(f"\n🎯 OPTIMIZATION NEEDED: Buy & Hold ({buy_hold_return:.2f}%) beats best strategy (10.79%)")

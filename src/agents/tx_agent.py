@@ -14,7 +14,6 @@ import random
 from termcolor import colored
 import logging
 from rich.console import Console
-from rich import print as rprint
 from playsound import playsound
 
 # 🌙 Moon Dev: Calculate project root dynamically

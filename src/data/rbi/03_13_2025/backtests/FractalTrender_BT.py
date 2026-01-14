@@ -1,8 +1,6 @@
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 # Load and preprocess data
 data = pd.read_csv(

@@ -5,7 +5,6 @@
 import pandas as pd
 from backtesting import Backtest, Strategy
 import talib
-import numpy as np
 
 # Load and preprocess data with lunar precision 🌕
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv')
@@ -207,5 +206,5 @@ if __name__ == "__main__":
         print(f"   Win Rate: {stats['Win Rate [%]']:.2f}%" if not pd.isna(stats['Win Rate [%]']) else "   Win Rate: N/A")
         print(f"   Max Drawdown: {stats['Max. Drawdown [%]']:.2f}%")
     
-    print(f"\n🌙 All backtests completed successfully! 🚀")
+    print("\n🌙 All backtests completed successfully! 🚀")
     print("📁 Results saved in AI_BACKTEST_RESULTS folder")

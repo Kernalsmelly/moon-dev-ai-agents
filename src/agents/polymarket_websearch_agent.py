@@ -184,7 +184,7 @@ class PolymarketWebSearchAgent:
         if not OPENAI_API_KEY:
             cprint("⚠️ WARNING: OPENAI_KEY not found - web search will fail!", "red", attrs=['bold'])
         else:
-            cprint(f"✅ OpenAI API key configured for web search", "green")
+            cprint("✅ OpenAI API key configured for web search", "green")
             cprint(f"🔍 Web search model: {WEB_SEARCH_MODEL}", "cyan")
 
         # Initialize AI models
@@ -507,7 +507,7 @@ Provide a concise summary of the most relevant and recent information."""
             ]
         }
 
-        cprint(f"📡 Sending subscription for live trades...", "cyan")
+        cprint("📡 Sending subscription for live trades...", "cyan")
         ws.send(json.dumps(subscription_msg))
         self.ws_connected = True
         cprint("✅ Subscription sent! Waiting for trades...", "green")
@@ -1269,7 +1269,7 @@ Provide predictions for each market in the specified format."""
                 cprint(f"   Filtered trades (>=${MIN_TRADE_SIZE_USD}): {self.filtered_trades_count}", "yellow")
                 cprint(f"   Total markets: {total_markets}", "white")
                 cprint(f"   Fresh eligible: {fresh_eligible_count}", "yellow" if fresh_eligible_count < NEW_MARKETS_FOR_ANALYSIS else "green", attrs=['bold'])
-                cprint(f"   🔍 Web search: ENABLED", "green")
+                cprint("   🔍 Web search: ENABLED", "green")
                 cprint(f"{'='*60}\n", "cyan")
 
             except KeyboardInterrupt:
@@ -1290,7 +1290,7 @@ Provide predictions for each market in the specified format."""
         total_markets = len(self.markets_df)
 
         if total_markets == 0:
-            cprint(f"\n⏳ No markets in database yet! WebSocket is collecting...", "yellow", attrs=['bold'])
+            cprint("\n⏳ No markets in database yet! WebSocket is collecting...", "yellow", attrs=['bold'])
             return
 
         now = datetime.now()
@@ -1330,10 +1330,10 @@ Provide predictions for each market in the specified format."""
 
         is_first_run = (self.last_analysis_run_timestamp is None)
 
-        cprint(f"📊 Market Analysis Status:", "cyan", attrs=['bold'])
+        cprint("📊 Market Analysis Status:", "cyan", attrs=['bold'])
         cprint(f"   Total markets: {total_markets}", "white")
         cprint(f"   Fresh eligible: {fresh_eligible_count}", "yellow" if fresh_eligible_count < NEW_MARKETS_FOR_ANALYSIS else "green", attrs=['bold'])
-        cprint(f"   🔍 Web search will be used for each market!", "green")
+        cprint("   🔍 Web search will be used for each market!", "green")
 
         should_analyze = (is_first_run and total_markets > 0) or (fresh_eligible_count >= NEW_MARKETS_FOR_ANALYSIS)
 
@@ -1387,10 +1387,10 @@ def main():
     cprint(f"📜 Lookback period: {LOOKBACK_HOURS} hours", "yellow")
     cprint("")
     cprint("🔄 How it works:", "green", attrs=['bold'])
-    cprint(f"   1. WebSocket collects whale trades from Polymarket", "cyan")
-    cprint(f"   2. For each market, WEB SEARCH finds latest news/context", "cyan")
-    cprint(f"   3. AI swarm analyzes markets WITH web context", "cyan")
-    cprint(f"   4. Consensus picks are generated with better info!", "cyan")
+    cprint("   1. WebSocket collects whale trades from Polymarket", "cyan")
+    cprint("   2. For each market, WEB SEARCH finds latest news/context", "cyan")
+    cprint("   3. AI swarm analyzes markets WITH web context", "cyan")
+    cprint("   4. Consensus picks are generated with better info!", "cyan")
     cprint("")
     cprint(f"🤖 AI Mode: {'SWARM (7 models)' if USE_SWARM_MODE else 'Single Model'}", "yellow")
     cprint("="*80 + "\n", "cyan")

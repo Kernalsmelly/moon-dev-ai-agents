@@ -11,17 +11,12 @@ import sys
 import cv2
 import time
 import json
-import shutil
 import whisper
-import numpy as np
 import base64
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
-from termcolor import colored, cprint
-from tqdm import tqdm
+from typing import Dict, List, Optional
+from termcolor import cprint
 from datetime import datetime
-from typing import Dict, List, Tuple, Optional, Any
-import threading
 
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -137,7 +132,7 @@ class ComplianceAgent:
                 cprint("❌ No AI models available. Please check your API keys.", "red")
                 raise ValueError("No AI models available")
                 
-            cprint(f"✅ Successfully initialized AI model", "green")
+            cprint("✅ Successfully initialized AI model", "green")
             return model
             
         except Exception as e:
@@ -397,7 +392,7 @@ class ComplianceAgent:
             
             if not video_files:
                 cprint(f"⚠️ No video files found in {VIDEOS_DIR}", "yellow")
-                cprint(f"🌙 Moon Dev says: Add some videos and try again! 🌙", "magenta")
+                cprint("🌙 Moon Dev says: Add some videos and try again! 🌙", "magenta")
                 return
             
             # Process each video
@@ -422,7 +417,7 @@ class ComplianceAgent:
             
             cprint("\n🎉 All videos processed successfully!", "green")
             cprint(f"📂 Reports saved to: {REPORTS_DIR}", "green")
-            cprint(f"🌟 Moon Dev's Compliance Agent has completed all tasks! 🌟", "magenta")
+            cprint("🌟 Moon Dev's Compliance Agent has completed all tasks! 🌟", "magenta")
         except Exception as e:
             cprint(f"❌ Error processing videos: {str(e)}", "red")
     

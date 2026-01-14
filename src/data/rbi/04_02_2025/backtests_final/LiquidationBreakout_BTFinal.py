@@ -2,7 +2,6 @@
 
 # Fixed imports (assuming standard backtesting library imports)
 import talib
-import numpy as np
 
 class LiquidationBreakout:
     def __init__(self):

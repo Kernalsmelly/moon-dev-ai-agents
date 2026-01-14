@@ -81,13 +81,9 @@ Need an API key? for a limited time, bootcamp members get free api keys for clau
 import os
 import pandas as pd
 import requests
-from datetime import datetime
 import time
 from pathlib import Path
-import numpy as np
 import traceback
-import json
-import io
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -200,7 +196,7 @@ class MoonDevAPI:
                         df = df.sort_values('datetime', ascending=True)
                         print(f"✅ Moon Dev: Got {len(df):,} records")
                         print(f"📅 Date range: {df['datetime'].min()} → {df['datetime'].max()}")
-                        print(f"🎯 Data sorted chronologically (oldest→newest like OHLCV)")
+                        print("🎯 Data sorted chronologically (oldest→newest like OHLCV)")
                     else:
                         print(f"✅ Moon Dev: Got {len(df):,} records (timestamp column not identified)")
 
@@ -303,8 +299,8 @@ class MoonDevAPI:
         """
         url = f'{self.base_url}/files/liq_data.csv'
 
-        print(f"🚀 Moon Dev: Starting NEW chunked streaming download...")
-        print(f"✨ Using server's chunked transfer encoding - no file size needed!")
+        print("🚀 Moon Dev: Starting NEW chunked streaming download...")
+        print("✨ Using server's chunked transfer encoding - no file size needed!")
 
         try:
             # Use streaming request with iter_content - this is the KEY change!
@@ -356,10 +352,10 @@ class MoonDevAPI:
                     df = df.sort_values('datetime', ascending=True)
                     print(f"📅 Date range: {df['datetime'].min()} → {df['datetime'].max()}")
 
-                print(f"✅ Moon Dev COMPLETE DATASET SUCCESS!")
+                print("✅ Moon Dev COMPLETE DATASET SUCCESS!")
                 print(f"   📊 Total records: {len(df):,}")
                 print(f"   💾 File size: {file_size_mb:.1f} MB")
-                print(f"   🎯 Data sorted chronologically (oldest→newest like OHLCV)")
+                print("   🎯 Data sorted chronologically (oldest→newest like OHLCV)")
 
                 return df
             else:
@@ -372,7 +368,7 @@ class MoonDevAPI:
             return None
 
         except requests.exceptions.ChunkedEncodingError as e:
-            print(f"📦 Moon Dev: Chunk encoding error - partial download may have occurred")
+            print("📦 Moon Dev: Chunk encoding error - partial download may have occurred")
             print(f"Error: {str(e)[:200]}")
             return None
 
@@ -481,7 +477,7 @@ class MoonDevAPI:
 
             if response.status_code == 403:
                 print("❗ Invalid API key or insufficient permissions")
-                print(f"🔑 Please check your API key in .env file")
+                print("🔑 Please check your API key in .env file")
                 return None
 
             response.raise_for_status()
@@ -516,7 +512,7 @@ class MoonDevAPI:
 
             if response.status_code == 403:
                 print("❗ Invalid API key or insufficient permissions")
-                print(f"🔑 Please check your API key in .env file")
+                print("🔑 Please check your API key in .env file")
                 return None
 
             response.raise_for_status()

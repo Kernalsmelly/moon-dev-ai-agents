@@ -39,7 +39,7 @@ class VolatilitySurge(Strategy):
         self.atr = self.I(talib.ATR, self.data.High, self.data.Low, self.data.Close, 1344)
         
         print("🌙 Moon Dev Indicators Initialized! ✨")
-        print(f"📉 10D HV Window: 960 | 📊 Volume Z Window: 1920 | 🚀 ATR Period: 1344")
+        print("📉 10D HV Window: 960 | 📊 Volume Z Window: 1920 | 🚀 ATR Period: 1344")
 
     def next(self):
         if not self.position:
@@ -60,7 +60,7 @@ class VolatilitySurge(Strategy):
                     return
                 
                 # Moon-themed debug
-                print(f"\n🚀 MOONSHOT ALERT! 🌕")
+                print("\n🚀 MOONSHOT ALERT! 🌕")
                 print(f"📉 HV: {hv:.2%} | 📊 Volume Z: {vz:.2f}")
                 print(f"💰 Entry: {self.data.Close[-1]:.2f}")
                 print(f"✨ ATR: {atr:.2f} | 📦 Size: {position_size} units")

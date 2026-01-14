@@ -51,7 +51,7 @@ class VolatilityFilterEMA(Strategy):
 
         # 🌠 Moon Dev Debug Console
         if len(self.data) % 100 == 0:
-            print(f"\n🌕 Lunar Status Report 🌕")
+            print("\n🌕 Lunar Status Report 🌕")
             print(f"│ Price: {price:.2f} │ EMA50: {ema50:.2f}")
             print(f"│ EMA200: {ema200:.2f} │ ATR: {atr:.2f}")
             print(f"╰──────────────── ATR Avg: {atr_avg:.2f} ────────────────╯")
@@ -69,7 +69,7 @@ class VolatilityFilterEMA(Strategy):
                         position_size = int(round(position_size))
                         
                         if position_size > 0:
-                            print(f"\n🚀🌙 LIFTOFF DETECTED! 🚀")
+                            print("\n🚀🌙 LIFTOFF DETECTED! 🚀")
                             print(f"│ Entry Price: {price:.2f}")
                             print(f"│ Position Size: {position_size} units")
                             print(f"╰────── Stop Loss: {price - stop_loss:.2f} ──────╯")
@@ -80,7 +80,7 @@ class VolatilityFilterEMA(Strategy):
         # 🌑 Black Hole Exit (Volatility Spike)
         else:
             if atr > atr_avg:
-                print(f"\n🌑⚡ VOLATILITY SPIKE! EXITING! ⚡")
+                print("\n🌑⚡ VOLATILITY SPIKE! EXITING! ⚡")
                 print(f"╰──── Current ATR: {atr:.2f} > Avg {atr_avg:.2f} ────╯")
                 self.sell()
 

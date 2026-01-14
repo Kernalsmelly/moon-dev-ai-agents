@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import talib
 from backtesting import Backtest, Strategy
@@ -21,15 +20,15 @@ class VoltaicDivergence(Strategy):
                self.bb_width[-1] > self.bb_width_avg[-1] and \
                (self.data.Close[-2] < self.kc_upper[-2] and self.data.Close[-1] > self.kc_upper[-1]):
                 self.buy(size=int(round(1000000 / self.data.Open[-1])), sl=self.kc_lower[-1])
-                print(f"🌙 Voltaic Divergence Detected! Launching Long Trade 🚀")
+                print("🌙 Voltaic Divergence Detected! Launching Long Trade 🚀")
         else:
             if (self.kc_middle[-2] < self.data.Close[-2] and self.kc_middle[-1] > self.data.Close[-1]):
                 self.position.close()
-                print(f"🌙 Trend Exhausted. Closing Position and Securing Gains 💰")
+                print("🌙 Trend Exhausted. Closing Position and Securing Gains 💰")
 
             if self.data.Low[-1] <= self.position.sl:
                 self.position.close()
-                print(f"🌙 Stop Loss Hit. Activating Capital Shield 🛡️")
+                print("🌙 Stop Loss Hit. Activating Capital Shield 🛡️")
             else:
                 self.position.sl = max(self.position.sl, self.kc_lower[-1])
 

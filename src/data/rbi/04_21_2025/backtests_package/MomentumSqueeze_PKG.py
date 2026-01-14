@@ -1,7 +1,6 @@
 from backtesting import Backtest, Strategy
 import pandas as pd
 import talib
-import numpy as np
 from pandas_ta import fisher
 
 # Data preparation

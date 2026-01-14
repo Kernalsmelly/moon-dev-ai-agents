@@ -74,17 +74,14 @@ all of my videos you can use: https://www.dropbox.com/scl/fo/d0rjdyus9q3pok5nbmo
 import sys
 from pathlib import Path
 import os
-import moviepy.editor as mp
 import time
 from termcolor import cprint
-from tqdm import tqdm
 import subprocess
 import shutil
 import random
 from youtube_transcript_api import YouTubeTranscriptApi
 import re
 from src.models import model_factory
-import yt_dlp
 import openai
 from moviepy.editor import VideoFileClip, AudioFileClip, CompositeVideoClip
 
@@ -532,7 +529,7 @@ class ClipsAgent:
             segment = ' '.join(segment_words)
             
             # Debug info
-            cprint(f"\n📊 Transcript Segment Stats:", "cyan")
+            cprint("\n📊 Transcript Segment Stats:", "cyan")
             cprint(f"  ├─ Total words: {len(words)}", "cyan")
             cprint(f"  ├─ Segment words: {len(segment_words)}", "cyan")
             cprint(f"  └─ Final length: {len(segment)} chars", "cyan")

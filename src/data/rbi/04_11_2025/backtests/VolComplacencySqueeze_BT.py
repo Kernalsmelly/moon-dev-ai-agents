@@ -68,7 +68,7 @@ class VolComplacencySqueeze(Strategy):
                              tp=price - (stop_price - price)*self.tp_multiplier)
                     self.entry_width = self.bb_width[-1]
                     self.entry_price = price
-                    print(f"🌙✨ MOON DEV ENTRY: Short Volatility Activated! ✨")
+                    print("🌙✨ MOON DEV ENTRY: Short Volatility Activated! ✨")
                     print(f"Entry Price: {price:.2f} | Size: {position_size}")
 
         # Exit logic
@@ -76,12 +76,12 @@ class VolComplacencySqueeze(Strategy):
             # Volatility spike exit
             if self.bb_percentile[-1] > 50:
                 self.position.close()
-                print(f"🚨 MOON DEV EXIT: Volatility Expansion Detected!")
+                print("🚨 MOON DEV EXIT: Volatility Expansion Detected!")
             
             # Trailing volatility stop
             if self.bb_width[-1] > self.entry_width * 1.5:
                 self.position.close()
-                print(f"🌪️ MOON DEV STOP: Volatility Spike 1.5x Entry!")
+                print("🌪️ MOON DEV STOP: Volatility Spike 1.5x Entry!")
 
 # Backtest execution
 bt = Backtest(data, VolComplacencySqueeze, cash=1_000_000, commission=.002)

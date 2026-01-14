@@ -105,7 +105,7 @@ class DivergentConvergence(Strategy):
 
         # Entry Logic
         if not self.position and self.div_bar is not None and stoch_converge and current_price > self.ema200[-1] and self.data.Volume[-1] > 1.5 * self.vol_sma[-1] and self.adx[-1] > 25 and self.macd_line[-1] > self.macd_signal[-1]:  # 🌙 Moon Dev Optimization: Integrated MACD bullish crossover, stricter volume (1.5x) and ADX (>25) for high-conviction entries in strong uptrends only
-            print(f"🌙 Moon Dev: All entry conditions met! Attempting LONG entry... 🚀")
+            print("🌙 Moon Dev: All entry conditions met! Attempting LONG entry... 🚀")
             # Calculate SL: below div low with buffer
             div_low = self.div_low
             atr_val = self.atr[-1]
@@ -153,14 +153,14 @@ class DivergentConvergence(Strategy):
             # Stochastic cross exit
             if k_cross_below_d:
                 self.position.close()
-                print(f"🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
+                print("🌙 Moon Dev: Stochastic %K crossed below %D! EXIT 📉")
                 self.current_sl = None
                 return
 
             # RSI overbought exit
             if rsi_now > 75:  # 🌙 Moon Dev Optimization: Raised RSI exit threshold to >75 for allowing more upside in strong trends before exiting
                 self.position.close()
-                print(f"🌙 Moon Dev: RSI Overbought >75! EXIT 📈")
+                print("🌙 Moon Dev: RSI Overbought >75! EXIT 📈")
                 self.current_sl = None
                 return
 

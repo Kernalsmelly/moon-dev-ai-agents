@@ -2,6 +2,10 @@
 🌙 Moon Dev's Configuration File
 Built with love by Moon Dev 🚀
 """
+import os
+
+# Prefer environment-provided RPC URL (set in .env or shell). Falls back to project defaults.
+RPC_URL = os.getenv("RPC_URL") or os.getenv("RPC_ENDPOINT")
 
 # 🔄 Exchange Selection
 EXCHANGE = 'solana'  # Options: 'solana', 'hyperliquid'
@@ -128,8 +132,8 @@ sell_at_multiple = 3
 USDC_SIZE = 1
 limit = 49
 timeframe = '15m'
-stop_loss_perctentage = -.24
+stop_loss_percentage = 20  # percent used in pnl/SL calculations (e.g., 20 means -20% stop)
+dont_trade_list = []  # list of token mint addresses to never trade
 EXIT_ALL_POSITIONS = False
-DO_NOT_TRADE_LIST = ['777']
 CLOSED_POSITIONS_TXT = '777'
 minimum_trades_in_last_hour = 777

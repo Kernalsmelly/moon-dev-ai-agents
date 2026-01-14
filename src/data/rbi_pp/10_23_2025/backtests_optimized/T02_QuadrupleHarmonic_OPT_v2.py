@@ -94,7 +94,7 @@ class QuadrupleHarmonic(Strategy):
             # Improved TP: 1:3 Risk-Reward ratio (increased from 1:2 for higher average returns per trade) 🌙
             stop_distance = entry_price - sl_price
             if stop_distance <= 0:
-                print(f"🌙 Moon Dev Skip: Zero or negative stop distance 😔")
+                print("🌙 Moon Dev Skip: Zero or negative stop distance 😔")
                 return
             tp_price = entry_price + 3 * stop_distance
             

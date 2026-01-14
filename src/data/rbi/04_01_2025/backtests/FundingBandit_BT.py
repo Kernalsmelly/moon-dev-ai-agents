@@ -1,6 +1,5 @@
 # 🌙 Moon Dev's FundingBandit Backtest Implementation
 from backtesting import Strategy, Backtest
-from backtesting.lib import crossover
 import talib
 import pandas as pd
 

@@ -1,7 +1,6 @@
 # 🌙 Moon Dev's Volatility Squeeze Backtest 🌙
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Backtest, Strategy
 
 # Clean data and prepare for backtesting

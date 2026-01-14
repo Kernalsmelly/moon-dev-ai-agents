@@ -5,11 +5,9 @@ Built with love by Moon Dev 🚀
 """
 
 import os
-import sys
-from termcolor import colored, cprint
+from termcolor import cprint
 from dotenv import load_dotenv
 import pandas as pd
-import time
 
 # Load environment variables
 load_dotenv()
@@ -42,7 +40,7 @@ class ExchangeManager:
                 self.account = eth_account.Account.from_key(hl_key)
                 self.hl = hl
 
-                cprint(f"✅ Initialized HyperLiquid exchange manager", "green")
+                cprint("✅ Initialized HyperLiquid exchange manager", "green")
                 cprint(f"   Account: {self.account.address[:6]}...{self.account.address[-4:]}", "cyan")
 
             except Exception as e:
@@ -53,7 +51,7 @@ class ExchangeManager:
             try:
                 from src import nice_funcs as solana
                 self.solana = solana
-                cprint(f"✅ Initialized Solana exchange manager", "green")
+                cprint("✅ Initialized Solana exchange manager", "green")
 
             except Exception as e:
                 cprint(f"❌ Failed to initialize Solana: {str(e)}", "red")
@@ -314,7 +312,7 @@ class ExchangeManager:
         if self.exchange.lower() == 'hyperliquid':
             return self.hl.set_leverage(symbol, leverage, self.account)
         else:
-            cprint(f"⚠️ Leverage not applicable for Solana spot trading", "yellow")
+            cprint("⚠️ Leverage not applicable for Solana spot trading", "yellow")
             return None
 
     def get_data(self, symbol_or_token, days_back, timeframe):
@@ -332,7 +330,7 @@ class ExchangeManager:
         if self.exchange.lower() == 'hyperliquid':
             # HyperLiquid doesn't have get_data in our implementation yet
             # For now, return empty dataframe
-            cprint(f"⚠️ OHLCV data not yet implemented for HyperLiquid", "yellow")
+            cprint("⚠️ OHLCV data not yet implemented for HyperLiquid", "yellow")
             return pd.DataFrame()
         else:
             return self.solana.get_data(symbol_or_token, days_back, timeframe)

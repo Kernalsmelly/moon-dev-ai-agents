@@ -344,7 +344,7 @@ def monitor_position_pnl(token, check_interval=PNL_CHECK_INTERVAL):
                 # Check stop loss
                 if pnl_pct <= -STOP_LOSS_PERCENTAGE:
                     cprint(f"🛑 STOP LOSS HIT! P&L: {pnl_pct:.2f}% (target: -{STOP_LOSS_PERCENTAGE}%)", "red", attrs=['bold'])
-                    cprint(f"🔄 Closing position with limit orders...", "yellow")
+                    cprint("🔄 Closing position with limit orders...", "yellow")
 
                     # Close position using limit sell (for longs) or limit buy (for shorts)
                     if position['position_amount'] > 0:
@@ -359,7 +359,7 @@ def monitor_position_pnl(token, check_interval=PNL_CHECK_INTERVAL):
                 # Check take profit
                 if pnl_pct >= TAKE_PROFIT_PERCENTAGE:
                     cprint(f"🎯 TAKE PROFIT HIT! P&L: {pnl_pct:.2f}% (target: +{TAKE_PROFIT_PERCENTAGE}%)", "green", attrs=['bold'])
-                    cprint(f"🔄 Closing position with limit orders...", "yellow")
+                    cprint("🔄 Closing position with limit orders...", "yellow")
 
                     # Close position using limit sell (for longs) or limit buy (for shorts)
                     if position['position_amount'] > 0:
@@ -375,7 +375,7 @@ def monitor_position_pnl(token, check_interval=PNL_CHECK_INTERVAL):
             time.sleep(check_interval)
 
     except KeyboardInterrupt:
-        cprint(f"\n⚠️  Position monitoring interrupted", "yellow")
+        cprint("\n⚠️  Position monitoring interrupted", "yellow")
         raise
     except Exception as e:
         cprint(f"❌ Error monitoring position: {e}", "red")
@@ -440,7 +440,7 @@ def calculate_position_size(account_balance):
         # For Solana: No leverage, direct position size
         position_size = account_balance * (MAX_POSITION_PERCENTAGE / 100)
 
-        cprint(f"\n📊 Position Calculation (SOLANA):", "yellow", attrs=['bold'])
+        cprint("\n📊 Position Calculation (SOLANA):", "yellow", attrs=['bold'])
         cprint(f"   💵 USDC Balance: ${account_balance:,.2f}", "white")
         cprint(f"   📈 Max Position %: {MAX_POSITION_PERCENTAGE}%", "white")
         cprint(f"   💎 Position Size: ${position_size:,.2f}", "cyan", attrs=['bold'])
@@ -455,7 +455,7 @@ class TradingAgent:
     def __init__(self):
         # Check if using swarm mode or single model
         if USE_SWARM_MODE:
-            cprint(f"\n🌊 Initializing Trading Agent in SWARM MODE (6 AI consensus)...", "cyan", attrs=['bold'])
+            cprint("\n🌊 Initializing Trading Agent in SWARM MODE (6 AI consensus)...", "cyan", attrs=['bold'])
             self.swarm = SwarmAgent()
             cprint("✅ Swarm mode initialized with 6 AI models!", "green")
 
@@ -488,7 +488,7 @@ class TradingAgent:
             cprint(f"🏦 Exchange: {EXCHANGE} (using symbols)", "cyan")
         else:
             tokens_to_show = MONITORED_TOKENS
-            cprint(f"🏦 Exchange: SOLANA (using contract addresses)", "cyan")
+            cprint("🏦 Exchange: SOLANA (using contract addresses)", "cyan")
 
         for i, token in enumerate(tokens_to_show, 1):
             token_display = token[:8] + "..." if len(token) > 8 else token
@@ -883,32 +883,32 @@ Example format:
             if current_position > 0:
                 # We have a position - take action based on signal
                 if action == "SELL":
-                    cprint(f"🚨 SELL signal with position - CLOSING POSITION", "white", "on_red")
+                    cprint("🚨 SELL signal with position - CLOSING POSITION", "white", "on_red")
                     try:
                         cprint(f"📉 Executing chunk_kill (${max_usd_order_size} chunks)...", "yellow")
                         n.chunk_kill(token, max_usd_order_size, slippage)
-                        cprint(f"✅ Position closed successfully!", "white", "on_green")
+                        cprint("✅ Position closed successfully!", "white", "on_green")
                     except Exception as e:
                         cprint(f"❌ Error closing position: {str(e)}", "white", "on_red")
                 elif action == "NOTHING":
-                    cprint(f"⏸️  DO NOTHING signal - HOLDING POSITION", "white", "on_blue")
+                    cprint("⏸️  DO NOTHING signal - HOLDING POSITION", "white", "on_blue")
                     cprint(f"💎 Maintaining ${current_position:.2f} position", "cyan")
                 else:  # BUY
-                    cprint(f"✅ BUY signal - KEEPING POSITION", "white", "on_green")
+                    cprint("✅ BUY signal - KEEPING POSITION", "white", "on_green")
                     cprint(f"💎 Maintaining ${current_position:.2f} position", "cyan")
             else:
                 # No position - explain what this means
                 if action == "SELL":
                     if LONG_ONLY:
-                        cprint(f"⏭️  SELL signal but NO POSITION to close", "white", "on_blue")
-                        cprint(f"📊 LONG ONLY mode: Can't open short, doing nothing", "cyan")
+                        cprint("⏭️  SELL signal but NO POSITION to close", "white", "on_blue")
+                        cprint("📊 LONG ONLY mode: Can't open short, doing nothing", "cyan")
                     else:
                         # SHORT MODE ENABLED - Open short position
                         # Get account balance and calculate position size
                         account_balance = get_account_balance()
                         position_size = calculate_position_size(account_balance)
 
-                        cprint(f"📉 SELL signal with no position - OPENING SHORT", "white", "on_red")
+                        cprint("📉 SELL signal with no position - OPENING SHORT", "white", "on_red")
                         cprint(f"⚡ {EXCHANGE} mode: Opening ${position_size:,.2f} short position", "yellow")
                         try:
                             # Check if we have the open_short function (Aster/HyperLiquid)
@@ -919,23 +919,23 @@ Example format:
                                 # Fallback to market_sell which should open short on futures exchanges
                                 cprint(f"📉 Executing market_sell to open short (${position_size:,.2f})...", "yellow")
                                 n.market_sell(token, position_size, slippage, leverage=LEVERAGE)
-                            cprint(f"✅ Short position opened successfully!", "white", "on_green")
+                            cprint("✅ Short position opened successfully!", "white", "on_green")
                         except Exception as e:
                             cprint(f"❌ Error opening short position: {str(e)}", "white", "on_red")
                 elif action == "NOTHING":
-                    cprint(f"⏸️  DO NOTHING signal with no position", "white", "on_blue")
-                    cprint(f"⏭️  Staying out of market", "cyan")
+                    cprint("⏸️  DO NOTHING signal with no position", "white", "on_blue")
+                    cprint("⏭️  Staying out of market", "cyan")
                 else:  # BUY
-                    cprint(f"📈 BUY signal with no position", "white", "on_green")
+                    cprint("📈 BUY signal with no position", "white", "on_green")
 
                     if USE_PORTFOLIO_ALLOCATION:
-                        cprint(f"📊 Portfolio allocation will handle entry", "white", "on_cyan")
+                        cprint("📊 Portfolio allocation will handle entry", "white", "on_cyan")
                     else:
                         # Simple mode: Open position at MAX_POSITION_PERCENTAGE
                         account_balance = get_account_balance()
                         position_size = calculate_position_size(account_balance)
 
-                        cprint(f"💰 Opening position at MAX_POSITION_PERCENTAGE", "white", "on_green")
+                        cprint("💰 Opening position at MAX_POSITION_PERCENTAGE", "white", "on_green")
                         try:
                             if EXCHANGE in ["ASTER", "HYPERLIQUID"]:
                                 success = n.ai_entry(token, position_size, leverage=LEVERAGE)
@@ -943,7 +943,7 @@ Example format:
                                 success = n.ai_entry(token, position_size)
 
                             if success:
-                                cprint(f"✅ Position opened successfully!", "white", "on_green")
+                                cprint("✅ Position opened successfully!", "white", "on_green")
 
                                 # Verify position was actually opened
                                 time.sleep(2)  # Brief delay for order to settle
@@ -954,15 +954,15 @@ Example format:
                                         position_usd = abs(position.get('position_amount', 0)) * position.get('mark_price', 0)
                                         cprint(f"📊 Confirmed: ${position_usd:,.2f} position | P&L: {pnl_pct:+.2f}%", "green", attrs=['bold'])
                                     else:
-                                        cprint(f"⚠️  Warning: Position verification failed - no position found!", "yellow")
+                                        cprint("⚠️  Warning: Position verification failed - no position found!", "yellow")
                                 else:
                                     position_usd = n.get_token_balance_usd(token)
                                     if position_usd > 0:
                                         cprint(f"📊 Confirmed: ${position_usd:,.2f} position", "green", attrs=['bold'])
                                     else:
-                                        cprint(f"⚠️  Warning: Position verification failed - no position found!", "yellow")
+                                        cprint("⚠️  Warning: Position verification failed - no position found!", "yellow")
                             else:
-                                cprint(f"❌ Position not opened (check errors above)", "white", "on_red")
+                                cprint("❌ Position not opened (check errors above)", "white", "on_red")
                         except Exception as e:
                             cprint(f"❌ Error opening position: {str(e)}", "white", "on_red")
 
@@ -1176,7 +1176,7 @@ def main():
                 # We have an open position - monitor P&L instead of sleeping
                 cprint(f"\n🔍 Open position detected for {monitored_token}", "yellow", attrs=['bold'])
                 monitor_position_pnl(monitored_token)
-                cprint(f"\n✅ Position closed. Resuming normal trading cycle...", "green")
+                cprint("\n✅ Position closed. Resuming normal trading cycle...", "green")
             else:
                 # No open position - sleep until next cycle
                 next_run = datetime.now() + timedelta(minutes=SLEEP_BETWEEN_RUNS_MINUTES)

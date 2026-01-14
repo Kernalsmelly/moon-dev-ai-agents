@@ -8,7 +8,6 @@ AI6 Implementation for Moon Dev Trading System 🌙
 import pandas as pd
 import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -269,14 +268,14 @@ print(stats)
 print(f"\n🚀 Strategy Details: {stats._strategy}")
 
 # Key metrics
-print(f"\n⭐ Key Performance Metrics:")
+print("\n⭐ Key Performance Metrics:")
 print(f"💰 Total Return: {stats['Return [%]']:.2f}%")
 print(f"📈 Sharpe Ratio: {stats['Sharpe Ratio']:.2f}")
 print(f"📉 Max Drawdown: {stats['Max. Drawdown [%]']:.2f}%")
 print(f"🎯 Win Rate: {stats['Win Rate [%]']:.2f}%")
 print(f"📊 Total Trades: {stats['# Trades']}")
 
-print(f"\n🔥 Strategy Analysis:")
+print("\n🔥 Strategy Analysis:")
 print(f"   📊 Trade Frequency: {stats['# Trades']} trades over {stats['Duration']}")
 print(f"   💰 Average Trade: {(stats['Return [%]'] / max(stats['# Trades'], 1)):.2f}% per trade")
 print(f"   📈 Best Trade: {stats.get('Best Trade [%]', 'N/A')}")

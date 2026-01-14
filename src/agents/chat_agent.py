@@ -20,14 +20,10 @@ from dotenv import load_dotenv
 import pandas as pd
 from src.config import *
 # from src.models import model_factory  # Removed - no AI needed
-import json
 import threading
 import random
-import selenium
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 # Removed sklearn imports - no longer needed
 import csv
@@ -149,7 +145,7 @@ class RestreamChatHandler:
             self.driver.set_page_load_timeout(30)
             
             embed_url = f"https://chat.restream.io/embed?token={self.embed_token}"
-            cprint(f"🌐 Loading chat URL", "cyan")
+            cprint("🌐 Loading chat URL", "cyan")
             self.driver.get(embed_url)
             
             # Wait for page to load

@@ -22,7 +22,6 @@ import time
 from datetime import datetime
 import pyaudio
 import openai
-from termcolor import cprint
 from dotenv import load_dotenv
 import base64
 from src.models import model_factory
@@ -85,7 +84,7 @@ class StreamAgent:
         
         # Verify environment variables
         if not os.getenv("OPENAI_KEY"):
-            raise ValueError(f"🚨 OPENAI_KEY not found!")
+            raise ValueError("🚨 OPENAI_KEY not found!")
         
         # Initialize OpenAI client
         openai_key = os.getenv("OPENAI_KEY")
@@ -122,7 +121,7 @@ class StreamAgent:
                 data = stream.read(AUDIO_CHUNK_SIZE, exception_on_overflow=False)
                 frames.append(data)
             
-        except Exception as e:
+        except Exception:
             pass
         finally:
             stream.stop_stream()
@@ -157,7 +156,7 @@ class StreamAgent:
                 # Clean up temporary file
                 os.unlink(temp_filename)
                 
-            except Exception as e:
+            except Exception:
                 if 'temp_filename' in locals():
                     try:
                         os.unlink(temp_filename)
@@ -185,7 +184,7 @@ class StreamAgent:
             
             return titles
             
-        except Exception as e:
+        except Exception:
             return []
     
     def generate_thumbnails(self, transcript, titles):
@@ -227,7 +226,7 @@ class StreamAgent:
                     
                     thumbnails_generated.append(str(filepath))
                     
-                except Exception as e:
+                except Exception:
                     pass
                     
                 # Small delay between generations
@@ -236,7 +235,7 @@ class StreamAgent:
             
             return thumbnails_generated
             
-        except Exception as e:
+        except Exception:
             return thumbnails_generated
     
     def display_results(self, titles):
@@ -277,7 +276,7 @@ class StreamAgent:
                 
             except KeyboardInterrupt:
                 raise
-            except Exception as e:
+            except Exception:
                 time.sleep(30)  # Short wait on error
 
 if __name__ == "__main__":
@@ -286,5 +285,5 @@ if __name__ == "__main__":
         agent.run()
     except KeyboardInterrupt:
         pass
-    except Exception as e:
+    except Exception:
         pass

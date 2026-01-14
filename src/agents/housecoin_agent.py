@@ -27,9 +27,8 @@ import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import pandas as pd
-from termcolor import colored, cprint
+from termcolor import cprint
 from dotenv import load_dotenv
-import requests
 
 # Add project root to path
 project_root = str(Path(__file__).parent.parent.parent)
@@ -37,7 +36,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 # Import Moon Dev modules
-from src.config import EXCHANGE, MONITORED_TOKENS
+from src.config import EXCHANGE
 from src import nice_funcs as n
 from src.models.model_factory import model_factory
 
@@ -446,7 +445,7 @@ class HousecoinAgent:
         cprint("🏠 Housecoin DCA Agent with AI Decisions 🏠", "cyan", attrs=['bold'])
         print("="*60)
         cprint("⚠️ NOT FINANCIAL ADVICE - This may go to zero!", "yellow", attrs=['bold'])
-        cprint(f"Thesis: 1 House = 1 Housecoin", "magenta")
+        cprint("Thesis: 1 House = 1 Housecoin", "magenta")
         cprint(f"Exit Target: ${EXIT_PRICE}", "yellow")
         cprint(f"Trading Hours: {TRADING_START_HOUR}AM-{TRADING_END_HOUR-12}PM ET", "cyan")
         cprint(f"AI Model: {AI_MODEL_TYPE} - {AI_MODEL_NAME}", "green")
@@ -460,7 +459,7 @@ class HousecoinAgent:
                     self.state['daily_spent'] = 0
                     self.state['last_reset_date'] = current_date
                     self.save_state()
-                    cprint(f"\n📅 New day! Daily spending reset.", "cyan")
+                    cprint("\n📅 New day! Daily spending reset.", "cyan")
 
                 # Get current price and SMA
                 current_price, sma_20 = self.get_current_price_and_sma()
@@ -497,7 +496,7 @@ class HousecoinAgent:
                 # SMA status
                 sma_status = "BELOW" if below_sma else "ABOVE"
                 sma_color = "red" if below_sma else "green"
-                print(f"20D-SMA: ", end="")
+                print("20D-SMA: ", end="")
                 cprint(f"{sma_status} {((current_price/sma_20 - 1) * 100):+.1f}%", sma_color, end=" ")
 
                 # 5-min SMA
@@ -522,7 +521,7 @@ class HousecoinAgent:
                         seconds_until_next = BELOW_SMA_BUY_MINUTES * 60 - (datetime.now() - self.last_buy_time).seconds
                         cprint(f"⏳ Next buy check in {seconds_until_next//60}m {seconds_until_next%60}s", "yellow")
                     elif not below_5min_sma:
-                        cprint(f"⏸️ Waiting for 5-min SMA confirmation", "yellow")
+                        cprint("⏸️ Waiting for 5-min SMA confirmation", "yellow")
                     else:
                         should_check_buy = True
                         buy_amount = BELOW_SMA_BUY_AMOUNT
@@ -547,7 +546,7 @@ class HousecoinAgent:
 
                 # Check with AI if strategy triggered
                 if should_check_buy:
-                    cprint(f"\n🎯 Strategy triggered! Checking with AI...", "cyan", attrs=['bold'])
+                    cprint("\n🎯 Strategy triggered! Checking with AI...", "cyan", attrs=['bold'])
 
                     # Get AI confirmation
                     ai_approved, ai_response = self.get_ai_confirmation(

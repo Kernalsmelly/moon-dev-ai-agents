@@ -1,9 +1,7 @@
 # 🌙 Moon Dev Backtest AI Generated Code 🚀
 import pandas as pd
 import talib
-import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 class VolatilityDecay(Strategy):
     atr_period = 14

@@ -139,7 +139,7 @@ class FractalCascade(Strategy):
                     self.position.close()
                     self.current_sl = None
                     self.tp = None
-                    print(f"🌙 Moon Dev: Long hard exit - below Jaw 😤")
+                    print("🌙 Moon Dev: Long hard exit - below Jaw 😤")
                     return
                 
                 # Trail stop for long - 🌙 Moon Dev: Fixed to use ffill_down (last confirmed support) and update on better levels, pass fixed TP
@@ -158,7 +158,7 @@ class FractalCascade(Strategy):
                     self.position.close()
                     self.current_sl = None
                     self.tp = None
-                    print(f"🌙 Moon Dev: Short hard exit - above Jaw 😤")
+                    print("🌙 Moon Dev: Short hard exit - above Jaw 😤")
                     return
                 
                 # Trail stop for short - 🌙 Moon Dev: Fixed to use ffill_up (last confirmed resistance) and update on better levels, pass fixed TP

@@ -13,7 +13,6 @@ import pandas as pd
 import numpy as np
 import talib
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 from pathlib import Path
 from glob import glob
 

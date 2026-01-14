@@ -1,7 +1,6 @@
 # 🌙 MOON DEV BACKTESTING IMPLEMENTATION FOR RETRACEMENTCONTRA STRATEGY 🚀
 
-from backtesting import Backtest, Strategy
-import pandas as pd
+from backtesting import Strategy
 import talib
 import numpy as np
 

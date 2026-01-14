@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
 import talib
 
@@ -101,7 +100,7 @@ class MomentumSqueeze(Strategy):
                 self.tp = tp
                 print(f"🌙 Moon Dev: LONG ENTRY at {entry}, SL: {sl}, TP: {tp}, Size: {pos_size}, Risk: {risk_amount:.2f} 🚀")
                 if bull_cross:
-                    print(f"📈 Bullish MACD cross confirmed!")
+                    print("📈 Bullish MACD cross confirmed!")
 
         # Short entry
         bars_since_short = current_bar - self.last_short_breakout if self.last_short_breakout >= 0 else 100
@@ -122,7 +121,7 @@ class MomentumSqueeze(Strategy):
                 self.tp = tp
                 print(f"🌙 Moon Dev: SHORT ENTRY at {entry}, SL: {sl}, TP: {tp}, Size: {pos_size}, Risk: {risk_amount:.2f} 📉")
                 if bear_cross:
-                    print(f"📉 Bearish MACD cross confirmed!")
+                    print("📉 Bearish MACD cross confirmed!")
 
         # Manage open positions
         if self.position:
@@ -166,7 +165,7 @@ class MomentumSqueeze(Strategy):
                 # MACD histogram reverse
                 if self.hist[-1] <= 0:
                     self.position.close()
-                    print(f"🌙 MACD histogram turned negative, closing long 📊")
+                    print("🌙 MACD histogram turned negative, closing long 📊")
                     self._reset_pos()
                     return
             else:  # short
@@ -180,7 +179,7 @@ class MomentumSqueeze(Strategy):
                 # MACD histogram reverse
                 if self.hist[-1] >= 0:
                     self.position.close()
-                    print(f"🌙 MACD histogram turned positive, closing short 📊")
+                    print("🌙 MACD histogram turned positive, closing short 📊")
                     self._reset_pos()
                     return
 

@@ -130,19 +130,19 @@ class FractalCascade(Strategy):
                 if not np.isnan(self.current_tp) and self.data.Close[-1] >= self.current_tp:
                     self.position.close()
                     self.current_sl = self.current_tp = None
-                    print(f"🌙 Moon Dev: Long exit - TP hit 🚀")
+                    print("🌙 Moon Dev: Long exit - TP hit 🚀")
                     return
                 
                 # Exit conditions
                 if self.data.Close[-1] < self.teeth[-1]:
                     self.position.close()
                     self.current_sl = self.current_tp = None
-                    print(f"🌙 Moon Dev: Long exit - below Teeth 📉")
+                    print("🌙 Moon Dev: Long exit - below Teeth 📉")
                     return
                 elif self.data.Close[-1] < self.jaw[-1]:
                     self.position.close()
                     self.current_sl = self.current_tp = None
-                    print(f"🌙 Moon Dev: Long hard exit - below Jaw 😤")
+                    print("🌙 Moon Dev: Long hard exit - below Jaw 😤")
                     return
                 
                 # 🌙 Moon Dev: Added ATR-based trailing stop for more frequent profit locking (Chandelier-style)
@@ -173,19 +173,19 @@ class FractalCascade(Strategy):
                 if not np.isnan(self.current_tp) and self.data.Close[-1] <= self.current_tp:
                     self.position.close()
                     self.current_sl = self.current_tp = None
-                    print(f"🌙 Moon Dev: Short exit - TP hit 📉")
+                    print("🌙 Moon Dev: Short exit - TP hit 📉")
                     return
                 
                 # Exit conditions
                 if self.data.Close[-1] > self.teeth[-1]:
                     self.position.close()
                     self.current_sl = self.current_tp = None
-                    print(f"🌙 Moon Dev: Short exit - above Teeth 📈")
+                    print("🌙 Moon Dev: Short exit - above Teeth 📈")
                     return
                 elif self.data.Close[-1] > self.jaw[-1]:
                     self.position.close()
                     self.current_sl = self.current_tp = None
-                    print(f"🌙 Moon Dev: Short hard exit - above Jaw 😤")
+                    print("🌙 Moon Dev: Short hard exit - above Jaw 😤")
                     return
                 
                 # 🌙 Moon Dev: Added ATR-based trailing stop for shorts

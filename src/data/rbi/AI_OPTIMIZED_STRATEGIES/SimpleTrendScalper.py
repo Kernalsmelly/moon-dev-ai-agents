@@ -2,7 +2,6 @@
 # Extremely simple strategy designed to generate high trade frequency
 
 import pandas as pd
-import numpy as np
 from backtesting import Backtest, Strategy
 import warnings
 warnings.filterwarnings('ignore')
@@ -148,7 +147,7 @@ print(f"🎯 Win Rate: {stats['Win Rate [%]']:.2f}%")
 trade_requirement = stats['# Trades'] > 100
 sharpe_requirement = stats['Sharpe Ratio'] > 2.0
 
-print(f"\n✅ REQUIREMENTS CHECK:")
+print("\n✅ REQUIREMENTS CHECK:")
 print(f"📊 Trade Count (>100): {'✅ PASS' if trade_requirement else '❌ FAIL'} ({stats['# Trades']} trades)")
 print(f"📈 Sharpe Ratio (>2.0): {'✅ PASS' if sharpe_requirement else '❌ FAIL'} ({stats['Sharpe Ratio']:.2f})")
 
@@ -164,7 +163,7 @@ print("\n🌙 Simple Trend Scalper test completed! ✨")
 
 # If we got high trade count, let's try to optimize for better Sharpe
 if stats['# Trades'] > 100:
-    print(f"\n🔄 Trade count goal achieved! Optimizing for Sharpe Ratio...")
+    print("\n🔄 Trade count goal achieved! Optimizing for Sharpe Ratio...")
     
     # Run a simple optimization
     try:

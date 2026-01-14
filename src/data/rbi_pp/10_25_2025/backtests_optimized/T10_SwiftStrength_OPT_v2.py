@@ -100,12 +100,12 @@ class SwiftStrength(Strategy):
             # Exit on opposite MACD crossover (signal-based exit)
             if self.position.is_long and (self.macdsignal[-2] < self.macd[-2] and self.macdsignal[-1] > self.macd[-1]):
                 self.position.close()
-                print(f"🌙 Moon Dev: Exit long on MACD bearish reversal 🔄")
+                print("🌙 Moon Dev: Exit long on MACD bearish reversal 🔄")
                 self._reset_trade_vars()
                 return
             if self.position.is_short and (self.macd[-2] < self.macdsignal[-2] and self.macd[-1] > self.macdsignal[-1]):
                 self.position.close()
-                print(f"🌙 Moon Dev: Exit short on MACD bullish reversal 🔄")
+                print("🌙 Moon Dev: Exit short on MACD bullish reversal 🔄")
                 self._reset_trade_vars()
                 return
 

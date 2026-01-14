@@ -12,7 +12,7 @@ import pandas as pd
 import time
 import requests
 from datetime import datetime
-from termcolor import colored, cprint
+from termcolor import cprint
 from dotenv import load_dotenv
 import openai
 from pathlib import Path
@@ -186,7 +186,7 @@ class FundingAgent2(BaseAgent):
             return
 
         try:
-            cprint(f"\n📢 Moon Dev is announcing the funding anomalies...", "yellow")
+            cprint("\n📢 Moon Dev is announcing the funding anomalies...", "yellow")
 
             # Generate speech
             response = openai.audio.speech.create(
@@ -302,7 +302,7 @@ class FundingAgent2(BaseAgent):
             except Exception as e:
                 cprint(f"❌ Error in main loop: {str(e)}", "red")
                 traceback.print_exc()
-                cprint(f"⏰ Retrying in 1 minute...", "yellow")
+                cprint("⏰ Retrying in 1 minute...", "yellow")
                 time.sleep(60)  # Sleep for a minute before retrying
 
 if __name__ == "__main__":

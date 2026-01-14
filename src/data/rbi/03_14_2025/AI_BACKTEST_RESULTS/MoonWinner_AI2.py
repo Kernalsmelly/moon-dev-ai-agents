@@ -72,7 +72,7 @@ return_pct = float(str(stats['Return [%]']).replace('%', ''))
 buy_hold_pct = float(str(stats['Buy & Hold Return [%]']).replace('%', ''))
 trades = int(stats['# Trades'])
 
-print(f"\n🏆 PERFORMANCE CHECK:")
+print("\n🏆 PERFORMANCE CHECK:")
 print(f"Strategy Return: {return_pct:.2f}%")
 print(f"Buy & Hold Return: {buy_hold_pct:.2f}%")
 print(f"Number of Trades: {trades}")

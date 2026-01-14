@@ -146,22 +146,22 @@ class GoldenCrossover(Strategy):
             if unrealized_pnl >= 2 * risk and self.position.size > 0:
                 partial_size = self.position.size * 0.5
                 self.position.close(size=partial_size)
-                print(f"🌙 Moon Dev: Partial exit 50% at 2:1 RR! Remaining trails. 🚀")
+                print("🌙 Moon Dev: Partial exit 50% at 2:1 RR! Remaining trails. 🚀")
 
             if unrealized_pnl >= 5 * risk:
-                print(f"🌙 Moon Dev: Full TP at 5:1 RR for big wins! 🚀")
+                print("🌙 Moon Dev: Full TP at 5:1 RR for big wins! 🚀")
                 self.position.close()
                 return
 
             # Bearish divergence: Enhanced with MACD confirmation
             if rsi > 70 and len(self.data) > 2 and close > self.data.Close[-2] and rsi < self.rsi[-2] and self.macd_hist[-1] < self.macd_hist[-2] and adx > 30:
-                print(f"🌙 Moon Dev: Bearish RSI & MACD Divergence in overbought with strong trend, EXITING! 🚀")
+                print("🌙 Moon Dev: Bearish RSI & MACD Divergence in overbought with strong trend, EXITING! 🚀")
                 self.position.close()
                 return
 
             # Exit below EMA20 trail for quicker response
             if close < ema20:
-                print(f"🌙 Moon Dev: EXITING below EMA20 trail 🚀")
+                print("🌙 Moon Dev: EXITING below EMA20 trail 🚀")
                 self.position.close()
                 return
 

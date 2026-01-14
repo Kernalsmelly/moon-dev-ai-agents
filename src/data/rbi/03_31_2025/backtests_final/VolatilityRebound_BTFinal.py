@@ -1,9 +1,7 @@
 # 🌙 Moon Dev's Volatility Rebound Backtest 🌙
 from backtesting import Backtest, Strategy
 import pandas as pd
-import numpy as np
 import talib
-import pandas_ta as ta
 
 class VolatilityRebound(Strategy):
     timeperiod_bb = 20

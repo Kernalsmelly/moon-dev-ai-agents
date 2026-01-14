@@ -4,7 +4,6 @@ Proof of concept for running backtests in conda environment
 """
 
 import subprocess
-import sys
 import os
 import json
 from datetime import datetime
@@ -25,7 +24,7 @@ def run_backtest_in_conda(file_path: str, conda_env: str = "tflow"):
     - execution_time: How long it took
     """
     
-    print(f"\n🚀 Moon Dev's Backtest Runner Starting!")
+    print("\n🚀 Moon Dev's Backtest Runner Starting!")
     print(f"📂 File: {file_path}")
     print(f"🐍 Conda env: {conda_env}")
     print("=" * 60)

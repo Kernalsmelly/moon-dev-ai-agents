@@ -44,7 +44,7 @@ class VolatilitySpikeReversal(Strategy):
         if current_drawdown >= 0.05:
             if self.position:
                 self.position.close()
-                print(f"🌙 MOON DEV DAILY LOSS LIMIT: 5% drawdown reached 🔴")
+                print("🌙 MOON DEV DAILY LOSS LIMIT: 5% drawdown reached 🔴")
             self.stop_trading = True
             return
 
@@ -73,7 +73,7 @@ class VolatilitySpikeReversal(Strategy):
                 print(f"🌙 MOON DEV EMERGENCY EXIT: 4σ stop {self.stop_loss_price:.2f} 🚨")
             elif len(self.data) - self.entry_bar >= 192:
                 self.position.close()
-                print(f"🌙 MOON DEV TIME EXIT: 48 hours passed 🕒")
+                print("🌙 MOON DEV TIME EXIT: 48 hours passed 🕒")
 
 bt = Backtest(data, VolatilitySpikeReversal, cash=1_000_000, commission=.002)
 stats = bt.run()

@@ -48,7 +48,7 @@ class VolatilityDivergence(Strategy):
         self.flat_ema = self.I(lambda d, a: d < 0.5 * a, self.ema_diff, self.atr)
         self.consol_count = 0
         self.bars_in_trade = 0
-        print(f"🌙 Moon Dev: Initialized VolatilityDivergence Strategy with talib indicators ✨")
+        print("🌙 Moon Dev: Initialized VolatilityDivergence Strategy with talib indicators ✨")
 
     def next(self):
         if len(self.data) < self.sma200_period + self.div_lookback + self.prev_lookback + 1:
@@ -104,7 +104,7 @@ class VolatilityDivergence(Strategy):
         below_sma = price < self.sma200[-1]
 
         if not self.position and bull_div and vol_ok and above_sma and price > self.bb_upper[-1] and price > ema_max:
-            print(f"🌙 Moon Dev: All LONG entry conditions met! Vol OK, Above SMA200, Breakout above BB & EMAs ✅")
+            print("🌙 Moon Dev: All LONG entry conditions met! Vol OK, Above SMA200, Breakout above BB & EMAs ✅")
             atr_val = self.atr[-1]
             entry_price = price
             sl_price = entry_price - self.sl_atr_mult * atr_val
@@ -129,7 +129,7 @@ class VolatilityDivergence(Strategy):
                 print(f"🌙 Moon Dev: Invalid SL distance {sl_distance} <=0 for LONG, no trade ⚠️")
 
         elif not self.position and bear_div and vol_ok and below_sma and price < self.bb_lower[-1] and price < ema_min:
-            print(f"🌙 Moon Dev: All SHORT entry conditions met! Vol OK, Below SMA200, Breakdown below BB & EMAs ✅")
+            print("🌙 Moon Dev: All SHORT entry conditions met! Vol OK, Below SMA200, Breakdown below BB & EMAs ✅")
             atr_val = self.atr[-1]
             entry_price = price
             sl_price = entry_price + self.sl_atr_mult * atr_val
@@ -156,10 +156,10 @@ class VolatilityDivergence(Strategy):
         # EMA cross exit
         if self.position.is_long and self.data.Close[-1] < self.ema9[-1]:
             self.position.close()
-            print(f"🌙 Moon Dev: Exit LONG on EMA9 cross below ❌")
+            print("🌙 Moon Dev: Exit LONG on EMA9 cross below ❌")
         elif self.position.is_short and self.data.Close[-1] > self.ema9[-1]:
             self.position.close()
-            print(f"🌙 Moon Dev: Exit SHORT on EMA9 cross above ❌")
+            print("🌙 Moon Dev: Exit SHORT on EMA9 cross above ❌")
 
 bt = Backtest(data, VolatilityDivergence, cash=1000000, commission=0.001)
 stats = bt.run()

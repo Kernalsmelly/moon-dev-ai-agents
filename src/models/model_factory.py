@@ -6,34 +6,27 @@ This module manages all available AI models and provides a unified interface.
 """
 
 import os
-from typing import Dict, Optional, Type
+from typing import Dict, Optional
 from termcolor import cprint
 from dotenv import load_dotenv
 from pathlib import Path
 from .base_model import BaseModel
-from .claude_model import ClaudeModel
-from .groq_model import GroqModel
-from .openai_model import OpenAIModel
-from .gemini_model import GeminiModel  # Re-enabled with Gemini 2.5 models
-from .deepseek_model import DeepSeekModel
-from .ollama_model import OllamaModel
-from .xai_model import XAIModel
-from .openrouter_model import OpenRouterModel  # 🌙 Moon Dev: OpenRouter - access to 200+ models!
+import importlib
 import random
 
 class ModelFactory:
     """Factory for creating and managing AI models"""
     
-    # Map model types to their implementations
+    # Map model types to their implementations as import paths (lazy import)
     MODEL_IMPLEMENTATIONS = {
-        "claude": ClaudeModel,
-        "groq": GroqModel,
-        "openai": OpenAIModel,
-        "gemini": GeminiModel,  # Re-enabled with Gemini 2.5 models
-        "deepseek": DeepSeekModel,
-        "ollama": OllamaModel,  # Add Ollama implementation
-        "xai": XAIModel,  # xAI Grok models
-        "openrouter": OpenRouterModel  # 🌙 Moon Dev: OpenRouter - 200+ models!
+        "claude": "src.models.claude_model.ClaudeModel",
+        "groq": "src.models.groq_model.GroqModel",
+        "openai": "src.models.openai_model.OpenAIModel",
+        "gemini": "src.models.gemini_model.GeminiModel",  # Re-enabled with Gemini 2.5 models
+        "deepseek": "src.models.deepseek_model.DeepSeekModel",
+        "ollama": "src.models.ollama_model.OllamaModel",
+        "xai": "src.models.xai_model.XAIModel",
+        "openrouter": "src.models.openrouter_model.OpenRouterModel",
     }
     
     # Default models for each type
@@ -64,7 +57,14 @@ class ModelFactory:
             if api_key := os.getenv(key_name):
                 try:
                     if model_type in self.MODEL_IMPLEMENTATIONS:
-                        model_class = self.MODEL_IMPLEMENTATIONS[model_type]
+                        impl = self.MODEL_IMPLEMENTATIONS[model_type]
+                        # Lazy import the implementation class if stored as a string
+                        if isinstance(impl, str):
+                            mod_name, cls_name = impl.rsplit('.', 1)
+                            mod = importlib.import_module(mod_name)
+                            model_class = getattr(mod, cls_name)
+                        else:
+                            model_class = impl
                         model_instance = model_class(api_key)
 
                         if model_instance.is_available():
@@ -76,7 +76,14 @@ class ModelFactory:
 
         # Initialize Ollama separately (no API key needed)
         try:
-            model_class = self.MODEL_IMPLEMENTATIONS["ollama"]
+            impl = self.MODEL_IMPLEMENTATIONS["ollama"]
+            if isinstance(impl, str):
+                mod_name, cls_name = impl.rsplit('.', 1)
+                mod = importlib.import_module(mod_name)
+                model_class = getattr(mod, cls_name)
+            else:
+                model_class = impl
+
             model_instance = model_class(model_name=self.DEFAULT_MODELS["ollama"])
 
             if model_instance.is_available():

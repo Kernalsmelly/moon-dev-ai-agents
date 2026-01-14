@@ -1,8 +1,7 @@
 # 🌙 Moon Dev's VoltaicContraction Backtest 🌙
 from backtesting import Backtest, Strategy
-from talib import ATR, SMA, MAX, MIN
+from talib import ATR, SMA
 import pandas as pd
-import numpy as np
 
 class VoltaicContraction(Strategy):
     risk_per_trade = 0.02  # 2% risk per trade

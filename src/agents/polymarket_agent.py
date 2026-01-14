@@ -373,7 +373,7 @@ class PolymarketAgent:
             ]
         }
 
-        cprint(f"📡 Moon Dev sending subscription for live trades...", "cyan")
+        cprint("📡 Moon Dev sending subscription for live trades...", "cyan")
         ws.send(json.dumps(subscription_msg))
 
         # Set connected flag immediately after sending subscription
@@ -874,7 +874,7 @@ Provide predictions for each market in the specified format."""
 
                 cprint(f"✅ Saved {len(new_records)} market predictions (run {analysis_run_id})", "green")
             else:
-                cprint(f"⚠️ No structured predictions found to save", "yellow")
+                cprint("⚠️ No structured predictions found to save", "yellow")
 
         except Exception as e:
             cprint(f"❌ Error saving predictions: {e}", "red")
@@ -1049,6 +1049,10 @@ Provide predictions for each market in the specified format."""
             # Use Claude 4.5 Sonnet for consensus (fast and reliable)
             consensus_model = ModelFactory().get_model('claude', 'claude-sonnet-4-5')
 
+            if consensus_model is None:
+                cprint("⚠️  No consensus model available (no API key or model failed to initialize). Skipping consensus step.", "yellow")
+                return
+
             cprint("⏳ Analyzing all responses for strongest consensus...\n", "cyan")
 
             response = consensus_model.generate_response(
@@ -1204,7 +1208,7 @@ Provide predictions for each market in the specified format."""
     def status_display_loop(self):
         """🌙 Moon Dev - Display status updates every 30 seconds"""
         cprint("\n📊 STATUS DISPLAY THREAD STARTED", "cyan", attrs=['bold'])
-        cprint(f"📡 Showing stats every 30 seconds\n", "cyan")
+        cprint("📡 Showing stats every 30 seconds\n", "cyan")
 
         while True:
             try:
@@ -1260,7 +1264,7 @@ Provide predictions for each market in the specified format."""
                 cprint(f"   Filtered trades (>=${MIN_TRADE_SIZE_USD}): {self.filtered_trades_count}", "yellow")
                 cprint(f"   Total markets in database: {total_markets}", "white")
                 cprint(f"   Fresh eligible markets: {fresh_eligible_count}", "yellow" if fresh_eligible_count < NEW_MARKETS_FOR_ANALYSIS else "green", attrs=['bold'])
-                cprint(f"   (Eligible + traded since last run)", "white")
+                cprint("   (Eligible + traded since last run)", "white")
 
                 if fresh_eligible_count >= NEW_MARKETS_FOR_ANALYSIS:
                     cprint(f"   ✅ Ready for analysis! (Have {fresh_eligible_count}, need {NEW_MARKETS_FOR_ANALYSIS})", "green", attrs=['bold'])
@@ -1289,8 +1293,8 @@ Provide predictions for each market in the specified format."""
 
         # 🌙 Moon Dev - Skip if no markets exist yet
         if total_markets == 0:
-            cprint(f"\n⏳ No markets in database yet! WebSocket is collecting...", "yellow", attrs=['bold'])
-            cprint(f"   First analysis will run when markets are collected\n", "yellow")
+            cprint("\n⏳ No markets in database yet! WebSocket is collecting...", "yellow", attrs=['bold'])
+            cprint("   First analysis will run when markets are collected\n", "yellow")
             return
 
         # 🌙 Moon Dev - Count markets with FRESH TRADES that are also ELIGIBLE for re-analysis
@@ -1336,22 +1340,22 @@ Provide predictions for each market in the specified format."""
 
         is_first_run = (self.last_analysis_run_timestamp is None)
 
-        cprint(f"📊 Market Analysis Status:", "cyan", attrs=['bold'])
+        cprint("📊 Market Analysis Status:", "cyan", attrs=['bold'])
         cprint(f"   Total markets in database: {total_markets}", "white")
         cprint(f"   Fresh eligible markets: {fresh_eligible_count}", "yellow" if fresh_eligible_count < NEW_MARKETS_FOR_ANALYSIS else "green", attrs=['bold'])
-        cprint(f"   (Eligible markets with trades since last run)", "white")
+        cprint("   (Eligible markets with trades since last run)", "white")
         cprint("", "white")
 
         if is_first_run:
-            cprint(f"🎬 FIRST ANALYSIS RUN", "yellow", attrs=['bold'])
-            cprint(f"   Will analyze whatever markets we have collected (minimum 1)", "yellow")
+            cprint("🎬 FIRST ANALYSIS RUN", "yellow", attrs=['bold'])
+            cprint("   Will analyze whatever markets we have collected (minimum 1)", "yellow")
             cprint(f"   Future runs will require {NEW_MARKETS_FOR_ANALYSIS} fresh eligible markets\n", "yellow")
         else:
-            cprint(f"🎯 Analysis Trigger Requirement:", "cyan", attrs=['bold'])
+            cprint("🎯 Analysis Trigger Requirement:", "cyan", attrs=['bold'])
             cprint(f"   Need: {NEW_MARKETS_FOR_ANALYSIS} fresh eligible markets", "white")
             cprint(f"   Have: {fresh_eligible_count} fresh eligible markets", "white")
             if fresh_eligible_count >= NEW_MARKETS_FOR_ANALYSIS:
-                cprint(f"   ✅ REQUIREMENT MET - Running analysis!", "green", attrs=['bold'])
+                cprint("   ✅ REQUIREMENT MET - Running analysis!", "green", attrs=['bold'])
             else:
                 cprint(f"   ❌ Need {NEW_MARKETS_FOR_ANALYSIS - fresh_eligible_count} more fresh eligible markets", "yellow", attrs=['bold'])
             cprint("", "white")
@@ -1426,7 +1430,7 @@ def main():
     cprint("", "yellow")
     cprint("🔄 REAL-TIME WebSocket MODE:", "green", attrs=['bold'])
     cprint(f"   🌐 WebSocket: {WEBSOCKET_URL}", "cyan")
-    cprint(f"   📊 Status Display: Every 30s - Shows collection stats", "cyan")
+    cprint("   📊 Status Display: Every 30s - Shows collection stats", "cyan")
     cprint(f"   🤖 Analysis Thread: Every {ANALYSIS_CHECK_INTERVAL_SECONDS}s - Checks for new markets", "magenta")
     cprint(f"   🎯 AI Analysis triggers when {NEW_MARKETS_FOR_ANALYSIS} new markets collected", "yellow")
     cprint("", "yellow")

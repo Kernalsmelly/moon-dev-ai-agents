@@ -3,7 +3,6 @@ import pandas as pd
 import talib
 import numpy as np
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 # 🌙 MOON DEV DATA PREPARATION 🌙
 data = pd.read_csv(

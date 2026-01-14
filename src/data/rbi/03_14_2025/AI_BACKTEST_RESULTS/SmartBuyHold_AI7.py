@@ -9,8 +9,6 @@ Smart version of buy and hold that beats regular buy and hold
 import pandas as pd
 import pandas_ta as ta
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
-import numpy as np
 
 # Load and preprocess data
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv')

@@ -155,28 +155,28 @@ class GoldenCrossover(Strategy):
                 partial_size_1 = self.position.size * 0.3
                 self.sell(size=partial_size_1)
                 self.partial_closed_1 = True
-                print(f"🌙 Moon Dev: Partial close 30% at 1.5:1 RR, securing early gains! 🚀")
+                print("🌙 Moon Dev: Partial close 30% at 1.5:1 RR, securing early gains! 🚀")
 
             if not self.partial_closed_2 and unrealized_pnl >= 3 * risk:
                 partial_size_2 = self.position.size * 0.3  # Note: size adjusted after first partial
                 self.sell(size=partial_size_2)
                 self.partial_closed_2 = True
-                print(f"🌙 Moon Dev: Partial close 30% at 3:1 RR, more profits locked! 🚀")
+                print("🌙 Moon Dev: Partial close 30% at 3:1 RR, more profits locked! 🚀")
 
             if unrealized_pnl >= 4 * risk:
-                print(f"🌙 Moon Dev: Full TP at 4:1 RR for optimized gains in BTC trends! 🚀")
+                print("🌙 Moon Dev: Full TP at 4:1 RR for optimized gains in BTC trends! 🚀")
                 self.position.close()
                 return
 
             # Bearish divergence: Enhanced with MACD histogram declining for stronger exit signal
             if rsi > 70 and len(self.data) > 2 and close > self.data.Close[-2] and rsi < self.rsi[-2] and self.macd_hist[-1] < self.macd_hist[-2] and adx > 25:
-                print(f"🌙 Moon Dev: Bearish RSI + MACD Hist Divergence in overbought, EXITING! 🚀")
+                print("🌙 Moon Dev: Bearish RSI + MACD Hist Divergence in overbought, EXITING! 🚀")
                 self.position.close()
                 return
 
             # Exit below EMA26 for quicker response to trend weakness
             if close < ema50:
-                print(f"🌙 Moon Dev: EXITING below EMA26 trail 🚀")
+                print("🌙 Moon Dev: EXITING below EMA26 trail 🚀")
                 self.position.close()
                 return
 

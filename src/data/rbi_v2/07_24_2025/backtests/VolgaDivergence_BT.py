@@ -1,8 +1,6 @@
 import pandas as pd
-import numpy as np
 import talib
 from backtesting import Strategy, Backtest
-from backtesting.lib import crossover
 
 class VolgaDivergence(Strategy):
     def init(self):

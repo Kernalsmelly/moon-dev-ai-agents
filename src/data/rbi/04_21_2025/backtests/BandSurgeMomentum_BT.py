@@ -2,7 +2,6 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 class BandSurgeMomentum(Strategy):
     def init(self):

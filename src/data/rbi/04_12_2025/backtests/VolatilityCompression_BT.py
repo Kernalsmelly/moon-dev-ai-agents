@@ -1,8 +1,7 @@
 # 🌙 Moon Dev's Volatility Compression Backtest 🌙
 from backtesting import Backtest, Strategy
-from talib import ATR, SMA, MAX, MIN
+from talib import ATR, SMA
 import pandas as pd
-import numpy as np
 
 class VolatilityCompression(Strategy):
     # 🌌 Strategy Parameters
@@ -44,7 +43,7 @@ class VolatilityCompression(Strategy):
                     self.initial_stop = entry_price - stop_distance
                     self.trailing_high = entry_price
                     
-                    print(f"\n🌙✨ MOON DEV ALERT: Volatility Compression Detected! ✨")
+                    print("\n🌙✨ MOON DEV ALERT: Volatility Compression Detected! ✨")
                     print(f"📈 Entry Price: {entry_price:.2f}")
                     print(f"🛑 Hard Stop: {self.initial_stop:.2f}")
                     print(f"🚀 Position Size: {position_size} units ({position_size/self.equity*100:.2f}% of equity)")

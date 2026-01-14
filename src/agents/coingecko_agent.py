@@ -231,7 +231,7 @@ from typing import Dict, List, Optional, Union
 from datetime import datetime, timedelta
 import time
 from dotenv import load_dotenv
-from termcolor import colored, cprint
+from termcolor import cprint
 import anthropic
 from pathlib import Path
 import openai

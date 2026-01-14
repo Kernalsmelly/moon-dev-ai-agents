@@ -3,7 +3,6 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 class VolumeSilhouetteEMA(Strategy):
     risk_per_trade = 0.01  # 1% of equity
@@ -46,7 +45,7 @@ class VolumeSilhouetteEMA(Strategy):
                             sl=sl_price,
                             tp=tp_price)
                     
-                    print(f"🌙🚀 MOON DEV ENTRY 🌙")
+                    print("🌙🚀 MOON DEV ENTRY 🌙")
                     print(f"Size: {position_size} | Entry: {entry_price:.2f}")
                     print(f"🌑 SL: {sl_price:.2f} | 🚀 TP: {tp_price:.2f}")
         else:

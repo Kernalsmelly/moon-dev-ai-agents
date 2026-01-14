@@ -6,7 +6,6 @@ This module provides integration with locally running Ollama models.
 """
 
 import requests
-import json
 from termcolor import cprint
 from .base_model import BaseModel, ModelResponse
 
@@ -40,7 +39,7 @@ class OllamaModel(BaseModel):
         try:
             response = requests.get(f"{self.base_url}/tags")
             if response.status_code == 200:
-                cprint(f"✨ Successfully connected to Ollama API", "green")
+                cprint("✨ Successfully connected to Ollama API", "green")
                 # Print available models
                 models = response.json().get("models", [])
                 if models:

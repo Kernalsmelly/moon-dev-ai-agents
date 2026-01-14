@@ -6,7 +6,7 @@ This module defines the base interface for all AI models.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from dataclasses import dataclass
 import random
 import time

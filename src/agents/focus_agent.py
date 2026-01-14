@@ -30,20 +30,18 @@ import openai
 from anthropic import Anthropic
 from termcolor import cprint
 from dotenv import load_dotenv
-from random import randint, uniform
-import threading
+from random import uniform
 import pandas as pd
 import tempfile
 from src.config import *
 from src.models import model_factory
 import re
-import requests
 
 # Load .env file explicitly from project root
 load_dotenv(dotenv_path=env_path)
 
 # Verify key loading
-cprint(f"\n🔍 Checking environment setup...", "cyan")
+cprint("\n🔍 Checking environment setup...", "cyan")
 cprint(f"📂 Project Root: {project_root}", "cyan")
 cprint(f"📝 .env Path: {env_path}", "cyan")
 
@@ -167,9 +165,9 @@ class FocusAgent:
         # Print model info with pricing if available
         if MODEL_TYPE == "openai":
             model_info = self.model.AVAILABLE_MODELS.get(MODEL_NAME, {})
-            cprint(f"\n💫 Moon Dev's Focus Agent using OpenAI!", "green")
+            cprint("\n💫 Moon Dev's Focus Agent using OpenAI!", "green")
             cprint(f"🤖 Model: {model_info.get('description', '')}", "cyan")
-            cprint(f"💰 Pricing:", "yellow")
+            cprint("💰 Pricing:", "yellow")
             cprint(f"  ├─ Input: {model_info.get('input_price', '')}", "yellow")
             cprint(f"  └─ Output: {model_info.get('output_price', '')}", "yellow")
         
@@ -324,7 +322,7 @@ class FocusAgent:
         """Analyze focus level from transcript"""
         try:
             # Debug the input
-            cprint(f"\n🔍 Analyzing transcript:", "cyan")
+            cprint("\n🔍 Analyzing transcript:", "cyan")
             cprint(f"  ├─ Length: {len(transcript)} chars", "cyan")
             cprint(f"  └─ Content type check: {'chicken' in transcript.lower()}", "yellow")
             
@@ -344,10 +342,10 @@ class FocusAgent:
                     response_content = response.content if hasattr(response, 'content') else str(response)
                 
                 # Print raw response for debugging
-                cprint(f"\n📝 Raw model response:", "magenta")
-                cprint(f"══════════════════════════════", "magenta")
+                cprint("\n📝 Raw model response:", "magenta")
+                cprint("══════════════════════════════", "magenta")
                 cprint(response_content, "yellow")
-                cprint(f"══════════════════════════════\n", "magenta")
+                cprint("══════════════════════════════\n", "magenta")
                 
                 # Improved response parsing
                 try:
@@ -385,7 +383,7 @@ class FocusAgent:
                         
                         return score, message
                     else:
-                        cprint(f"\n⚠️ Parsing Debug:", "yellow")
+                        cprint("\n⚠️ Parsing Debug:", "yellow")
                         cprint(f"  ├─ Score found: {score}", "yellow")
                         cprint(f"  └─ Message found: {message}", "yellow")
                         raise ValueError("Could not extract score and message")
@@ -470,9 +468,9 @@ class FocusAgent:
         
         # Print the transcript being sent to AI
         cprint("\n📝 Transcript being analyzed:", "cyan")
-        cprint(f"══════════════════════════════", "cyan")
+        cprint("══════════════════════════════", "cyan")
         cprint(transcript, "yellow")
-        cprint(f"══════════════════════════════\n", "cyan")
+        cprint("══════════════════════════════\n", "cyan")
         
         score, message = self.analyze_focus(transcript)
         

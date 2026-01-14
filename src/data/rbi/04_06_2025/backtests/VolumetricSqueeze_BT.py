@@ -62,7 +62,7 @@ class VolumetricSqueeze(Strategy):
                 print(f"🌙✨ Moon Exit: Trailing Stop @ {self.trail_stop:.2f}")
                 self.position.close()
             elif price <= (self.entry_price - 2.5*self.atr[-1]):
-                print(f"🚨🌙 Emergency Stop!")
+                print("🚨🌙 Emergency Stop!")
                 self.position.close()
 
         # Entry logic

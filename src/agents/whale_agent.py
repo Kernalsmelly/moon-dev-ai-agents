@@ -18,17 +18,13 @@ import os
 import pandas as pd
 import time
 from datetime import datetime, timedelta
-from termcolor import colored, cprint
 from dotenv import load_dotenv
 import openai
 from pathlib import Path
-from src import nice_funcs as n
 from src import nice_funcs_hyperliquid as hl  # Add import for hyperliquid functions
 from src.agents.api import MoonDevAPI
-from collections import deque
 from src.agents.base_agent import BaseAgent
 import traceback
-import numpy as np
 import anthropic
 
 # Get the project root directory
@@ -188,7 +184,7 @@ class WhaleAgent(BaseAgent):
         """Save new OI data point with change percentages"""
         try:
             print("\n🔄 Starting to save new OI data point...")
-            print(f"📊 Input data:")
+            print("📊 Input data:")
             print(f"  Timestamp: {timestamp}")
             print(f"  BTC OI: ${btc_oi:,.2f}")
             print(f"  ETH OI: ${eth_oi:,.2f}")
@@ -207,7 +203,7 @@ class WhaleAgent(BaseAgent):
                 eth_change_pct = ((eth_oi - prev_data['eth_oi']) / prev_data['eth_oi']) * 100
                 total_change_pct = ((total_oi - prev_data['total_oi']) / prev_data['total_oi']) * 100
                 
-                print(f"\n📈 Calculated Changes:")
+                print("\n📈 Calculated Changes:")
                 print(f"BTC Change: {btc_change_pct:.4f}%")
                 print(f"ETH Change: {eth_change_pct:.4f}%")
                 print(f"Total Change: {total_change_pct:.4f}%")
@@ -649,7 +645,7 @@ class WhaleAgent(BaseAgent):
             avg_change = historical_changes.mean()
             threshold = avg_change * WHALE_THRESHOLD_MULTIPLIER
             
-            print(f"\n🔍 Whale Detection Analysis:")
+            print("\n🔍 Whale Detection Analysis:")
             print(f"Current change: {abs(current_change):.4f}%")
             print(f"Average change: {avg_change:.4f}%")
             print(f"Threshold ({(WHALE_THRESHOLD_MULTIPLIER-1)*100:.0f}% above avg): {threshold:.4f}%")

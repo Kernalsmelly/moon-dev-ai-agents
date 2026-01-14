@@ -31,11 +31,8 @@ import os
 from Quartz import CoreGraphics as CG
 import AppKit
 import subprocess
-import base64
 from src.models import model_factory  # Import Moon Dev's model factory
 import traceback
-from Cocoa import NSURL
-import time
 
 # Configuration - Moon Dev's target coordinates (DO NOT ADJUST THESE)
 CODE_EDITOR_X = -2686
@@ -563,7 +560,7 @@ def capture_composer_screenshot():
                 cprint(f"  ├─ Display {i}: Origin({display['x']}, {display['y']}) Size({display['width']}x{display['height']})", "cyan")
             
             # Create CGImage of specified region
-            cprint(f"\n📸 Capturing AI chat screenshot...", "cyan")
+            cprint("\n📸 Capturing AI chat screenshot...", "cyan")
             cprint(f"🎯 Capture region: x={SCREENSHOT_X}, y={SCREENSHOT_Y}, width={SCREENSHOT_WIDTH}, height={SCREENSHOT_HEIGHT}", "cyan")
             
             # Ensure we have valid coordinates

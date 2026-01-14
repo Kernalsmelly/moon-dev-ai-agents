@@ -29,7 +29,7 @@ class DynamicVWAPTrend(Strategy):
         adx = self.adx[-1]
 
         # Moon Dev debug prints 🌙
-        print(f"\n🌙 Moon Dev Debug 🌙")
+        print("\n🌙 Moon Dev Debug 🌙")
         print(f"Price: {current_price:.2f} | VWAP: {vwap:.2f} | ADX: {adx:.2f}")
 
         # Check if we're in a position

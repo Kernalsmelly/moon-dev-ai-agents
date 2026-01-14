@@ -4,7 +4,6 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import crossover
 import pandas as pd
 import talib
-import numpy as np
 
 # Data Preparation 🌍
 data_path = "/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv"
@@ -73,7 +72,7 @@ class VolatilitySentinel(Strategy):
                 return
                 
             # Execute Short Entry 🩳
-            print(f"🚀🌑 MOON DEV SHORT SIGNAL!")
+            print("🚀🌑 MOON DEV SHORT SIGNAL!")
             print(f"Entry: {entry_price:.2f} | Size: {position_size} | Vol Stop: {stop_price:.2f}")
             self.sell(size=position_size, sl=stop_price, tag='VolatilityStop')
 

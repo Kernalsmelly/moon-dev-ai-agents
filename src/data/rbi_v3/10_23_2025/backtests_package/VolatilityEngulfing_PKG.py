@@ -1,7 +1,6 @@
 import pandas as pd
 import talib
 from backtesting import Backtest, Strategy
-import numpy as np
 
 # Data loading and cleaning
 path = '/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv'
@@ -102,7 +101,7 @@ class VolatilityEngulfing(Strategy):
             # Exit on bearish engulfing
             if is_bearish_engulfing:
                 self.position.close()
-                print(f"🌙 Moon Dev: Bearish Engulfing Exit! 🚨 Pattern confirmed, closing position.")
+                print("🌙 Moon Dev: Bearish Engulfing Exit! 🚨 Pattern confirmed, closing position.")
         
         # Debug position info
         if self.position:

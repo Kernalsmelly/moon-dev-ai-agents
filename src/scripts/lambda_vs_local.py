@@ -38,24 +38,24 @@ def calculate_costs():
     years_to_breakeven = months_to_breakeven / 12
     
     # Print results
-    print(f"🌙 MoonDev's AI Cost Calculator")
-    print(f"\n💰 Lambda Labs Costs:")
+    print("🌙 MoonDev's AI Cost Calculator")
+    print("\n💰 Lambda Labs Costs:")
     print(f"Daily cost: ${daily_lambda_cost:.2f}")
     print(f"Weekly cost: ${weekly_lambda_cost:.2f}")
     print(f"Monthly cost: ${monthly_lambda_cost:.2f}")
     print(f"Yearly cost: ${yearly_lambda_cost:.2f}")
     
-    print(f"\n🖥️ Local Machine Analysis:")
+    print("\n🖥️ Local Machine Analysis:")
     print(f"Initial machine cost: ${LOCAL_MACHINE_COST:.2f}")
     print(f"Yearly electricity cost: ${yearly_electricity_cost:.2f}")
     
-    print(f"\n⏰ Break-even Analysis:")
+    print("\n⏰ Break-even Analysis:")
     print(f"Hours to break even: {hours_to_breakeven:.1f}")
     print(f"Weeks to break even: {weeks_to_breakeven:.1f}")
     print(f"Months to break even: {months_to_breakeven:.1f}")
     print(f"Years to break even: {years_to_breakeven:.1f}")
     
-    print(f"\n💡 Recommendation:")
+    print("\n💡 Recommendation:")
     if years_to_breakeven > 2:
         print("Stick with Lambda Labs - break-even time is too long!")
     elif years_to_breakeven > 1:

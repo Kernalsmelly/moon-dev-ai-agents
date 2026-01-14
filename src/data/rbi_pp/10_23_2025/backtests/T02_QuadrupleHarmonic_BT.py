@@ -1,7 +1,6 @@
 import pandas as pd
 import talib
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 class QuadrupleHarmonic(Strategy):
     def init(self):
@@ -79,7 +78,7 @@ class QuadrupleHarmonic(Strategy):
             risk_amount = self.equity * 0.01
             stop_distance = entry_price - sl_price
             if stop_distance <= 0:
-                print(f"🌙 Moon Dev Skip: Zero or negative stop distance 😔")
+                print("🌙 Moon Dev Skip: Zero or negative stop distance 😔")
                 return
             
             position_size = risk_amount / stop_distance

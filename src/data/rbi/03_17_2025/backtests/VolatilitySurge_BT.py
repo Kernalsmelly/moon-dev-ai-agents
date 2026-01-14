@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import talib
 from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
 
 # Data preprocessing
 data = pd.read_csv('/Users/md/Dropbox/dev/github/moon-dev-ai-agents-for-trading/src/data/rbi/BTC-USD-15m.csv')
@@ -40,7 +39,7 @@ class VolatilitySurge(Strategy):
         self.atr = self.I(talib.ATR, self.data.High, self.data.Low, self.data.Close, 1344)
         
         print("🌙 Moon Dev Indicators Initialized! ✨")
-        print(f"📉 10D HV Window: 960 | 📊 Volume Z Window: 1920 | 🚀 ATR Period: 1344")
+        print("📉 10D HV Window: 960 | 📊 Volume Z Window: 1920 | 🚀 ATR Period: 1344")
 
     def next(self):
         if not self.position:
@@ -56,7 +55,7 @@ class VolatilitySurge(Strategy):
                 position_size = int(round(risk_amount / atr))
                 
                 # Moon-themed debug
-                print(f"\n🚀 MOONSHOT ALERT! 🌕")
+                print("\n🚀 MOONSHOT ALERT! 🌕")
                 print(f"📉 HV: {hv:.2%} | 📊 Volume Z: {vz:.2f}")
                 print(f"💰 Entry: {self.data.Close[-1]:.2f}")
                 print(f"✨ ATR: {atr:.2f} | 📦 Size: {position_size} units")

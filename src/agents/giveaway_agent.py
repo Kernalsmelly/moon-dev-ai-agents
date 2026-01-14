@@ -24,14 +24,11 @@ if str(PROJECT_ROOT) not in sys.path:
 import os
 import time
 import csv
-from datetime import datetime
-from termcolor import colored, cprint
+from termcolor import cprint
 from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import threading
 
 # Load environment variables
@@ -288,13 +285,13 @@ class GiveawayAgent:
                         # Update last message
                         self.last_message_content = current_content
 
-                except Exception as e:
+                except Exception:
                     # Silently skip errors
                     pass
 
                 time.sleep(POLL_INTERVAL)
 
-            except Exception as e:
+            except Exception:
                 # Silently skip errors
                 time.sleep(POLL_INTERVAL)
 

@@ -150,7 +150,7 @@ class GoldenCrossover(Strategy):
 
             # 🌙 Moon Dev Optimization: Increased full TP to 4:1 RR to capture larger trending moves in BTC, improving overall returns
             if unrealized_pnl >= 4 * risk:
-                print(f"🌙 Moon Dev: Taking full profits at 4:1 RR! 🚀")
+                print("🌙 Moon Dev: Taking full profits at 4:1 RR! 🚀")
                 self.position.close()
                 return
 
@@ -162,7 +162,7 @@ class GoldenCrossover(Strategy):
 
             # Exit below EMA50 trail
             if close < ema50:
-                print(f"🌙 Moon Dev: EXITING below EMA50 trail 🚀")
+                print("🌙 Moon Dev: EXITING below EMA50 trail 🚀")
                 self.position.close()
                 return
 
