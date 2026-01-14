@@ -1,0 +1,45 @@
+name: Python tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+
+    strategy:
+      matrix:
+        python-version: [3.11]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-ci.txt
+
+      - name: Run critical tests (alpha math, exit & telemetry)
+        run: |
+          python -m pytest -q tests/test_alpha_logic.py tests/test_exit_logic.py tests/test_telemetry_integration.py -q
+
+      - name: Run full test suite
+        run: |
+          python -m pytest -q || python -m pytest -q --maxfail=1
+
+      - name: Upload pytest results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-failures
+          path: .pytest_cache
