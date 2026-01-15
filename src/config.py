@@ -149,3 +149,6 @@ else:
     _has_wallet_key = bool(os.getenv('SOLANA_PRIVATE_KEY') or os.getenv('FUNDER_PRIVATE_KEY'))
     SHADOW_MODE = not _has_wallet_key
 
+# Watchlist path (can be set to an absolute path outside the repo; default is relative to data/)
+WATCHLIST_PATH = os.getenv('WATCHLIST_PATH', 'watchlist.json')
+

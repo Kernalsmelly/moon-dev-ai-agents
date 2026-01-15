@@ -19,7 +19,7 @@ async def test_shadow_mode_prevents_real_swaps(tmp_path, mock_jupiter, mock_vers
     monkeypatch.setattr('src.config.SHADOW_MODE', True)
 
     brain = MarketBrain(rpc='http://localhost')
-    mint = 'ShadowMint11111111111111111111111111111111'
+    mint = WSOL_MINT_LITERAL
 
     # simple pricing: token price 1 SOL, large pool liquidity to avoid chunking
     async def price_side(maddr):
@@ -39,6 +39,14 @@ async def test_shadow_mode_prevents_real_swaps(tmp_path, mock_jupiter, mock_vers
     # Redirect logging to tmp_path/data
     data_dir = tmp_path / 'data'
     data_dir.mkdir()
+
+    # Create a watchlist mapping file that resolves the WSOL mint to symbol 'SOL'
+    wl = {WSOL_MINT_LITERAL: 'SOL'}
+    wl_path = data_dir / 'watchlist.json'
+    with open(wl_path, 'w', encoding='utf-8') as fh:
+        json.dump(wl, fh)
+    # point the config to the tmp watchlist
+    monkeypatch.setattr('src.config.WATCHLIST_PATH', str(wl_path))
 
     def patched_log_execution_event(self, mint_arg, event_type, data):
         ev_csv = data_dir / 'execution_events.csv'
@@ -70,5 +78,6 @@ async def test_shadow_mode_prevents_real_swaps(tmp_path, mock_jupiter, mock_vers
                 dat = json.loads(r.get('data_json') or '{}')
                 assert int(dat.get('unitsConsumed') or 0) == 55555
                 assert dat.get('shadow_mode') is True
+                assert dat.get('symbol') == 'SOL'
                 found = True
     assert found, 'exit_simulated telemetry not found in execution_events.csv'

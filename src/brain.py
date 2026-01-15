@@ -936,6 +936,23 @@ class MarketBrain:
             lamports = int(amount_sol * 1e9)
             # Input mint is WSOL for SOL trades
             WSOL_MINT_LITERAL = "So11111111111111111111111111111111111111112"
+
+            # Attempt to resolve a human-friendly symbol for the mint from the
+            # configurable watchlist path. WATCHLIST_PATH may be absolute or
+            # relative to the repository `data/` directory.
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+            wl_path = getattr(config, 'WATCHLIST_PATH', 'watchlist.json')
+            if not os.path.isabs(wl_path):
+                wl_path = os.path.join(data_dir, wl_path)
+            resolved_symbol = None
+            try:
+                if os.path.exists(wl_path):
+                    with open(wl_path, 'r', encoding='utf-8') as fh:
+                        wl_obj = json.load(fh)
+                        if isinstance(wl_obj, dict):
+                            resolved_symbol = wl_obj.get(mint)
+            except Exception:
+                resolved_symbol = None
             quote = await te.get_jupiter_quote(WSOL_MINT_LITERAL, token_mint, lamports, te.DEFAULT_SLIPPAGE_BPS)
             if not quote:
                 console.print(Panel('No quote received', style='red'))
@@ -1189,6 +1206,7 @@ class MarketBrain:
                                             'base_amount_chunk': base_amount_chunk,
                                             'unitsConsumed': units,
                                             'shadow_mode': getattr(config, 'SHADOW_MODE', True),
+                                            'symbol': resolved_symbol,
                                         })
                                     except Exception:
                                         pass
@@ -1338,6 +1356,7 @@ class MarketBrain:
                                 'unitsConsumed': units,
                                 'estimated_impact_pct': impact_pct,
                                 'shadow_mode': True,
+                                'symbol': resolved_symbol,
                             })
                         except Exception:
                             pass
@@ -1374,6 +1393,7 @@ class MarketBrain:
                             'unitsConsumed': units,
                             'estimated_impact_pct': impact_pct,
                             'shadow_mode': getattr(config, 'SHADOW_MODE', True),
+                            'symbol': resolved_symbol,
                         })
                     except Exception:
                         pass
