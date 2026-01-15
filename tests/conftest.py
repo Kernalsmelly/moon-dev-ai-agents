@@ -1,3 +1,39 @@
+import os
+from pathlib import Path
+import pytest
+
+import src.config as cfg
+
+
+@pytest.fixture(scope='session', autouse=True)
+def isolate_telemetry(tmp_path_factory, monkeypatch):
+    """Autouse fixture to redirect telemetry and watchlist to temporary files.
+
+    This ensures tests do not write into the repository data/ folder and
+    provides hermetic isolation for execution events and watchlist.
+    """
+    td = tmp_path_factory.mktemp('telemetry')
+    ev = td / 'execution_events.csv'
+    wl = td / 'watchlist.json'
+
+    # ensure files exist
+    ev.write_text('')
+    wl.write_text('{}')
+
+    # Override config attributes so code that imports src.config sees these
+    monkeypatch.setenv('EXECUTION_LOG_PATH', str(ev))
+    monkeypatch.setenv('WATCHLIST_PATH', str(wl))
+    # directly set module attributes too for already-imported modules
+    try:
+        setattr(cfg, 'EXECUTION_LOG_PATH', str(ev))
+    except Exception:
+        pass
+    try:
+        setattr(cfg, 'WATCHLIST_PATH', str(wl))
+    except Exception:
+        pass
+
+    yield
 import base64
 from unittest.mock import AsyncMock, Mock
 import pytest

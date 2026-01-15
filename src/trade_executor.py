@@ -64,10 +64,8 @@ def load_dotenv_into_env(path='.env'):
 # load .env so SOLANA_PRIVATE_KEY and RPC_URL are present when running directly
 load_dotenv_into_env()
 
-# Common mints (use native SOL mint and the Legacy Devnet USDC mint to get routes)
-WSOL_MINT = "So11111111111111111111111111111111111111112"
-# Mainnet USDC mint for a Mainnet dry-run route
-USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+# Note: input/output mints are required parameters for Jupiter helpers below.
+# We intentionally DO NOT define default mints here to avoid hidden global state.
 
 # Jupiter V6 API endpoints (public)
 JUPITER_QUOTE = "https://api.jup.ag/swap/v1/quote"
@@ -84,14 +82,14 @@ def load_key():
     return solders_key
 
 
-async def get_jupiter_quote(amount_lamports: int, slippage_bps: int = DEFAULT_SLIPPAGE_BPS):
+async def get_jupiter_quote(input_mint: str, output_mint: str, amount_lamports: int, slippage_bps: int = DEFAULT_SLIPPAGE_BPS):
     """Request a Jupiter V6 quote (async).
 
     Returns the JSON response (quoteResponse) on success.
     """
     params = {
-        "inputMint": WSOL_MINT,
-        "outputMint": USDC_MINT,
+        "inputMint": input_mint,
+        "outputMint": output_mint,
         "amount": str(amount_lamports),
         "slippageBps": str(slippage_bps),
     }
@@ -110,16 +108,17 @@ async def get_jupiter_quote(amount_lamports: int, slippage_bps: int = DEFAULT_SL
         raise
 
 
-async def get_jupiter_swap_transaction(quote_response, user_pubkey: str, wrap_and_unwrap: bool = True):
+async def get_jupiter_swap(quote_response, user_pubkey: str | None = None, wrap_and_unwrap: bool = True):
     """Request Jupiter swap transaction (returns JSON with swapTransaction base64).
 
     Sends quoteResponse to the swap endpoint and asks Jupiter to return a signed/simulatable transaction blob.
     """
     payload = {
         "quoteResponse": quote_response,
-        "userPublicKey": user_pubkey,
         "wrapAndUnwrapSol": bool(wrap_and_unwrap),
     }
+    if user_pubkey:
+        payload["userPublicKey"] = user_pubkey
     # optional auth header
     jupiter_key = os.getenv('JUPITER_API_KEY') or os.getenv('JUPITER_KEY')
     headers = {"x-api-key": jupiter_key} if jupiter_key else None
@@ -131,7 +130,12 @@ async def get_jupiter_swap_transaction(quote_response, user_pubkey: str, wrap_an
         return resp.json()
 
 
-async def main(amount: float, slippage: float = 0.01, live: bool = False, priority_fee: int | None = None, verbose: bool = False):
+# Backwards-compatible wrapper for older callers
+async def get_jupiter_swap_transaction(quote_response, user_pubkey: str, wrap_and_unwrap: bool = True):
+    return await get_jupiter_swap(quote_response, user_pubkey=user_pubkey, wrap_and_unwrap=wrap_and_unwrap)
+
+
+async def main(amount: float, input_mint: str, output_mint: str, slippage: float = 0.01, live: bool = False, priority_fee: int | None = None, verbose: bool = False):
     KEY = load_key()
     # Default priority fee (micro-lamports per CU)
     DEFAULT_PRIORITY_FEE = int(os.getenv('PRIORITY_FEE', '10000'))
@@ -150,7 +154,7 @@ async def main(amount: float, slippage: float = 0.01, live: bool = False, priori
 
     # 1) Get quote
     try:
-        quote = await get_jupiter_quote(lamports, slippage_bps)
+        quote = await get_jupiter_quote(input_mint, output_mint, lamports, slippage_bps)
         quote_failed = False
     except Exception as e:
         console.print(Panel(f"Failed to fetch quote: {e}", style="yellow"))
@@ -491,12 +495,14 @@ async def main(amount: float, slippage: float = 0.01, live: bool = False, priori
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--amount", type=float, default=0.1, help="Amount of SOL to swap")
+    parser.add_argument("--input-mint", type=str, required=True, help="Input mint (e.g. WSOL) - required")
+    parser.add_argument("--output-mint", type=str, required=True, help="Output mint (e.g. USDC) - required")
     parser.add_argument("--live", action="store_true", help="If set, actually send the signed transaction on-chain. Defaults to simulate-only.")
     parser.add_argument("--priority-fee", type=int, default=None, help="Priority fee (micro-lamports per compute unit). Defaults to 10000.")
     parser.add_argument("--verbose", action="store_true", help="Verbose output: print detailed routePlan AmmName entries when available.")
     args = parser.parse_args()
 
     try:
-        asyncio.run(main(args.amount, live=args.live, priority_fee=args.priority_fee, verbose=args.verbose))
+        asyncio.run(main(args.amount, input_mint=args.input_mint, output_mint=args.output_mint, live=args.live, priority_fee=args.priority_fee, verbose=args.verbose))
     except KeyboardInterrupt:
         console.print("Interrupted", style="yellow")

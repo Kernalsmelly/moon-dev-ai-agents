@@ -152,3 +152,8 @@ else:
 # Watchlist path (can be set to an absolute path outside the repo; default is relative to data/)
 WATCHLIST_PATH = os.getenv('WATCHLIST_PATH', 'watchlist.json')
 
+# Path to execution events CSV used by telemetry/heartbeat. Can be absolute or
+# relative to the repository data directory. Tests should override this to a
+# temp path for hermetic runs.
+EXECUTION_LOG_PATH = os.getenv('EXECUTION_LOG_PATH', 'data/execution_events.csv')
+

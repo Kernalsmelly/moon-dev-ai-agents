@@ -19,9 +19,9 @@ import glob
 try:
     # Prefer timezone-aware UTC; Python 3.11+ exposes datetime.UTC. For older
     # versions, fall back to timezone.utc to remain compatible.
-    from datetime import datetime, UTC
+    from datetime import datetime, UTC, timedelta
 except Exception:
-    from datetime import datetime, timezone as UTC
+    from datetime import datetime, timezone as UTC, timedelta
 from typing import List
 
 import httpx
@@ -117,6 +117,9 @@ class MarketBrain:
         self._birdeye_lock = asyncio.Lock()
         # timestamps (float seconds) of recent birdeye requests
         self._birdeye_ts: list[float] = []
+
+    # last observed birdeye latency (ms) recorded from last request
+    self._last_birdeye_latency_ms: int | None = None
 
         # token decimals cache: mint -> (decimals:int, ts: float)
         # TTL default 24h
@@ -362,9 +365,9 @@ class MarketBrain:
         attempts = 3
         delay = 1.0
         data = None
-        for attempt in range(1, attempts + 1):
+    for attempt in range(1, attempts + 1):
             try:
-                reserved_ts = None
+        reserved_ts = None
                 while True:
                     async with self._birdeye_lock:
                         now = time.time()
@@ -381,10 +384,18 @@ class MarketBrain:
                                 continue
                     await asyncio.sleep(sleep_for)
                 try:
+                    # measure birdeye request latency
                     async with httpx.AsyncClient(timeout=8.0) as client:
+                        be_start = time.monotonic()
                         resp = await client.get(url, params={'address': mint_address})
+                        be_latency_ms = int((time.monotonic() - be_start) * 1000)
                         resp.raise_for_status()
                         data = resp.json()
+                        # store last observed birdeye latency for telemetry consumers
+                        try:
+                            self._last_birdeye_latency_ms = be_latency_ms
+                        except Exception:
+                            pass
                         break
                 except Exception:
                     if reserved_ts is not None:
@@ -537,9 +548,15 @@ class MarketBrain:
         This is a lightweight telemetry sink for debugging and post-mortem analysis.
         """
         try:
-            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-            os.makedirs(data_dir, exist_ok=True)
-            ev_csv = os.path.join(data_dir, 'execution_events.csv')
+            # Allow configurable execution log path via config.EXECUTION_LOG_PATH.
+            ev_path = getattr(config, 'EXECUTION_LOG_PATH', 'data/execution_events.csv')
+            # If relative, make it relative to the repo data directory
+            if not os.path.isabs(ev_path):
+                data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+                os.makedirs(data_dir, exist_ok=True)
+                ev_csv = os.path.join(os.path.dirname(os.path.dirname(__file__)), ev_path)
+            else:
+                ev_csv = ev_path
             import csv, json as _json
             ts = datetime.now(UTC).isoformat()
             header_needed = not os.path.exists(ev_csv)
@@ -580,8 +597,10 @@ class MarketBrain:
         try:
             active_positions = settings.get('active_positions') if isinstance(settings, dict) else None
             if isinstance(active_positions, list) and len(active_positions) == 0:
-                # load default watchlist from data/watchlist.json (best-effort)
-                wl_path = os.path.join(data_dir, 'watchlist.json')
+                # load default watchlist from configured WATCHLIST_PATH (best-effort)
+                wl_path = getattr(config, 'WATCHLIST_PATH', 'watchlist.json')
+                if not os.path.isabs(wl_path):
+                    wl_path = os.path.join(data_dir, wl_path)
                 if os.path.exists(wl_path):
                     try:
                         with open(wl_path, 'r', encoding='utf-8') as fh:
@@ -1056,6 +1075,22 @@ class MarketBrain:
                     pass
                 return False
 
+            # Attempt to resolve a human-friendly symbol for telemetry from watchlist
+            try:
+                data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+                wl_path = getattr(config, 'WATCHLIST_PATH', 'watchlist.json')
+                if not os.path.isabs(wl_path):
+                    wl_path = os.path.join(data_dir, wl_path)
+                resolved_symbol = None
+                try:
+                    if os.path.exists(wl_path):
+                        with open(wl_path, 'r', encoding='utf-8') as fh:
+                            wl_obj = json.load(fh)
+                            if isinstance(wl_obj, dict):
+                                resolved_symbol = wl_obj.get(mint)
+                except Exception:
+                    resolved_symbol = None
+
             # compute token amount from SOL amount
             try:
                 decimals = await self._get_token_decimals(mint)
@@ -1156,9 +1191,16 @@ class MarketBrain:
                             continue
 
                         # retry loop for this chunk
-                        max_attempts = 3
+                        max_attempts = int(os.getenv('CHUNK_MAX_ATTEMPTS', '3'))
                         success = False
-                        attempt = 0
+                        # backoff params
+                        try:
+                            initial_wait = float(os.getenv('CHUNK_RETRY_INITIAL_WAIT', '1'))
+                            max_wait = float(os.getenv('CHUNK_RETRY_MAX_WAIT', '8'))
+                        except Exception:
+                            initial_wait = 1.0
+                            max_wait = 8.0
+
                         for attempt in range(1, max_attempts + 1):
                             try:
                                 # measure quote latency
@@ -1167,6 +1209,7 @@ class MarketBrain:
                                 q_latency_ms = int((time.monotonic() - q_start) * 1000)
                                 if not quote:
                                     raise Exception('No quote')
+
                                 swap_resp = await te.get_jupiter_swap(quote, user_pubkey=str(te.load_key().pubkey()), wrap_and_unwrap=True)
                                 swap_tx_b64 = swap_resp.get('swapTransaction')
                                 if not swap_tx_b64:
@@ -1208,7 +1251,6 @@ class MarketBrain:
                                         raise Exception(f'Chunk simulation error: {err}')
 
                                     # send if live is enabled
-                                    # send if live is enabled
                                     if live and (os.getenv('ENABLE_LIVE_EXITS', '0') in ('1', 'true', 'True')):
                                         # respect global shadow-mode override: even if live is requested,
                                         # avoid sending on-chain when SHADOW_MODE is active.
@@ -1247,6 +1289,7 @@ class MarketBrain:
                                             'shadow_mode': getattr(config, 'SHADOW_MODE', True),
                                             'symbol': resolved_symbol,
                                             'quote_latency_ms': q_latency_ms if 'q_latency_ms' in locals() else None,
+                                            'birdeye_latency_ms': getattr(self, '_last_birdeye_latency_ms', None),
                                             'estimated_impact_pct': chunk_estimated_impact,
                                             'attempts': attempt,
                                         })
@@ -1255,43 +1298,36 @@ class MarketBrain:
 
                                 success = True
                                 break
-                                except Exception as e:
-                                    console.print(Panel(f"Chunk {idx+1} attempt {attempt} failed: {e}", style='yellow'))
-                                    if attempt < attempts:
-                                        # exponential backoff with jitter
-                                        try:
-                                            initial_wait = float(os.getenv('CHUNK_RETRY_INITIAL_WAIT', '1'))
-                                            max_wait = float(os.getenv('CHUNK_RETRY_MAX_WAIT', '8'))
-                                        except Exception:
-                                            initial_wait = 1.0
-                                            max_wait = 8.0
-                                        wait = min(max_wait, initial_wait * (2 ** (attempt - 1))) + random.uniform(0, 1)
-                                        await asyncio.sleep(wait)
-                                        continue
-                                            else:
-                                                console.print(Panel(f"Chunk {chunk_index} failed after {attempts} attempts; moving to next chunk.", style='red'))
-                                if not success:
-                                    consecutive_failures += 1
-                                    # if too many consecutive chunk failures, trigger circuit breaker
-                                    if consecutive_failures >= int(os.getenv('CHUNK_CIRCUIT_BREAKER_THRESHOLD', '3')):
-                                        # record critical event and abort
-                                        try:
-                                            self._log_execution_event(mint, 'CIRCUIT_BREAKER_TRIGGERED', {
-                                                'reason': 'consecutive_chunk_failures',
-                                                'consecutive_failures': consecutive_failures,
-                                                'chunk_index': chunk_index,
-                                            })
-                                        except Exception:
-                                            pass
-                                        console.print(Panel(f"Circuit breaker triggered after {consecutive_failures} consecutive chunk failures for {mint}.", style='red'))
-                                        break
+                            except Exception as e:
+                                console.print(Panel(f"Chunk {chunk_index} attempt {attempt} failed: {e}", style='yellow'))
+                                if attempt < max_attempts:
+                                    wait = min(max_wait, initial_wait * (2 ** (attempt - 1))) + random.uniform(0, 1)
+                                    await asyncio.sleep(wait)
+                                    continue
                                 else:
-                                    consecutive_failures = 0
-                                    succeeded_chunks += 1
-                                    processed_sol += chunk_amount_sol
-                                    remaining_sol = float(amount_sol) - processed_sol
-                        if success:
+                                    console.print(Panel(f"Chunk {chunk_index} failed after {max_attempts} attempts; moving to next chunk.", style='red'))
+
+                        # handle success/failure for this chunk
+                        if not success:
+                            consecutive_failures += 1
+                            # if too many consecutive chunk failures, trigger circuit breaker
+                            if consecutive_failures >= int(os.getenv('CHUNK_CIRCUIT_BREAKER_THRESHOLD', '3')):
+                                # record critical event and abort
+                                try:
+                                    self._log_execution_event(mint, 'CIRCUIT_BREAKER_TRIGGERED', {
+                                        'reason': 'consecutive_chunk_failures',
+                                        'consecutive_failures': consecutive_failures,
+                                        'chunk_index': chunk_index,
+                                    })
+                                except Exception:
+                                    pass
+                                console.print(Panel(f"Circuit breaker triggered after {consecutive_failures} consecutive chunk failures for {mint}.", style='red'))
+                                break
+                        else:
+                            consecutive_failures = 0
                             succeeded_chunks += 1
+                            processed_sol += chunk_amount_sol
+                            remaining_sol = float(amount_sol) - processed_sol
 
                         # cooldown between chunks to let liquidity rebalance (10-20s)
                         cooldown = float(os.getenv('CHUNK_COOLDOWN_SECONDS', '10'))
@@ -1401,6 +1437,7 @@ class MarketBrain:
                                 'estimated_impact_pct': impact_pct,
                                 'shadow_mode': True,
                                 'symbol': resolved_symbol,
+                                'birdeye_latency_ms': getattr(self, '_last_birdeye_latency_ms', None),
                             })
                         except Exception:
                             pass
@@ -1438,6 +1475,7 @@ class MarketBrain:
                             'estimated_impact_pct': impact_pct,
                             'shadow_mode': getattr(config, 'SHADOW_MODE', True),
                             'symbol': resolved_symbol,
+                            'birdeye_latency_ms': getattr(self, '_last_birdeye_latency_ms', None),
                         })
                     except Exception:
                         pass
@@ -1726,8 +1764,111 @@ class MarketBrain:
         except Exception:
             return 0.0
 
+    async def _heartbeat_loop(self):
+        """Periodic health/status summary sent to Telegram every 4 hours.
+
+        Summarizes recent execution_events.csv entries (last 4 hours) and posts a
+        short plaintext summary. Best-effort; exceptions are caught so the loop
+        cannot crash the MarketBrain run loop.
+        """
+        interval = int(os.getenv('HEARTBEAT_INTERVAL_SECONDS', str(4 * 3600)))
+        # Resolve execution events CSV path from config (allow tests to override)
+        ev_path = getattr(config, 'EXECUTION_LOG_PATH', 'data/execution_events.csv')
+        if not os.path.isabs(ev_path):
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+            ev_csv = os.path.join(os.path.dirname(os.path.dirname(__file__)), ev_path)
+        else:
+            ev_csv = ev_path
+        while True:
+            try:
+                    await asyncio.sleep(interval)
+                    now = datetime.now(UTC)
+                    cutoff = now - timedelta(seconds=interval)
+                    entries = []
+                    try:
+                        if os.path.exists(ev_csv):
+                            import csv, json as _json
+                            with open(ev_csv, 'r', encoding='utf-8') as fh:
+                                reader = csv.reader(fh)
+                                header = next(reader, None)
+                                for row in reader:
+                                    try:
+                                        ts_s, mint, ev_type, j = row
+                                        ts = datetime.fromisoformat(ts_s)
+                                        if ts.tzinfo is None:
+                                            ts = ts.replace(tzinfo=UTC)
+                                        if ts < cutoff:
+                                            continue
+                                        data = _json.loads(j or '{}')
+                                        entries.append({'ts': ts, 'mint': mint, 'event_type': ev_type, 'data': data})
+                                    except Exception:
+                                        # skip malformed rows
+                                        continue
+                    except Exception as e:
+                        # non-fatal: log a warning and continue loop
+                        try:
+                            console.print(Panel(f"Heartbeat CSV read warning: {e}", style='yellow'))
+                        except Exception:
+                            pass
+
+                # compute summary metrics
+                cnt = len(entries)
+                units_list = [e['data'].get('unitsConsumed') for e in entries if isinstance(e['data'].get('unitsConsumed'), (int, float))]
+                quote_lat_list = [e['data'].get('quote_latency_ms') for e in entries if isinstance(e['data'].get('quote_latency_ms'), (int, float))]
+                impact_list = [e['data'].get('estimated_impact_pct') for e in entries if isinstance(e['data'].get('estimated_impact_pct'), (int, float))]
+                attempts_list = [e['data'].get('attempts') for e in entries if isinstance(e['data'].get('attempts'), (int, float))]
+
+                def safe_mean(xs):
+                    try:
+                        return float(sum(xs)) / float(len(xs)) if xs else None
+                    except Exception:
+                        return None
+
+                avg_units = safe_mean(units_list)
+                avg_quote_lat = safe_mean(quote_lat_list)
+                avg_birdeye = getattr(self, '_last_birdeye_latency_ms', None)
+
+                # compute simple Pearson correlation between impact_list and attempts_list
+                corr = None
+                try:
+                    if len(impact_list) >= 2 and len(attempts_list) >= 2 and len(impact_list) == len(attempts_list):
+                        xs = impact_list
+                        ys = attempts_list
+                        mx = sum(xs) / len(xs)
+                        my = sum(ys) / len(ys)
+                        cov = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+                        varx = sum((x - mx) ** 2 for x in xs)
+                        vary = sum((y - my) ** 2 for y in ys)
+                        denom = (varx * vary) ** 0.5
+                        if denom:
+                            corr = cov / denom
+                except Exception:
+                    corr = None
+
+                mode = 'SHADOW' if getattr(config, 'SHADOW_MODE', True) else 'LIVE'
+                msg_lines = [f"🤖 [MOON DEV] {int(interval/3600)}h Status Update", f"Mode: {mode}"]
+                msg_lines.append(f"Simulated/Executed events (last {int(interval/3600)}h): {cnt}")
+                msg_lines.append(f"Avg Compute Units: {avg_units if avg_units is not None else 'n/a'}")
+                msg_lines.append(f"Avg Quote Latency (ms): {avg_quote_lat if avg_quote_lat is not None else 'n/a'}")
+                msg_lines.append(f"Last Birdeye Latency (ms): {avg_birdeye if avg_birdeye is not None else 'n/a'}")
+                msg_lines.append(f"Volatility Correlation: {round(corr,3) if corr is not None else 'n/a'}")
+                msg = "\n".join(msg_lines)
+                try:
+                    await self._send_telegram_status(msg)
+                except Exception:
+                    pass
+            except Exception:
+                # swallow any heartbeat errors and continue
+                await asyncio.sleep(60)
+
     async def run(self):
         console.print(Panel('MarketBrain starting loop (dry-run only)...', style='green'))
+        # start heartbeat background task (best-effort, non-blocking)
+        try:
+            asyncio.create_task(self._heartbeat_loop())
+        except Exception:
+            pass
+
         while True:
             try:
                 # 1) check birdeye for volume spikes
