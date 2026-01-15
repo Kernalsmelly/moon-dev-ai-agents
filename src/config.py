@@ -137,3 +137,18 @@ dont_trade_list = []  # list of token mint addresses to never trade
 EXIT_ALL_POSITIONS = False
 CLOSED_POSITIONS_TXT = '777'
 minimum_trades_in_last_hour = 777
+
+# Shadow mode: if no private keys are present in the environment, default to
+# SHADOW_MODE=True to prevent accidental live transactions. You can override
+# explicitly by setting the SHADOW_MODE environment variable to '1'/'true'.
+_explicit_shadow = os.getenv('SHADOW_MODE')
+if _explicit_shadow is not None:
+    SHADOW_MODE = str(_explicit_shadow).lower() in ('1', 'true', 'yes')
+else:
+    # Consider common private-key env vars used across the project
+    _has_wallet_key = bool(os.getenv('SOLANA_PRIVATE_KEY') or os.getenv('FUNDER_PRIVATE_KEY'))
+    SHADOW_MODE = not _has_wallet_key
+
+# Watchlist path (can be set to an absolute path outside the repo; default is relative to data/)
+WATCHLIST_PATH = os.getenv('WATCHLIST_PATH', 'watchlist.json')
+

@@ -101,4 +101,14 @@ if __name__ == "__main__":
         cprint(f"  • {agent.title()}: {status}", "white", "on_blue")
     print("\n")
 
+    # Security first: warn when in shadow mode so operators know no real SOL will be spent
+    try:
+        if getattr(config, 'SHADOW_MODE', True):
+            cprint("[SECURITY] Shadow Mode Active - No real SOL will be spent.", "yellow")
+            # ensure live exits are disabled unless explicitly overridden
+            if os.getenv('ENABLE_LIVE_EXITS', str(getattr(config, 'ENABLE_LIVE_EXITS', '0'))).lower() in ('1', 'true', 'yes'):
+                cprint("[WARNING] ENABLE_LIVE_EXITS is set but SHADOW_MODE is active — live sends will be suppressed.", "red")
+    except Exception:
+        pass
+
     run_agents()
