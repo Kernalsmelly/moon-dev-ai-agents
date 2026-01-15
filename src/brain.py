@@ -35,6 +35,7 @@ from solders.compute_budget import ID as COMPUTE_BUDGET_ID
 from solana.rpc.async_api import AsyncClient
 
 import src.trade_executor as te
+import src.config as config
 
 console = Console()
 
@@ -554,6 +555,26 @@ class MarketBrain:
                 settings = {}
         except Exception:
             settings = {}
+
+        # If the orchestrator/settings indicate there are no active positions,
+        # consult the watchlist so the monitor can still observe high-volume tokens.
+        try:
+            active_positions = settings.get('active_positions') if isinstance(settings, dict) else None
+            if isinstance(active_positions, list) and len(active_positions) == 0:
+                # load default watchlist from data/watchlist.json (best-effort)
+                wl_path = os.path.join(data_dir, 'watchlist.json')
+                if os.path.exists(wl_path):
+                    try:
+                        with open(wl_path, 'r', encoding='utf-8') as fh:
+                            wl = json.load(fh)
+                            if isinstance(wl, list) and wl:
+                                # if caller passed an empty mint, pick the first
+                                if not mint:
+                                    mint = wl[0]
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
         tp1_pct = float(os.getenv('TP1_PCT', settings.get('TP1_PCT', 0.25)))
         tp1_size = float(os.getenv('TP1_SIZE', settings.get('TP1_SIZE', 0.5)))
@@ -1147,13 +1168,19 @@ class MarketBrain:
                                         raise Exception(f'Chunk simulation error: {err}')
 
                                     # send if live is enabled
+                                    # send if live is enabled
                                     if live and (os.getenv('ENABLE_LIVE_EXITS', '0') in ('1', 'true', 'True')):
-                                        try:
-                                            raw = bytes(vtx)
-                                            sent = await client.send_raw_transaction(raw)
-                                            console.print(Panel(f"Chunk {chunk_index} tx sent: {sent}", style='green'))
-                                        except Exception as e:
-                                            raise
+                                        # respect global shadow-mode override: even if live is requested,
+                                        # avoid sending on-chain when SHADOW_MODE is active.
+                                        if getattr(config, 'SHADOW_MODE', True):
+                                            console.print(Panel(f"SHADOW_MODE active — skipping on-chain send for chunk {chunk_index} on {mint}", style='yellow'))
+                                        else:
+                                            try:
+                                                raw = bytes(vtx)
+                                                sent = await client.send_raw_transaction(raw)
+                                                console.print(Panel(f"Chunk {chunk_index} tx sent: {sent}", style='green'))
+                                            except Exception as e:
+                                                raise
 
                                     # log per-chunk execution telemetry including unitsConsumed
                                     try:
@@ -1161,6 +1188,7 @@ class MarketBrain:
                                             'chunk_index': chunk_index,
                                             'base_amount_chunk': base_amount_chunk,
                                             'unitsConsumed': units,
+                                            'shadow_mode': getattr(config, 'SHADOW_MODE', True),
                                         })
                                     except Exception:
                                         pass
@@ -1284,18 +1312,71 @@ class MarketBrain:
                     console.print(Panel(f"Exit simulation failed: {err}", style='red'))
                     return False
 
-                # If live execution is enabled, send the raw transaction
+                # If live execution is enabled, send the raw transaction (unless shadow mode)
                 if live and (os.getenv('ENABLE_LIVE_EXITS', '0') in ('1', 'true', 'True')):
-                    try:
-                        raw = bytes(vtx)
-                        sent = await client.send_raw_transaction(raw)
-                        console.print(Panel(f"Exit tx sent: {sent}", style='green'))
+                    # Respect SHADOW_MODE: skip on-chain send but still log telemetry
+                    if getattr(config, 'SHADOW_MODE', True):
+                        console.print(Panel("SHADOW_MODE active — skipping on-chain send for exit (virtual-only).", style='yellow'))
+                        # attempt to extract unitsConsumed for telemetry (best-effort)
+                        try:
+                            sim_val = getattr(sim, 'value', sim)
+                            units = None
+                            if isinstance(sim_val, dict):
+                                units = sim_val.get('unitsConsumed') or (sim_val.get('result') or {}).get('value', {}).get('unitsConsumed')
+                            else:
+                                units = getattr(sim_val, 'units_consumed', None) or getattr(sim_val, 'unitsConsumed', None)
+                        except Exception:
+                            units = None
+                        try:
+                            impact_pct = None
+                            if estimated_sell_usd is not None and pool_liquidity_usd is not None:
+                                impact_pct = self._calculate_price_impact(float(estimated_sell_usd), float(pool_liquidity_usd))
+                        except Exception:
+                            impact_pct = None
+                        try:
+                            self._log_execution_event(mint, 'exit_simulated', {
+                                'unitsConsumed': units,
+                                'estimated_impact_pct': impact_pct,
+                                'shadow_mode': True,
+                            })
+                        except Exception:
+                            pass
                         return True
-                    except Exception as e:
-                        console.print(Panel(f"Failed to send exit tx: {e}", style='red'))
-                        return False
+                    else:
+                        try:
+                            raw = bytes(vtx)
+                            sent = await client.send_raw_transaction(raw)
+                            console.print(Panel(f"Exit tx sent: {sent}", style='green'))
+                            return True
+                        except Exception as e:
+                            console.print(Panel(f"Failed to send exit tx: {e}", style='red'))
+                            return False
                 else:
                     console.print(Panel(f"Exit simulation successful (live disabled).", style='green'))
+                    # log simulated exit telemetry even when not sending
+                    try:
+                        sim_val = getattr(sim, 'value', sim)
+                        units = None
+                        if isinstance(sim_val, dict):
+                            units = sim_val.get('unitsConsumed') or (sim_val.get('result') or {}).get('value', {}).get('unitsConsumed')
+                        else:
+                            units = getattr(sim_val, 'units_consumed', None) or getattr(sim_val, 'unitsConsumed', None)
+                    except Exception:
+                        units = None
+                    try:
+                        impact_pct = None
+                        if estimated_sell_usd is not None and pool_liquidity_usd is not None:
+                            impact_pct = self._calculate_price_impact(float(estimated_sell_usd), float(pool_liquidity_usd))
+                    except Exception:
+                        impact_pct = None
+                    try:
+                        self._log_execution_event(mint, 'exit_simulated', {
+                            'unitsConsumed': units,
+                            'estimated_impact_pct': impact_pct,
+                            'shadow_mode': getattr(config, 'SHADOW_MODE', True),
+                        })
+                    except Exception:
+                        pass
                     return True
         except Exception as e:
             console.print(Panel(f"_execute_exit_swap error: {e}", style='red'))
