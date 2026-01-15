@@ -148,6 +148,24 @@ class MarketBrain:
             # ignore load errors — start fresh
             pass
 
+    async def _send_telegram_status(self, message: str):
+        """Send a short status message to a configured Telegram chat if available.
+
+        Requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in environment. Best-effort
+        and non-blocking (exceptions ignored).
+        """
+        try:
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            chat_id = os.getenv('TELEGRAM_CHAT_ID')
+            if not bot_token or not chat_id:
+                return False
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(url, json={"chat_id": chat_id, "text": message})
+            return True
+        except Exception:
+            return False
+
     def _save_state(self):
         try:
             tmp = self.state_path + '.tmp'
@@ -191,14 +209,15 @@ class MarketBrain:
             dest = os.path.join(backups_dir, f'brain_state_{ts}.json')
             # copy metadata too
             shutil.copy2(self.state_path, dest)
-
-            # cleanup old backups, keep the newest `keep` files
-            pattern = os.path.join(backups_dir, 'brain_state_*.json')
-            files = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
-            for old in files[keep:]:
-                try:
-                    os.remove(old)
-                except Exception:
+                        try:
+                            self._log_execution_event(mint, 'chunking_completed', {
+                                'succeeded_chunks': succeeded_chunks,
+                                'total_chunks': n_chunks,
+                                'fill_ratio': fill_ratio,
+                                'max_impact': max_impact,
+                                'estimated_usd_size': estimated_sell_usd,
+                                'estimated_impact_pct': impact_pct,
+                            })
                     # ignore failures to delete old backups
                     pass
         except Exception:
@@ -1137,11 +1156,15 @@ class MarketBrain:
                             continue
 
                         # retry loop for this chunk
-                        attempts = 3
+                        max_attempts = 3
                         success = False
-                        for attempt in range(1, attempts + 1):
+                        attempt = 0
+                        for attempt in range(1, max_attempts + 1):
                             try:
+                                # measure quote latency
+                                q_start = time.monotonic()
                                 quote = await te.get_jupiter_quote(mint, WSOL_MINT_LITERAL, int(base_amount_chunk), te.DEFAULT_SLIPPAGE_BPS)
+                                q_latency_ms = int((time.monotonic() - q_start) * 1000)
                                 if not quote:
                                     raise Exception('No quote')
                                 swap_resp = await te.get_jupiter_swap(quote, user_pubkey=str(te.load_key().pubkey()), wrap_and_unwrap=True)
@@ -1191,6 +1214,14 @@ class MarketBrain:
                                         # avoid sending on-chain when SHADOW_MODE is active.
                                         if getattr(config, 'SHADOW_MODE', True):
                                             console.print(Panel(f"SHADOW_MODE active — skipping on-chain send for chunk {chunk_index} on {mint}", style='yellow'))
+                                            # write an explicit audit line to logs/bot.log for offline verification
+                                            try:
+                                                log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'logs')
+                                                os.makedirs(log_dir, exist_ok=True)
+                                                with open(os.path.join(log_dir, 'bot.log'), 'a', encoding='utf-8') as logfh:
+                                                    logfh.write(f"Transaction NOT sent (SHADOW_MODE) chunk={chunk_index} mint={mint}\n")
+                                            except Exception:
+                                                pass
                                         else:
                                             try:
                                                 raw = bytes(vtx)
@@ -1199,14 +1230,25 @@ class MarketBrain:
                                             except Exception as e:
                                                 raise
 
-                                    # log per-chunk execution telemetry including unitsConsumed
+                                    # log per-chunk execution telemetry including unitsConsumed and latency
                                     try:
+                                        # try to compute this chunk's estimated impact if possible
+                                        chunk_estimated_impact = None
+                                        try:
+                                            if sol_price_usd is not None and pool_liquidity_usd is not None:
+                                                chunk_estimated_impact = self._calculate_price_impact(float(chunk_amount_sol * sol_price_usd), float(pool_liquidity_usd))
+                                        except Exception:
+                                            chunk_estimated_impact = None
+
                                         self._log_execution_event(mint, 'chunk_executed', {
                                             'chunk_index': chunk_index,
                                             'base_amount_chunk': base_amount_chunk,
                                             'unitsConsumed': units,
                                             'shadow_mode': getattr(config, 'SHADOW_MODE', True),
                                             'symbol': resolved_symbol,
+                                            'quote_latency_ms': q_latency_ms if 'q_latency_ms' in locals() else None,
+                                            'estimated_impact_pct': chunk_estimated_impact,
+                                            'attempts': attempt,
                                         })
                                     except Exception:
                                         pass
@@ -1277,7 +1319,9 @@ class MarketBrain:
                     return succeeded_chunks > 0
 
             # request a Jupiter quote for token -> WSOL
+            q_start = time.monotonic()
             quote = await te.get_jupiter_quote(mint, WSOL_MINT_LITERAL, int(base_amount), te.DEFAULT_SLIPPAGE_BPS)
+            q_latency_ms = int((time.monotonic() - q_start) * 1000)
             if not quote:
                 console.print(Panel('No quote received for exit swap', style='yellow'))
                 try:
