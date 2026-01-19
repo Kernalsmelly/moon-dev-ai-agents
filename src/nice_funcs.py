@@ -70,28 +70,60 @@ def get_priority_fee(mode: str = 'standard') -> int:
 
 
 # Persistence helpers for position state (highest_price_seen, de_risked, entry_price)
-POS_STATE_FILE = os.path.join('data', 'positions_state.json')
+# Now backed by SQLite for crash-proof persistence and trade history
+POS_STATE_FILE = os.path.join('data', 'positions_state.json')  # Legacy path (for reference)
 
-def load_positions_state():
-    try:
-        os.makedirs('data', exist_ok=True)
-        if os.path.exists(POS_STATE_FILE):
-            with open(POS_STATE_FILE, 'r') as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return {}
+# Use SQLite-backed position store
+try:
+    from src.position_store import (
+        load_positions_state,
+        save_positions_state,
+        get_position,
+        update_position,
+        record_trade,
+        get_performance_summary,
+    )
+    _USE_SQLITE_STORE = True
+except ImportError:
+    # Fallback to JSON if position_store not available
+    _USE_SQLITE_STORE = False
 
+    def load_positions_state():
+        try:
+            os.makedirs('data', exist_ok=True)
+            if os.path.exists(POS_STATE_FILE):
+                with open(POS_STATE_FILE, 'r') as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
 
-def save_positions_state(state: dict):
-    try:
-        os.makedirs('data', exist_ok=True)
-        with open(POS_STATE_FILE, 'w') as f:
-            json.dump(state, f, indent=2)
-        return True
-    except Exception as e:
-        print('Failed to save positions state:', e)
-        return False
+    def save_positions_state(state: dict):
+        try:
+            os.makedirs('data', exist_ok=True)
+            with open(POS_STATE_FILE, 'w') as f:
+                json.dump(state, f, indent=2)
+            return True
+        except Exception as e:
+            print('Failed to save positions state:', e)
+            return False
+
+    def get_position(mint: str):
+        state = load_positions_state()
+        return state.get(mint)
+
+    def update_position(mint: str, **kwargs):
+        state = load_positions_state()
+        if mint not in state:
+            state[mint] = {}
+        state[mint].update(kwargs)
+        return save_positions_state(state)
+
+    def record_trade(**kwargs):
+        pass  # No-op in fallback mode
+
+    def get_performance_summary(**kwargs):
+        return {}
 
 
 def verify_transaction_structure(tx_bytes: bytes):

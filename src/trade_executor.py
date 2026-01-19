@@ -27,8 +27,18 @@ from solders.transaction import VersionedTransaction
 from solders.message import MessageV0
 from solders.pubkey import Pubkey
 from solders.system_program import transfer as sp_transfer, TransferParams as SPTransferParams
-from solana.rpc.async_api import AsyncClient
-from solana.rpc.types import TxOpts
+from src.brain import MarketBrain
+try:
+    from solana.rpc.types import TxOpts
+except Exception:
+    # Fallback for test environments where the installed 'solana' package
+    # or its submodules are not importable. Provide a minimal TxOpts shim
+    # sufficient for code that only needs to construct/send transactions in tests.
+    class TxOpts:
+        def __init__(self, skip_preflight: bool = False, preflight_commitment=None, max_retries: int | None = None):
+            self.skip_preflight = skip_preflight
+            self.preflight_commitment = preflight_commitment
+            self.max_retries = max_retries
 try:
     # preferred: solders compute budget helper
     from solders.programs.compute_budget import ComputeBudgetProgram
@@ -140,6 +150,11 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
     # Default priority fee (micro-lamports per CU)
     DEFAULT_PRIORITY_FEE = int(os.getenv('PRIORITY_FEE', '10000'))
     rpc = os.getenv("RPC_URL") or getattr(config, "RPC_URL", None) or getattr(config, "SOLANA_RPC", None) or "https://api.devnet.solana.com"
+
+    # Instantiate MarketBrain so we can route all RPC calls through the
+    # centralized shield (_call_rpc). This ensures consistent rotation,
+    # blacklisting and monitoring for critical money flows.
+    brain = MarketBrain(rpc=rpc)
 
     lamports = int(amount * 1e9)
     # Use the DEFAULT_SLIPPAGE_BPS (50 bps) unless a caller explicitly provided a priority argument
@@ -268,9 +283,37 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
                                 return int(s) / 1e6
                             except Exception:
                                 return None
-
-                        input_sol = lamports_to_sol_val(in_amount_raw) if in_amount_raw is not None else None
+                        # robust extraction for outAmount across Jupiter v1/Metis shapes
+                        try:
+                            out_amount_raw = quote.get('outAmount') or quote.get('out_amount') or quote.get('out') or quote.get('outAmountRaw')
+                            if out_amount_raw is None:
+                                data = quote.get('data') or quote.get('routes') or quote.get('results') or quote.get('quote') or []
+                                if isinstance(data, list) and len(data) > 0:
+                                    first = data[0]
+                                    if isinstance(first, dict):
+                                        out_amount_raw = first.get('outAmount') or first.get('out_amount') or first.get('out') or first.get('outAmountRaw')
+                                # fallback: look through data list entries
+                                if out_amount_raw is None and isinstance(data, list):
+                                    for entry in data:
+                                        if isinstance(entry, dict):
+                                            cand = entry.get('outAmount') or entry.get('out') or entry.get('out_amount')
+                                            if cand is not None:
+                                                out_amount_raw = cand
+                                                break
+                        except Exception:
+                            out_amount_raw = quote.get('outAmount') or quote.get('out')
                         output_usdc = usdc_units_to_float_val(out_amount_raw) if out_amount_raw is not None else None
+                        # If out_amount_raw is still None after robust parsing, log the raw quote for post-mortem
+                        if out_amount_raw is None:
+                            try:
+                                data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+                                os.makedirs(data_dir, exist_ok=True)
+                                err_log = os.path.join(data_dir, 'parsing_errors.log')
+                                with open(err_log, 'a', encoding='utf-8') as fh:
+                                    fh.write(json.dumps({'ts': time.time(), 'stage': 'outAmount_missing', 'quote': quote}) + "\n")
+                                console.print(Panel(f"critical_parsing_error: outAmount not found in Jupiter quote — saved raw payload to {err_log}", style='red'))
+                            except Exception:
+                                pass
 
                         # Try to extract AMM label from routePlan
                         amm_label = None
@@ -296,6 +339,15 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
                         console.print(Panel(summary, title="Jupiter Route Summary", style="green"))
                     except Exception:
                         console.print(Panel(f"No detailed route hops found. Quote keys: {list(quote.keys())}", title="Route Plan Debug", style="yellow"))
+                        # Log the raw quote for post-mortem analysis when verbose parsing fails
+                        try:
+                            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+                            os.makedirs(data_dir, exist_ok=True)
+                            err_log = os.path.join(data_dir, 'parsing_errors.log')
+                            with open(err_log, 'a', encoding='utf-8') as fh:
+                                fh.write(json.dumps({'ts': time.time(), 'stage': 'route_plan_parse_fail', 'quote_keys': list(quote.keys()), 'quote': quote}) + "\n")
+                        except Exception:
+                            pass
         except Exception:
             if verbose:
                 console.print(Panel("Failed to extract detailed routePlan (structure unexpected).", style="yellow"))
@@ -356,30 +408,42 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
         except Exception:
             instrs = [instr]
 
-        # fetch latest blockhash and balance
+        # fetch latest blockhash and balance via MarketBrain shield
         recent = None
-        async with AsyncClient(rpc) as client:
-            try:
-                bal = await client.get_balance(payer_pub)
-                b = getattr(bal, 'value', None)
-                console.print(Panel(f"Payer balance (lamports): {b}", title="Debug"))
-                if not b or int(b) == 0:
-                    console.print(Panel("Payer account not funded or not found on this RPC. Fund the wallet on Devnet or set SOLANA_PRIVATE_KEY to a funded key to run a successful simulation.", style="yellow"))
-                    return
-            except Exception:
-                console.print(Panel("Failed to fetch payer balance for debug.", style="yellow"))
-            try:
-                lb = await client.get_latest_blockhash()
+        try:
+            bal = await brain._call_rpc('getBalance', [str(payer_pub)])
+            # resilient parsing of common JSON-RPC shapes
+            bal_val = None
+            if isinstance(bal, dict):
+                bal_val = bal.get('result', {}).get('value') or bal.get('value')
+            else:
+                bal_val = None
+            b = int(bal_val) if bal_val is not None else None
+            console.print(Panel(f"Payer balance (lamports): {b}", title="Debug"))
+            if not b or int(b) == 0:
+                console.print(Panel("Payer account not funded or not found on this RPC. Fund the wallet on Devnet or set SOLANA_PRIVATE_KEY to a funded key to run a successful simulation.", style="yellow"))
+                return
+        except Exception:
+            console.print(Panel("Failed to fetch payer balance for debug.", style="yellow"))
+        try:
+            lb = await brain._call_rpc('getLatestBlockhash', [])
+            recent = None
+            if isinstance(lb, dict):
+                res = lb.get('result') or lb
+                if isinstance(res, dict):
+                    val = res.get('value') or res.get('result')
+                    if isinstance(val, dict):
+                        recent = val.get('blockhash') or val.get('blockHash')
+                    elif isinstance(res.get('value'), dict):
+                        recent = res['value'].get('blockhash')
+            # if still None, try common fallback shapes
+            if not recent:
                 try:
-                    recent = lb.value.blockhash
+                    recent = lb.get('value', {}).get('blockhash') if isinstance(lb, dict) else None
                 except Exception:
-                    recent = getattr(lb, 'value', None)
-                    if isinstance(recent, dict):
-                        recent = recent.get('blockhash')
-                    else:
-                        recent = None
-            except Exception:
-                recent = None
+                    recent = None
+        except Exception:
+            recent = None
 
         if not recent:
             console.print(Panel("Failed to fetch recent blockhash for message compilation.", style="red"))
@@ -408,7 +472,80 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
     # Default behavior: DRY-RUN / SIMULATE ONLY.
 
     # SIMULATE and optionally SEND when --live is provided
-    async with AsyncClient(rpc) as client:
+    # SIMULATE and optionally SEND when --live is provided — route through brain shield
+    console.print("Simulating transaction...")
+    try:
+        # prefer using base64-encoded signed bytes for RPC simulate
+        try:
+            sim = await brain._call_rpc('simulateTransaction', [signed_b64, {"encoding": "base64"}])
+        except Exception:
+            try:
+                sim = await brain._call_rpc('simulateTransaction', [signed_bytes, {"encoding": "base64"}])
+            except Exception:
+                sim = await brain._call_rpc('simulateTransaction', [signed_b64])
+
+        sim_val = sim.get('result', {}).get('value') if isinstance(sim, dict) else sim
+
+        # Attempt to extract units consumed and error information from several possible shapes
+        units = None
+        err = None
+        if isinstance(sim_val, dict):
+            units = sim_val.get('unitsConsumed')
+            if units is None:
+                units = sim_val.get('result', {}).get('value', {}).get('unitsConsumed') if isinstance(sim_val.get('result', {}), dict) else None
+            err = sim_val.get('err') or (sim_val.get('result', {}).get('value', {}).get('err') if isinstance(sim_val.get('result', {}), dict) else None)
+        else:
+            units = getattr(sim_val, 'units_consumed', None) or getattr(sim_val, 'unitsConsumed', None)
+            err = getattr(sim_val, 'err', None)
+
+        if err:
+            console.print(Panel(f"Simulation failed: {err}", style="red"))
+            return
+
+        console.print(Panel(f"SIMULATION SUCCESS — unitsConsumed: {units}", style="green"))
+
+        # Check on-chain balance safety: ensure we keep at least 0.05 SOL (50_000_000 lamports)
+        try:
+            bal = await brain._call_rpc('getBalance', [str(solders_key.pubkey())])
+            bal_val = bal.get('result', {}).get('value') if isinstance(bal, dict) else bal
+            bal_lamports = int(bal_val) if bal_val is not None else None
+        except Exception:
+            bal_lamports = None
+
+        MIN_REMAINING = int(0.05 * 1e9)
+        ESTIMATED_FEE = 50_000  # safety cushion in lamports
+
+        if bal_lamports is not None:
+            spend_lamports = lamports if (not quote_failed and quote is not None) else lamports_small
+            if bal_lamports - spend_lamports - ESTIMATED_FEE < MIN_REMAINING:
+                console.print(Panel(f"Insufficient balance to leave {MIN_REMAINING} lamports after trade. Current balance: {bal_lamports}. Aborting.", style="red"))
+                return
+        else:
+            console.print(Panel("Could not determine payer balance; aborting for safety.", style="red"))
+            return
+
+        # Only send if live mode explicitly enabled via env var or CLI override
+        final_live = final_live_env
+
+        if final_live:
+            console.print(Panel("LIVE MODE enabled. Sending transaction on-chain...", style="yellow"))
+            try:
+                resp = await brain._call_rpc('sendTransaction', [signed_b64, {"skipPreflight": True}])
+                sig = None
+                if isinstance(resp, dict):
+                    sig = resp.get('result') or resp.get('value') or resp.get('signature')
+                else:
+                    sig = getattr(resp, 'result', None) or getattr(resp, 'value', None)
+
+                console.print(Panel(f"Send result: {sig}", title="TX Result"))
+            except Exception as e:
+                console.print(Panel(f"Failed to send transaction: {e}", style="red"))
+                return
+        else:
+            console.print(Panel("DRY-RUN (no send). To send on mainnet, re-run with --live (and ensure you understand the risks).", style="yellow"))
+    except Exception as e:
+        console.print(Panel(f"Simulation RPC error: {e}", style="red"))
+        return
         console.print("Simulating transaction...")
         try:
             # Prefer passing a VersionedTransaction object for simulation when available

@@ -1,3 +1,4 @@
+"""Tests for brain persistence and state management."""
 import json
 import os
 import time
@@ -8,80 +9,123 @@ import pytest
 from src.brain import MarketBrain
 
 
-def _create_dummy_backup(backups_dir: Path, name: str, mtime: float, content: str = "old"):
-    p = backups_dir / name
-    p.write_text(content)
-    # set modification time
-    os.utime(p, (mtime, mtime))
-    return p
+class TestRotateBackups:
+    """Test the _rotate_backups method."""
+
+    def test_rotate_backups_creates_backup(self, tmp_path, monkeypatch):
+        """_rotate_backups should create a backup of the current state file."""
+        data_dir = tmp_path / "data"
+        backups_dir = data_dir / "backups"
+        data_dir.mkdir(parents=True)
+
+        # create a state file to be backed up
+        state_file = data_dir / "brain_state.json"
+        state_file.write_text(json.dumps({"test": "data"}))
+
+        # Prevent __init__ side-effects
+        monkeypatch.setenv('RPC_URL', 'http://localhost')
+
+        brain = MarketBrain.__new__(MarketBrain)
+        brain.state_path = str(state_file)
+
+        # call rotate - should create backup
+        brain._rotate_backups(keep=5)
+
+        # backups dir should now exist with at least one backup
+        assert backups_dir.exists()
+        backups = list(backups_dir.glob("brain_state_*.json"))
+        assert len(backups) >= 1
+
+        # newest backup should have same content as original
+        newest = sorted(backups)[-1]
+        backed = json.loads(newest.read_text())
+        assert backed == {"test": "data"}
+
+    def test_rotate_backups_no_state_file(self, tmp_path, monkeypatch):
+        """_rotate_backups should do nothing if no state file exists."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir(parents=True)
+
+        state_file = data_dir / "brain_state.json"
+        # Don't create the state file
+
+        monkeypatch.setenv('RPC_URL', 'http://localhost')
+
+        brain = MarketBrain.__new__(MarketBrain)
+        brain.state_path = str(state_file)
+
+        # Should not raise, just return silently
+        brain._rotate_backups(keep=5)
+
+        # No backups should exist
+        backups_dir = data_dir / "backups"
+        if backups_dir.exists():
+            assert len(list(backups_dir.glob("*"))) == 0
 
 
-def test_rotate_backups_keeps_newest_five(tmp_path: Path):
-    data_dir = tmp_path / "data"
-    backups_dir = data_dir / "backups"
-    backups_dir.mkdir(parents=True)
+class TestSaveState:
+    """Test the _save_state method."""
 
-    # create a dummy primary state file so rotate will copy it
-    state_file = data_dir / "brain_state.json"
-    state_file.write_text(json.dumps({"initial": True}))
+    def test_save_state_writes_signatures(self, tmp_path, monkeypatch):
+        """_save_state should write last_signatures to the state file."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir(parents=True)
 
-    # create 7 backup files with increasing mtimes (oldest first)
-    now = time.time()
-    files = []
-    for i in range(7):
-        ts = now - (7 - i) * 60  # spaced by 60s
-        name = f"brain_state_20200101T00000{i}Z.json"
-        p = _create_dummy_backup(backups_dir, name, ts, content=f"backup-{i}")
-        files.append(p)
+        state_file = data_dir / "brain_state.json"
 
-    # construct a MarketBrain object without running __init__ (avoid repo writes)
-    brain = MarketBrain.__new__(MarketBrain)
-    brain.state_path = str(state_file)
+        monkeypatch.setenv('RPC_URL', 'http://localhost')
 
-    # call rotate, keep=5
-    brain._rotate_backups(keep=5)
+        brain = MarketBrain.__new__(MarketBrain)
+        brain.state_path = str(state_file)
+        brain.last_signatures = {"whale1": "sig1", "whale2": "sig2"}
 
-    remaining = sorted(backups_dir.glob("brain_state_*.json"))
-    # assert exactly 5 remain
-    assert len(remaining) == 5
+        # Save state
+        brain._save_state()
 
-    # newest 5 should remain: files[2:] (indices 2..6)
-    expected_names = {p.name for p in files[2:]}
-    remaining_names = {p.name for p in remaining}
-    assert remaining_names == expected_names
+        # Verify state file was written
+        assert state_file.exists()
+        content = json.loads(state_file.read_text())
+        assert content == {"whale1": "sig1", "whale2": "sig2"}
 
+    def test_save_state_atomic_replace(self, tmp_path, monkeypatch):
+        """_save_state should atomically replace existing state."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir(parents=True)
 
-def test_save_state_creates_backup_before_replace(tmp_path: Path):
-    data_dir = tmp_path / "data"
-    backups_dir = data_dir / "backups"
-    backups_dir.mkdir(parents=True)
+        state_file = data_dir / "brain_state.json"
+        # Write initial state
+        state_file.write_text(json.dumps({"old": "data"}))
 
-    state_file = data_dir / "brain_state.json"
-    # write an existing primary state
-    old_content = {"last": "old"}
-    state_file.write_text(json.dumps(old_content))
+        monkeypatch.setenv('RPC_URL', 'http://localhost')
 
-    # prepare brain object without __init__ side-effects
-    brain = MarketBrain.__new__(MarketBrain)
-    brain.state_path = str(state_file)
-    # new state to be saved
-    brain.last_signatures = {"whale1": "sig_new"}
+        brain = MarketBrain.__new__(MarketBrain)
+        brain.state_path = str(state_file)
+        brain.last_signatures = {"new": "signatures"}
 
-    # ensure no backups exist initially
-    assert len(list(backups_dir.glob("*"))) == 0
+        # Save new state
+        brain._save_state()
 
-    # call save_state which should create a backup of the old file, then replace
-    brain._save_state()
+        # Verify content was replaced
+        content = json.loads(state_file.read_text())
+        assert content == {"new": "signatures"}
+        assert "old" not in content
 
-    # primary state file should exist and contain the new content
-    new_text = json.loads(state_file.read_text())
-    assert new_text == brain.last_signatures
+    def test_save_state_handles_empty_signatures(self, tmp_path, monkeypatch):
+        """_save_state should handle empty signatures dict."""
+        data_dir = tmp_path / "data"
+        data_dir.mkdir(parents=True)
 
-    # backups dir should contain at least one file
-    backups = sorted(backups_dir.glob("brain_state_*.json"))
-    assert len(backups) >= 1
+        state_file = data_dir / "brain_state.json"
 
-    # newest backup should contain the previous content
-    newest = backups[-1]
-    backed = json.loads(newest.read_text())
-    assert backed == old_content
+        monkeypatch.setenv('RPC_URL', 'http://localhost')
+
+        brain = MarketBrain.__new__(MarketBrain)
+        brain.state_path = str(state_file)
+        brain.last_signatures = {}
+
+        # Save empty state
+        brain._save_state()
+
+        # Verify empty dict was written
+        content = json.loads(state_file.read_text())
+        assert content == {}

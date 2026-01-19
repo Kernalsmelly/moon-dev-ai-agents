@@ -53,7 +53,9 @@ async def test_heartbeat_time_warp(tmp_path, monkeypatch):
     async def fake_sleep(seconds):
         # record call and return immediately
         sleep_calls.append(seconds)
-        await asyncio.sleep(0)  # yield to event loop
+        # Use run_in_executor to yield control without invoking asyncio.sleep
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: None)
         return None
 
     monkeypatch.setattr(brain_mod.asyncio, 'sleep', fake_sleep)
@@ -131,7 +133,10 @@ async def test_heartbeat_handles_corrupt_csv(tmp_path, monkeypatch):
 
     # patch sleep to fast-forward
     async def fake_sleep(seconds):
-        await asyncio.sleep(0)
+        # yield to the event loop without calling asyncio.sleep to avoid
+        # recursive monkeypatch interactions
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: None)
         return None
 
     monkeypatch.setattr(brain_mod.asyncio, 'sleep', fake_sleep)

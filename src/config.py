@@ -3,9 +3,138 @@
 Built with love by Moon Dev 🚀
 """
 import os
+import json
+import threading
+import time
 
-# Prefer environment-provided RPC URL (set in .env or shell). Falls back to project defaults.
-RPC_URL = os.getenv("RPC_URL") or os.getenv("RPC_ENDPOINT")
+# Prefer environment-provided RPC URL (set in .env or shell). If provided we
+# honor it and do not auto-promote a PRIMARY from the pool. If not provided
+# we'll attempt to load the PRIMARY entry from `config/rpc_pool.json` which is
+# produced by the health-check script. A background watcher will hot-reload
+# the pool and update `RPC_URL` at runtime when the file changes.
+_env_rpc = os.getenv("RPC_URL") or os.getenv("RPC_ENDPOINT")
+
+# Module-level pool and selection exposed for other modules to read.
+RPC_POOL: list[dict] = []  # list of pool entry dicts as in rpc_pool.json
+RPC_POOL_PATH = None
+RPC_URL = None
+
+
+def _load_rpc_pool_file() -> list[dict]:
+    """Read `config/rpc_pool.json` and return the pool list (deduped).
+
+    Returns an empty list if the file is missing or cannot be parsed.
+    """
+    try:
+        base = os.path.dirname(os.path.dirname(__file__))
+        pool_path = os.path.join(base, 'config', 'rpc_pool.json')
+        global RPC_POOL_PATH
+        RPC_POOL_PATH = pool_path
+        if not os.path.exists(pool_path):
+            return []
+        with open(pool_path, 'r', encoding='utf-8') as fh:
+            obj = json.load(fh)
+        pool = []
+        seen = set()
+        for entry in obj.get('pool', []):
+            if not isinstance(entry, dict):
+                continue
+            url = entry.get('url')
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            pool.append(entry)
+        return pool
+    except Exception:
+        return []
+
+
+def _apply_rpc_pool(pool: list[dict]):
+    """Apply a newly-loaded pool to module-level variables.
+
+    If an explicit RPC URL was provided via environment, that value is
+    preserved and the pool is not used to override it.
+    """
+    global RPC_POOL, RPC_URL
+    RPC_POOL = pool or []
+    # If user explicitly set RPC via env, respect that and do not override.
+    if _env_rpc:
+        RPC_URL = _env_rpc
+    else:
+        # pick first pool entry url if available, otherwise fallback to devnet
+        if RPC_POOL and isinstance(RPC_POOL, list) and len(RPC_POOL) > 0:
+            first = RPC_POOL[0]
+            if isinstance(first, dict):
+                RPC_URL = first.get('url') or os.getenv('RPC_URL') or os.getenv('RPC_ENDPOINT')
+        if not RPC_URL:
+            RPC_URL = os.getenv('RPC_URL') or os.getenv('RPC_ENDPOINT') or 'https://api.devnet.solana.com'
+
+
+# initial load
+_apply_rpc_pool(_load_rpc_pool_file())
+
+
+def _watch_rpc_pool_file(poll_interval: float = 2.0):
+    """Background thread that watches `rpc_pool.json` for changes and
+    reloads the in-memory pool so other modules pick up changes without a
+    process restart.
+    """
+    try:
+        last_mtime = None
+        if not RPC_POOL_PATH:
+            base = os.path.dirname(os.path.dirname(__file__))
+            RP = os.path.join(base, 'config', 'rpc_pool.json')
+        else:
+            RP = RPC_POOL_PATH
+        while True:
+            try:
+                if os.path.exists(RP):
+                    m = os.path.getmtime(RP)
+                    if last_mtime is None:
+                        last_mtime = m
+                    elif m != last_mtime:
+                        # changed -> reload
+                        pool = _load_rpc_pool_file()
+                        _apply_rpc_pool(pool)
+                        last_mtime = m
+                time.sleep(poll_interval)
+            except Exception:
+                time.sleep(poll_interval)
+    except Exception:
+        # thread should die silently on unexpected errors
+        return
+
+
+# Start watcher thread only if no explicit RPC env is set (we shouldn't
+# override a user-specified RPC_URL) and when running in a real environment.
+# Tests and some CI environments may not want background threads; allow
+# disabling via RPC_POOL_WATCHER_ENABLED=0 or 'false'. Default is enabled.
+try:
+    watcher_enabled = os.getenv('RPC_POOL_WATCHER_ENABLED', '1')
+    enabled_flag = str(watcher_enabled).lower() not in ('0', 'false', 'no')
+except Exception:
+    enabled_flag = True
+
+if not _env_rpc and enabled_flag:
+    try:
+        t = threading.Thread(target=_watch_rpc_pool_file, daemon=True, name='rpc-pool-watcher')
+        t.start()
+    except Exception:
+        pass
+
+# Constructed provider URLs (Hydra / Multi-provider integration)
+# These prefer explicit env vars if present, otherwise build from API keys.
+HELIUS_API_KEY = os.getenv('HELIUS_API_KEY', '')
+HELIUS_URL = os.getenv('HELIUS_URL') or (f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}" if HELIUS_API_KEY else '')
+
+CHAINSTACK_API_KEY = os.getenv('CHAINSTACK_API_KEY', '')
+CHAINSTACK_URL = os.getenv('CHAINSTACK_URL') or (f"https://solana-mainnet.core.chainstack.com/{CHAINSTACK_API_KEY}" if CHAINSTACK_API_KEY else '')
+
+ANKR_API_KEY = os.getenv('ANKR_API_KEY', '')
+ANKR_URL = os.getenv('ANKR_URL') or (f"https://rpc.ankr.com/solana/{ANKR_API_KEY}" if ANKR_API_KEY else '')
+
+ALCHEMY_API_KEY = os.getenv('ALCHEMY_API_KEY', '')
+ALCHEMY_URL = os.getenv('ALCHEMY_URL') or (f"https://solana-mainnet.g.alchemy.com/v2/{ALCHEMY_API_KEY}" if ALCHEMY_API_KEY else '')
 
 # 🔄 Exchange Selection
 EXCHANGE = 'solana'  # Options: 'solana', 'hyperliquid'
@@ -111,6 +240,12 @@ AI_TEMPERATURE = 0.7  # Creativity vs precision (0-1)
 ENABLE_STRATEGIES = True  # Set this to True to use strategies
 STRATEGY_MIN_CONFIDENCE = 0.7  # Minimum confidence to act on strategy signals
 
+# Paper / Live trading toggles
+# Ensure paper trading by default for safety; allow realtime data
+# to still be used for signals and telemetry.
+LIVE_TRADING_ENABLED = False
+USE_REAL_TIME_DATA = True
+
 # Sleep time between main agent runs
 SLEEP_BETWEEN_RUNS_MINUTES = 15  # How long to sleep between agent runs 🕒
 
@@ -156,4 +291,47 @@ WATCHLIST_PATH = os.getenv('WATCHLIST_PATH', 'watchlist.json')
 # relative to the repository data directory. Tests should override this to a
 # temp path for hermetic runs.
 EXECUTION_LOG_PATH = os.getenv('EXECUTION_LOG_PATH', 'data/execution_events.csv')
+
+# Jito tipping strategy: 'adaptive' will attempt to fetch recent tip percentiles
+# to bid competitively; 'fixed' uses JITO_DEFAULT_TIP_LAMPORTS.
+JITO_TIP_STRATEGY = os.getenv('JITO_TIP_STRATEGY', 'adaptive')
+# Default tip lamports used as fallback when adaptive data is unavailable
+JITO_DEFAULT_TIP_LAMPORTS = int(os.getenv('JITO_DEFAULT_TIP_LAMPORTS', '10000'))
+# API endpoint (optional) that returns recent tip amounts as JSON list for percentile calculation
+JITO_TIP_API_URL = os.getenv('JITO_TIP_API_URL', '')
+# percentile to target when adaptive (e.g., 95 means 95th percentile)
+JITO_TIP_PERCENTILE = int(os.getenv('JITO_TIP_PERCENTILE', '95'))
+
+# Minimum SOL balance (in SOL) required to allow Salami exits / tip payments.
+# If the running wallet falls below this, Salami exits will be disabled to
+# preserve a 'moonbag' for fees/tips. Default is 0.01 SOL.
+MIN_TRADE_BALANCE_SOL = float(os.getenv('MIN_TRADE_BALANCE_SOL', '0.01'))
+
+
+# Pydantic-backed Jito configuration for validation and safety caps
+try:
+    from pydantic import BaseModel, Field
+
+    class JitoConfig(BaseModel):
+        tip_strategy: str = Field(os.getenv('JITO_TIP_STRATEGY', 'adaptive'))
+        default_tip_lamports: int = Field(int(os.getenv('JITO_DEFAULT_TIP_LAMPORTS', '10000')), le=100_000_000)
+        tip_api_url: str = Field(os.getenv('JITO_TIP_API_URL', ''))
+        percentile: int = Field(int(os.getenv('JITO_TIP_PERCENTILE', '95')))
+        tip_receiver: str = Field(os.getenv('JITO_TIP_RECEIVER', ''))
+
+    try:
+        JITO = JitoConfig()
+    except Exception:
+        # Fall back to safe defaults if validation fails
+        JITO = JitoConfig()
+
+    # Backwards-compatible module-level names
+    JITO_TIP_STRATEGY = JITO.tip_strategy
+    JITO_DEFAULT_TIP_LAMPORTS = int(JITO.default_tip_lamports)
+    JITO_TIP_API_URL = JITO.tip_api_url
+    JITO_TIP_PERCENTILE = int(JITO.percentile)
+    JITO_TIP_RECEIVER = JITO.tip_receiver
+except Exception:
+    # pydantic not available or something else failed — keep existing raw values
+    pass
 

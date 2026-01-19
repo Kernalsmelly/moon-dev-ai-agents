@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import asyncio
 import os
-from solana.rpc.async_api import AsyncClient
 from solders.pubkey import Pubkey
+from src.brain import MarketBrain
 
 async def scan():
     addr = 'GikBZnDSKa1M1TN84J8dtCqkkor7wUpGoV7nZcg5Zfpi'
@@ -12,13 +12,18 @@ async def scan():
     }
     for name, url in clusters.items():
         try:
-            async with AsyncClient(url) as client:
-                res = await client.get_balance(Pubkey.from_string(addr))
-                bal = getattr(res, 'value', None)
-                if bal is None:
-                    print(f'{name} Balance: <no result>')
-                else:
-                    print(f'{name} Balance: {bal / 10**9} SOL')
+            brain = MarketBrain(rpc=url)
+            resp = await brain._call_rpc('getBalance', [addr])
+            bal = None
+            if isinstance(resp, dict):
+                bal = resp.get('result', {}).get('value') or resp.get('value')
+            else:
+                bal = resp
+
+            if bal is None:
+                print(f'{name} Balance: <no result>')
+            else:
+                print(f'{name} Balance: {int(bal) / 10**9} SOL')
         except Exception as e:
             print(f'{name} Balance: ERROR - {e}')
 

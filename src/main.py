@@ -15,6 +15,15 @@ import src.config as config
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
+# Register global MarketBrain shield early so repo-local AsyncClient imports
+# will delegate through the shield. This helps ensure all modules get routed
+# through the centralized RPC caller even if they import the local shim.
+try:
+    from src.brain import MarketBrain
+    MarketBrain.register_global_shield()
+except Exception:
+    pass
+
 # Import agents
 from src.agents.trading_agent import TradingAgent  # noqa: E402
 from src.agents.risk_agent import RiskAgent  # noqa: E402

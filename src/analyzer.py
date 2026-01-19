@@ -19,7 +19,51 @@ except Exception:
     raise
 
 from rich.console import Console
-from rich.table import Table
+try:
+    from rich.table import Table
+except Exception:
+    # Provide a minimal Table fallback for environments where the
+    # full `rich.table` is not importable (tests/CI may use a
+    # lightweight shim). This mirrors the small Table used by the
+    # local shim in the repository.
+    class Table:
+        def __init__(self, title=None):
+            self.title = title
+            self._columns = []
+            self._rows = []
+
+        def add_column(self, name, justify=None):
+            self._columns.append((name, justify or "left"))
+
+        def add_row(self, *cells):
+            self._rows.append(list(cells))
+
+        def __str__(self):
+            cols = [c[0] for c in self._columns]
+            widths = [len(c) for c in cols]
+            for row in self._rows:
+                for i, cell in enumerate(row):
+                    s = str(cell)
+                    if i >= len(widths):
+                        widths.append(len(s))
+                    else:
+                        widths[i] = max(widths[i], len(s))
+
+            parts = []
+            if self.title:
+                parts.append(self.title)
+            if cols:
+                header = " | ".join(c.ljust(widths[i]) for i, c in enumerate(cols))
+                parts.append(header)
+                parts.append("-" * len(header))
+
+            for row in self._rows:
+                line_parts = []
+                for i, cell in enumerate(row):
+                    line_parts.append(str(cell).ljust(widths[i]))
+                parts.append(" | ".join(line_parts))
+
+            return "\n".join(parts)
 from rich.panel import Panel
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"

@@ -31,13 +31,17 @@ os.makedirs(DATA_DIR, exist_ok=True)
 async def check_balance_ok(rpc: str, min_remaining_lamports: int = int(0.05 * 1e9), spend_lamports: int = 0):
     """Check wallet balance and ensure min_remaining after spend."""
     key = te.load_key()
-    async with AsyncClient(rpc) as client:
-        try:
-            bal = await client.get_balance(key.pubkey())
-            bal_val = getattr(bal, 'value', None) or (bal.get('result', {}).get('value') if isinstance(bal, dict) else None)
-            bal_lamports = int(bal_val) if bal_val is not None else None
-        except Exception:
-            bal_lamports = None
+    brain = MarketBrain(rpc=rpc)
+    try:
+        bal = await brain._call_rpc('getBalance', [str(key.pubkey())])
+        bal_val = None
+        if isinstance(bal, dict):
+            bal_val = bal.get('result', {}).get('value') or bal.get('value')
+        else:
+            bal_val = bal
+        bal_lamports = int(bal_val) if bal_val is not None else None
+    except Exception:
+        bal_lamports = None
 
     if bal_lamports is None:
         console.print(Panel('Could not determine wallet balance; aborting simulation for safety.', style='red'))
@@ -68,146 +72,162 @@ async def simulate_swap_and_log(rpc: str, spike: dict, amount_sol: float = 0.1, 
         ok, bal = await check_balance_ok(rpc, spend_lamports=lamports)
         if not ok:
             return False
+    except Exception as e:
+        console.print(Panel(f'Failed to prepare quote/safety checks: {e}', style='red'))
+        return False
 
     # Input mint is WSOL for SOL trades
     WSOL_MINT_LITERAL = "So11111111111111111111111111111111111111112"
     quote = await te.get_jupiter_quote(WSOL_MINT_LITERAL, mint, lamports, te.DEFAULT_SLIPPAGE_BPS)
-        if not quote:
-            console.print(Panel('No quote received from Jupiter; skipping.', style='yellow'))
-            return False
+    if not quote:
+        console.print(Panel('No quote received from Jupiter; skipping.', style='yellow'))
+        return False
 
-        # extract expected out amount from quote (robust to shapes)
-        out_amount_raw = quote.get('outAmount') or quote.get('out_amount') or quote.get('out') or quote.get('outAmountRaw')
+    # extract expected out amount from quote (robust to shapes)
+    out_amount_raw = quote.get('outAmount') or quote.get('out_amount') or quote.get('out') or quote.get('outAmountRaw')
+    expected_out_raw = None
+    try:
+        if out_amount_raw is not None:
+            expected_out_raw = int(out_amount_raw)
+    except Exception:
         expected_out_raw = None
-        try:
-            if out_amount_raw is not None:
-                expected_out_raw = int(out_amount_raw)
-        except Exception:
-            expected_out_raw = None
 
-        # Convert expected_out to SOL when possible. Prefer precise conversion using
-        # price information from the quote when output mint is not SOL.
-        expected_out_sol = None
-        try:
-            WSOL_MINT_LITERAL = "So11111111111111111111111111111111111111112"
-            if expected_out_raw is not None:
-                if mint == WSOL_MINT_LITERAL:
-                    expected_out_sol = float(expected_out_raw) / 1e9
-                else:
-                    # try to get a price from the quote (SOL per token)
-                    price = None
-                    for k in ('price', 'priceUsd', 'price_in', 'tokenPrice'):
-                        try:
-                            v = quote.get(k)
-                            if v is not None:
-                                price = float(v)
-                                break
-                        except Exception:
-                            continue
+    # Convert expected_out to SOL when possible. Prefer precise conversion using
+    # price information from the quote when output mint is not SOL.
+    expected_out_sol = None
+    try:
+        WSOL_MINT_LITERAL = "So11111111111111111111111111111111111111112"
+        if expected_out_raw is not None:
+            if mint == WSOL_MINT_LITERAL:
+                expected_out_sol = float(expected_out_raw) / 1e9
+            else:
+                # try to get a price from the quote (SOL per token)
+                price = None
+                for k in ('price', 'priceUsd', 'price_in', 'tokenPrice'):
+                    try:
+                        v = quote.get(k)
+                        if v is not None:
+                            price = float(v)
+                            break
+                    except Exception:
+                        continue
 
-                    if price is not None and price > 0:
-                        # heuristically infer token decimals from the raw amount
-                        decimals = 0
-                        try:
-                            if expected_out_raw % 1_000_000_000 == 0:
-                                decimals = 9
-                            elif expected_out_raw % 1_000_000 == 0:
-                                decimals = 6
-                            else:
-                                # fallback guess
-                                decimals = 6
-                        except Exception:
+                if price is not None and price > 0:
+                    # heuristically infer token decimals from the raw amount
+                    decimals = 0
+                    try:
+                        if expected_out_raw % 1_000_000_000 == 0:
+                            decimals = 9
+                        elif expected_out_raw % 1_000_000 == 0:
                             decimals = 6
+                        else:
+                            # fallback guess
+                            decimals = 6
+                    except Exception:
+                        decimals = 6
 
-                        token_amount = float(expected_out_raw) / (10 ** decimals)
-                        # price is assumed to be SOL per token unit
-                        expected_out_sol = token_amount * float(price)
-                    else:
-                        # no price info — leave as unknown (conservative)
-                        expected_out_sol = 0.0
+                    token_amount = float(expected_out_raw) / (10 ** decimals)
+                    # price is assumed to be SOL per token unit
+                    expected_out_sol = token_amount * float(price)
+                else:
+                    # no price info — leave as unknown (conservative)
+                    expected_out_sol = 0.0
 
-        except Exception:
-            expected_out_sol = None
+    except Exception:
+        expected_out_sol = None
 
-        # request swap transaction (simulatable blob)
-        swap_resp = await te.get_jupiter_swap(quote, user_pubkey=str(te.load_key().pubkey()), wrap_and_unwrap=True)
-        swap_tx_b64 = swap_resp.get('swapTransaction')
-        if not swap_tx_b64:
-            console.print(Panel(f"No swapTransaction in swap response: {swap_resp}", style='red'))
-            return False
+    # request swap transaction (simulatable blob)
+    swap_resp = await te.get_jupiter_swap(quote, user_pubkey=str(te.load_key().pubkey()), wrap_and_unwrap=True)
+    swap_tx_b64 = swap_resp.get('swapTransaction')
+    if not swap_tx_b64:
+        console.print(Panel(f"No swapTransaction in swap response: {swap_resp}", style='red'))
+        return False
 
+    import base64
+    from solders.transaction import VersionedTransaction
+
+    swap_tx_bytes = base64.b64decode(swap_tx_b64)
+    try:
+        tx1 = VersionedTransaction.from_bytes(swap_tx_bytes)
+    except Exception as e:
+        console.print(Panel(f"Failed to decode VersionedTransaction: {e}", style='red'))
+        return False
+
+    # Prepend compute budget if available
+    try:
+        if te.ComputeBudgetProgram is not None:
+            limit_ix = te.ComputeBudgetProgram.set_compute_unit_limit(200_000)
+            price_ix = te.ComputeBudgetProgram.set_compute_unit_price(int(os.getenv('PRIORITY_FEE', '10000')))
+            if hasattr(tx1.message, 'instructions'):
+                tx1.message.instructions = [limit_ix, price_ix] + list(tx1.message.instructions)
+    except Exception:
+        pass
+
+    key = te.load_key()
+    vtx = VersionedTransaction(tx1.message, [key])
+
+    # simulate via MarketBrain shield
+    brain = MarketBrain(rpc=rpc)
+    try:
         import base64
-        from solders.transaction import VersionedTransaction
-
-        swap_tx_bytes = base64.b64decode(swap_tx_b64)
-        try:
-            tx1 = VersionedTransaction.from_bytes(swap_tx_bytes)
-        except Exception as e:
-            console.print(Panel(f"Failed to decode VersionedTransaction: {e}", style='red'))
-            return False
-
-        # Prepend compute budget if available
-        try:
-            if te.ComputeBudgetProgram is not None:
-                limit_ix = te.ComputeBudgetProgram.set_compute_unit_limit(200_000)
-                price_ix = te.ComputeBudgetProgram.set_compute_unit_price(int(os.getenv('PRIORITY_FEE', '10000')))
-                if hasattr(tx1.message, 'instructions'):
-                    tx1.message.instructions = [limit_ix, price_ix] + list(tx1.message.instructions)
-        except Exception:
-            pass
-
-        key = te.load_key()
-        vtx = VersionedTransaction(tx1.message, [key])
-
-        # simulate
-        async with AsyncClient(rpc) as client:
+        b64 = base64.b64encode(bytes(vtx)).decode()
+        # Prefer using MarketBrain._call_rpc when available (tests sometimes
+        # inject simple FakeBrain instances that lack _call_rpc). If absent,
+        # fall back to the orchestrator AsyncClient (tests patch this object).
+        if hasattr(brain, '_call_rpc') and callable(getattr(brain, '_call_rpc')):
             try:
-                sim = await client.simulate_transaction(vtx)
+                sim = await brain._call_rpc('simulateTransaction', [b64, {"encoding": "base64"}])
             except Exception:
-                # fallback to raw bytes
+                sim = await brain._call_rpc('simulateTransaction', [bytes(vtx)])
+        else:
+            # use local AsyncClient (test harness may patch orch.AsyncClient)
+            async with AsyncClient(rpc) as client:
                 try:
                     sim = await client.simulate_transaction(bytes(vtx))
-                except Exception as e:
-                    console.print(Panel(f"Simulation RPC failed: {e}", style='red'))
-                    return False
+                except Exception:
+                    try:
+                        sim = await client.simulate_transaction(b64)
+                    except Exception as e:
+                        console.print(Panel(f"Simulation RPC failed: {e}", style='red'))
+                        return False
+    except Exception as e:
+        console.print(Panel(f"Simulation RPC failed: {e}", style='red'))
+        return False
 
-        sim_val = getattr(sim, 'value', sim)
-        units = None
-        err = None
-        if isinstance(sim_val, dict):
-            units = sim_val.get('unitsConsumed') or (sim_val.get('result') or {}).get('value', {}).get('unitsConsumed')
-            err = sim_val.get('err') or (sim_val.get('result') or {}).get('value', {}).get('err')
-        else:
-            units = getattr(sim_val, 'units_consumed', None) or getattr(sim_val, 'unitsConsumed', None)
-            err = getattr(sim_val, 'err', None)
+    sim_val = getattr(sim, 'value', sim)
+    units = None
+    err = None
+    if isinstance(sim_val, dict):
+        units = sim_val.get('unitsConsumed') or (sim_val.get('result') or {}).get('value', {}).get('unitsConsumed')
+        err = sim_val.get('err') or (sim_val.get('result') or {}).get('value', {}).get('err')
+    else:
+        units = getattr(sim_val, 'units_consumed', None) or getattr(sim_val, 'unitsConsumed', None)
+        err = getattr(sim_val, 'err', None)
 
-        if err:
-            console.print(Panel(f"SIMULATION failed: {err}", style='red'))
-            success = False
-        else:
-            console.print(Panel(f"SIMULATION SUCCESS — unitsConsumed: {units}", style='green'))
-            success = True
+    if err:
+        console.print(Panel(f"SIMULATION failed: {err}", style='red'))
+        success = False
+    else:
+        console.print(Panel(f"SIMULATION SUCCESS — unitsConsumed: {units}", style='green'))
+        success = True
 
-        # Log to CSV: timestamp, mint, name, volume_pct, expected_out_raw, expected_out_sol,
-        # input_amount_sol, units, balance, success, alpha_score, whale_multiplier
-        ts = datetime.utcnow().isoformat() + 'Z'
-        header_needed = not os.path.exists(ALPHA_CSV)
-        with open(ALPHA_CSV, 'a', newline='') as fh:
-            writer = csv.writer(fh)
-            if header_needed:
-                writer.writerow([
-                    'ts', 'mint', 'name', 'volume_pct', 'expected_out_raw', 'expected_out_sol',
-                    'input_amount_sol', 'unitsConsumed', 'balance_lamports', 'success', 'alpha_score', 'whale_multiplier', 'exit_type'
-                ])
-            alpha_score = spike.get('alpha_score') if spike and isinstance(spike, dict) else None
-            whale_mult = spike.get('whale_multiplier') if spike and isinstance(spike, dict) else None
-            exit_type = spike.get('exit_type') if spike and isinstance(spike, dict) else None
-            writer.writerow([ts, mint, name, pct, expected_out_raw, expected_out_sol, input_amount_sol, units, bal, success, alpha_score, whale_mult, exit_type])
+    # Log to CSV: timestamp, mint, name, volume_pct, expected_out_raw, expected_out_sol,
+    # input_amount_sol, units, balance, success, alpha_score, whale_multiplier
+    ts = datetime.utcnow().isoformat() + 'Z'
+    header_needed = not os.path.exists(ALPHA_CSV)
+    with open(ALPHA_CSV, 'a', newline='') as fh:
+        writer = csv.writer(fh)
+        if header_needed:
+            writer.writerow([
+                'ts', 'mint', 'name', 'volume_pct', 'expected_out_raw', 'expected_out_sol',
+                'input_amount_sol', 'unitsConsumed', 'balance_lamports', 'success', 'alpha_score', 'whale_multiplier', 'exit_type'
+            ])
+        alpha_score = spike.get('alpha_score') if spike and isinstance(spike, dict) else None
+        whale_mult = spike.get('whale_multiplier') if spike and isinstance(spike, dict) else None
+        exit_type = spike.get('exit_type') if spike and isinstance(spike, dict) else None
+        writer.writerow([ts, mint, name, pct, expected_out_raw, expected_out_sol, input_amount_sol, units, bal, success, alpha_score, whale_mult, exit_type])
 
-        return success
-    finally:
-        # no global mutation performed
-        pass
+    return success
 
 
 async def check_daily_pnl():

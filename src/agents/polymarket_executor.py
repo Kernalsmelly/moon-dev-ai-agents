@@ -33,15 +33,20 @@ else:
 
 # Try to import official py-clob-client in a forgiving way
 ClobClient = None
+ApiCreds = None
 try:
-    # Common layout: clob.client.ClobClient
-    from clob.client import ClobClient  # type: ignore
-except Exception:
+    # Official py-clob-client package
+    from py_clob_client.client import ClobClient
+    from py_clob_client.clob_types import ApiCreds
+except ImportError:
     try:
-        # Alternative import path: clob.ClobClient
-        from clob import ClobClient  # type: ignore
+        # Fallback: alternative import paths
+        from clob.client import ClobClient  # type: ignore
     except Exception:
-        ClobClient = None
+        try:
+            from clob import ClobClient  # type: ignore
+        except Exception:
+            ClobClient = None
 
 
 class PolymarketExecutor:
@@ -77,7 +82,16 @@ class PolymarketExecutor:
             try:
                 if not self.dry_run and self.private_key:
                     # Initialize the client only when not in dry-run to avoid accidental live orders
-                    self.client = ClobClient(host=self.host, key=self.private_key, chain_id=self.chain_id)
+                    # py-clob-client v0.34+ uses ApiCreds for auth
+                    self.client = ClobClient(
+                        host=self.host,
+                        chain_id=self.chain_id,
+                        key=self.private_key,
+                        signature_type=2,  # POLY_GNOSIS_SAFE for most users
+                        funder=os.getenv("FUNDER_ADDRESS"),  # Optional
+                    )
+                    # Get/set API credentials
+                    self.client.set_api_creds(self.client.create_or_derive_api_creds())
                     cprint(f"✅ ClobClient initialized (host={self.host}, chain_id={self.chain_id})", "green")
                 else:
                     cprint("ℹ️ Executor initialized in dry-run mode (no live orders will be submitted)", "cyan")

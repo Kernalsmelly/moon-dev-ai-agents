@@ -19,7 +19,7 @@ from solders.pubkey import Pubkey
 from solders.message import MessageV0
 from solders.system_program import transfer as sp_transfer, TransferParams as SPTransferParams
 from solders.transaction import VersionedTransaction
-from solana.rpc.async_api import AsyncClient
+from src.brain import MarketBrain
 from solana.rpc.types import TxOpts
 
 console = Console()
@@ -56,38 +56,49 @@ async def bridge(funder_b58: str, recipient: str, amount_sol: float = 0.5, rpc: 
 
     console.print(Panel(f"Bridge: {amount_sol} SOL from {payer_pub} -> {recipient}", title="Internal Bridge"))
 
-    async with AsyncClient(rpc) as client:
-        # Show funder balance
-        try:
-            bal = await client.get_balance(payer_pub)
-            b = getattr(bal, 'value', None)
-            console.print(f"Funder balance (lamports): {b}")
-            if not b or int(b) < lamports + 1000:
-                console.print(Panel("Funder does not have enough SOL to send. Aborting.", style="red"))
-                return 2
-        except Exception as e:
-            console.print(Panel(f"Failed to fetch funder balance: {e}", style="red"))
-            return 3
+    brain = MarketBrain(rpc=rpc)
 
-        # Get latest blockhash
-        try:
-            lb = await client.get_latest_blockhash()
-            recent = None
-            try:
-                recent = lb.value.blockhash
-            except Exception:
-                recent = getattr(lb, 'value', None)
-                if isinstance(recent, dict):
-                    recent = recent.get('blockhash')
-        except Exception as e:
-            console.print(Panel(f"Failed to fetch latest blockhash: {e}", style="red"))
-            return 4
+    # Show funder balance
+    try:
+        bal = await brain._call_rpc('getBalance', [str(payer_pub)])
+        b = None
+        if isinstance(bal, dict):
+            b = bal.get('result', {}).get('value') or bal.get('value')
+        else:
+            b = bal
+        console.print(f"Funder balance (lamports): {b}")
+        if not b or int(b) < lamports + 1000:
+            console.print(Panel("Funder does not have enough SOL to send. Aborting.", style="red"))
+            return 2
+    except Exception as e:
+        console.print(Panel(f"Failed to fetch funder balance: {e}", style="red"))
+        return 3
 
+    # Get latest blockhash
+    try:
+        lb = await brain._call_rpc('getLatestBlockhash', [])
+        recent = None
+        if isinstance(lb, dict):
+            res = lb.get('result') or lb
+            if isinstance(res, dict):
+                val = res.get('value') or res.get('result')
+                if isinstance(val, dict):
+                    recent = val.get('blockhash') or val.get('blockHash')
+        # fallback
         if not recent:
-            console.print(Panel("No recent blockhash available. Aborting.", style="red"))
-            return 5
+            try:
+                recent = lb.get('value', {}).get('blockhash') if isinstance(lb, dict) else None
+            except Exception:
+                recent = None
+    except Exception as e:
+        console.print(Panel(f"Failed to fetch latest blockhash: {e}", style="red"))
+        return 4
 
-        # Build instruction and MessageV0
+    if not recent:
+        console.print(Panel("No recent blockhash available. Aborting.", style="red"))
+        return 5
+
+    # Build instruction and MessageV0
         instr = sp_transfer(SPTransferParams(from_pubkey=payer_pub, to_pubkey=recipient_pub, lamports=lamports))
         try:
             msg = MessageV0.try_compile(payer_pub, [instr], [], recent)
@@ -105,8 +116,15 @@ async def bridge(funder_b58: str, recipient: str, amount_sol: float = 0.5, rpc: 
 
         console.print("Sending transaction...")
         try:
-            send_resp = await client.send_raw_transaction(signed_bytes, opts=TxOpts(skip_preflight=False))
-            sig = getattr(send_resp, 'value', send_resp)
+            # send via MarketBrain shield using sendTransaction RPC (base64 encoded)
+            import base64
+            b64 = base64.b64encode(signed_bytes).decode()
+            resp = await brain._call_rpc('sendTransaction', [b64, {'skipPreflight': False}])
+            sig = None
+            if isinstance(resp, dict):
+                sig = resp.get('result') or resp.get('value') or resp.get('signature')
+            else:
+                sig = resp
             console.print(Panel(f"Bridge tx signature: {sig}", style="green"))
         except Exception as e:
             console.print(Panel(f"Failed to send transaction: {e}", style="red"))
@@ -116,9 +134,13 @@ async def bridge(funder_b58: str, recipient: str, amount_sol: float = 0.5, rpc: 
         console.print("Waiting for confirmation (short poll)...")
         for i in range(12):
             try:
-                resp = await client.get_signature_statuses([sig])
-                st = getattr(resp, 'value', None)
-                if st and st[0] is not None:
+                resp = await brain._call_rpc('getSignatureStatuses', [[sig]])
+                st = None
+                if isinstance(resp, dict):
+                    st = resp.get('result', {}).get('value') or resp.get('value')
+                else:
+                    st = resp
+                if st and isinstance(st, list) and st[0] is not None:
                     console.print(Panel(f"Bridge confirmed: {st[0]}", style="green"))
                     return 0
             except Exception:

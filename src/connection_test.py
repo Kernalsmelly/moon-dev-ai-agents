@@ -8,8 +8,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
-from solana.rpc.async_api import AsyncClient
 from solders.pubkey import Pubkey
+from src.brain import MarketBrain
 
 import os
 import sys
@@ -32,12 +32,15 @@ async def run_check():
     table.add_column("Check", style="cyan", no_wrap=True)
     table.add_column("Result", style="magenta")
 
-    async with AsyncClient(rpc) as client:
+    # Use MarketBrain shield for RPC checks
+    brain = MarketBrain(rpc=rpc)
+    try:
+        # connectivity check via getHealth
         try:
-            connected = await client.is_connected()
-        except Exception as e:
+            h = await brain._call_rpc('getHealth', [])
+            connected = True
+        except Exception:
             connected = False
-            table.add_row("is_connected()", f"Error: {e}")
 
         if connected:
             table.add_row("is_connected()", "✅ Connected")
@@ -46,8 +49,12 @@ async def run_check():
 
         # Block height
         try:
-            bh_resp = await client.get_block_height()
-            bh = bh_resp.value if hasattr(bh_resp, 'value') else bh_resp
+            bh_resp = await brain._call_rpc('getBlockHeight', [])
+            bh = None
+            if isinstance(bh_resp, dict):
+                bh = bh_resp.get('result') or bh_resp.get('value') or bh_resp
+            else:
+                bh = bh_resp
             table.add_row("block_height", str(bh))
         except Exception as e:
             table.add_row("block_height", f"Error: {e}")
@@ -58,10 +65,14 @@ async def run_check():
         else:
             try:
                 pub = Pubkey.from_string(address)
-                bal_resp = await client.get_balance(pub)
-                bal = bal_resp.value if hasattr(bal_resp, 'value') else bal_resp
+                bal_resp = await brain._call_rpc('getBalance', [str(pub)])
+                bal = None
+                if isinstance(bal_resp, dict):
+                    bal = bal_resp.get('result', {}).get('value') or bal_resp.get('value')
+                else:
+                    bal = bal_resp
                 # balance is in lamports
-                sol = int(bal) / 1e9
+                sol = int(bal) / 1e9 if bal is not None else 0
                 table.add_row("wallet_address", address)
                 table.add_row("balance_SOL", f"{sol:.9f} SOL ({bal} lamports)")
             except Exception as e:

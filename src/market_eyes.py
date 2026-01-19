@@ -16,7 +16,7 @@ from rich.table import Table
 from rich.panel import Panel
 
 import httpx
-from solana.rpc.async_api import AsyncClient
+from src.brain import MarketBrain
 
 # make repo root importable when running the script directly
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -82,7 +82,7 @@ async def main():
     last_slot = None
     circulating_sol = None
 
-    # Reuse both HTTP client and RPC client for speed
+    # Reuse HTTP client for price APIs and MarketBrain shield for RPCs
     async with httpx.AsyncClient(timeout=10.0) as http_client:
         # Primary price source: CoinGecko (priority flip)
         try:
@@ -102,40 +102,40 @@ async def main():
             except Exception:
                 price = None
 
-        # Reuse AsyncClient for RPC calls across trials
-        async with AsyncClient(rpc) as client:
-            # capture last_slot and circulating supply once
-            try:
-                slot_resp = await client.get_slot()
-                last_slot = getattr(slot_resp, "value", slot_resp)
-            except Exception:
-                last_slot = None
+        # Use MarketBrain shield for RPC interactions
+        brain = MarketBrain(rpc=rpc)
+        # capture last_slot and circulating supply once via JSON-RPC
+        try:
+            slot_resp = await brain._call_rpc('getSlot', [])
+            last_slot = slot_resp.get('result') if isinstance(slot_resp, dict) else slot_resp
+        except Exception:
+            last_slot = None
 
-            try:
-                supply_resp = await client.get_supply()
-                supply_val = getattr(supply_resp, "value", supply_resp)
-                circ = None
-                if isinstance(supply_val, dict):
-                    circ = supply_val.get("circulating")
-                else:
-                    circ = getattr(supply_val, "circulating", None)
-                if circ is not None:
-                    try:
-                        circulating_sol = int(circ) / 1e9
-                    except Exception:
-                        circulating_sol = None
-            except Exception:
-                circulating_sol = None
-
-            # Speed test: measure get_latest_blockhash latency across trials
-            for i in range(trials):
+        try:
+            supply_resp = await brain._call_rpc('getSupply', [])
+            supply_val = supply_resp.get('result', {}).get('value') if isinstance(supply_resp, dict) else supply_resp
+            circ = None
+            if isinstance(supply_val, dict):
+                circ = supply_val.get('circulating')
+            else:
+                circ = getattr(supply_val, 'circulating', None)
+            if circ is not None:
                 try:
-                    t0 = time.perf_counter()
-                    _ = await client.get_latest_blockhash()
-                    t1 = time.perf_counter()
-                    rpc_latencies.append((t1 - t0) * 1000)
+                    circulating_sol = int(circ) / 1e9
                 except Exception:
-                    rpc_latencies.append(float("inf"))
+                    circulating_sol = None
+        except Exception:
+            circulating_sol = None
+
+        # Speed test: measure getLatestBlockhash latency across trials using the brain shield
+        for i in range(trials):
+            try:
+                t0 = time.perf_counter()
+                _ = await brain._call_rpc('getLatestBlockhash', [])
+                t1 = time.perf_counter()
+                rpc_latencies.append((t1 - t0) * 1000)
+            except Exception:
+                rpc_latencies.append(float('inf'))
 
     # take min latency as requested
     rpc_latency_ms = min(rpc_latencies) if rpc_latencies else None

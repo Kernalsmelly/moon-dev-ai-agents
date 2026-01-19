@@ -1,0 +1,6 @@
+--- ENV PROBE START ---
+PYTHON: Python 3.9.6
+which pip: /usr/bin/pip3
+which pytest: none
+which python3: /usr/bin/python3
+--- PYTHON IMPORT CHECK ---

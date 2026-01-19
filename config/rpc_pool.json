@@ -1,0 +1,265 @@
+{
+  "generated_at": 1768460627.512834,
+  "pool": [
+    {
+      "label": "PRIMARY",
+      "url": "https://solana-mainnet.core.chainstack.com/2bb46d42f69ffea65683a9521123b323",
+      "avg_latency_ms": 79.695,
+      "success_getHealth": true,
+      "success_getLatestBlockhash": true
+    },
+    {
+      "label": "BACKUP_1",
+      "url": "https://mainnet.helius-rpc.com/?api-key=aa118d76-b23f-42fe-a25d-5289afaddad5",
+      "avg_latency_ms": 137.17,
+      "success_getHealth": true,
+      "success_getLatestBlockhash": true
+    },
+    {
+      "label": "BACKUP_2",
+      "url": "https://solana-mainnet.g.alchemy.com/v2/SvtEhMMoeXyNIy0WARnZn",
+      "avg_latency_ms": 136.95,
+      "success_getHealth": true,
+      "success_getLatestBlockhash": true
+    }
+  ],
+  "raw": [
+    {
+      "url": "https://solana-mainnet.core.chainstack.com/2bb46d42f69ffea65683a9521123b323",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 190.3,
+      "resp_getHealth": {
+        "jsonrpc": "2.0",
+        "result": "ok",
+        "id": 1
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 78.28,
+      "resp_getLatestBlockhash": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "3.0.14",
+            "slot": 393613302
+          },
+          "value": {
+            "blockhash": "2EQ9dpj1DfnFeKqbXS1gN39KNTpVgdQyrihTTAKu9TKU",
+            "lastValidBlockHeight": 371742558
+          }
+        },
+        "id": 1
+      },
+      "avg_latency_ms": 134.29000000000002
+    },
+    {
+      "url": "https://mainnet.helius-rpc.com/?api-key=aa118d76-b23f-42fe-a25d-5289afaddad5",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 160.9,
+      "resp_getHealth": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "result": "ok"
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 113.44,
+      "resp_getLatestBlockhash": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "3.0.13",
+            "slot": 393613302
+          },
+          "value": {
+            "blockhash": "2EQ9dpj1DfnFeKqbXS1gN39KNTpVgdQyrihTTAKu9TKU",
+            "lastValidBlockHeight": 371742558
+          }
+        },
+        "id": 1
+      },
+      "avg_latency_ms": 137.17000000000002
+    },
+    {
+      "url": "https://rpc.ankr.com/solana/a595bea18549e6382363387d6a5c6ba68fe48db79f569e424f9c767a9191ef24",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 254.39,
+      "resp_getHealth": {
+        "error": "message: API key is not allowed to access blockchain, json-rpc code: -32052, rest code: 403"
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 49.65,
+      "resp_getLatestBlockhash": {
+        "error": "message: API key is not allowed to access blockchain, json-rpc code: -32052, rest code: 403"
+      },
+      "avg_latency_ms": 152.01999999999998
+    },
+    {
+      "url": "https://solana-mainnet.g.alchemy.com/v2/SvtEhMMoeXyNIy0WARnZn",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 239.37,
+      "resp_getHealth": {
+        "jsonrpc": "2.0",
+        "result": "ok",
+        "id": 1
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 63.92,
+      "resp_getLatestBlockhash": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "3.0.12",
+            "slot": 393613301
+          },
+          "value": {
+            "blockhash": "5FJFZoys1gzSP27RqDNV4b2Bpqy4UvfJmAU7A1VggRUL",
+            "lastValidBlockHeight": 371742557
+          }
+        },
+        "id": 1
+      },
+      "avg_latency_ms": 151.645
+    },
+    {
+      "url": "https://solana-mainnet.core.chainstack.com/2bb46d42f69ffea65683a9521123b323",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 72.71,
+      "resp_getHealth": {
+        "jsonrpc": "2.0",
+        "result": "ok",
+        "id": 1
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 86.68,
+      "resp_getLatestBlockhash": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "3.0.14",
+            "slot": 393613302
+          },
+          "value": {
+            "blockhash": "2EQ9dpj1DfnFeKqbXS1gN39KNTpVgdQyrihTTAKu9TKU",
+            "lastValidBlockHeight": 371742558
+          }
+        },
+        "id": 1
+      },
+      "avg_latency_ms": 79.695
+    },
+    {
+      "url": "https://rpc.ankr.com/solana/a595bea18549e6382363387d6a5c6ba68fe48db79f569e424f9c767a9191ef24",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 63.94,
+      "resp_getHealth": {
+        "error": "message: API key is not allowed to access blockchain, json-rpc code: -32052, rest code: 403"
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 64.92,
+      "resp_getLatestBlockhash": {
+        "error": "message: API key is not allowed to access blockchain, json-rpc code: -32052, rest code: 403"
+      },
+      "avg_latency_ms": 64.43
+    },
+    {
+      "url": "https://mainnet.helius-rpc.com/?api-key=c319d383-e894-4ead-906e-c080f21ab803",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 173.94,
+      "resp_getHealth": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "result": "ok"
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 60.69,
+      "resp_getLatestBlockhash": {
+        "jsonrpc": "2.0",
+        "error": {
+          "code": -32401,
+          "message": "Invalid API key"
+        }
+      },
+      "avg_latency_ms": 117.315
+    },
+    {
+      "url": "https://solana-mainnet.g.alchemy.com/v2/SvtEhMMoeXyNIy0WARnZn",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 204.75,
+      "resp_getHealth": {
+        "jsonrpc": "2.0",
+        "result": "ok",
+        "id": 1
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 69.15,
+      "resp_getLatestBlockhash": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "3.0.12",
+            "slot": 393613303
+          },
+          "value": {
+            "blockhash": "5BwE45t45pukhdt36w47xSNPsApVKpFb4EAvZKJdG5bs",
+            "lastValidBlockHeight": 371742559
+          }
+        },
+        "id": 1
+      },
+      "avg_latency_ms": 136.95
+    },
+    {
+      "url": "https://solana-devnet.g.alchemy.com/v2/SvtEhMMoeXyNIy0WARnZn",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 491.94,
+      "resp_getHealth": {
+        "jsonrpc": "2.0",
+        "result": "ok",
+        "id": 1
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 189.85,
+      "resp_getLatestBlockhash": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "3.0.6",
+            "slot": 435271104
+          },
+          "value": {
+            "blockhash": "755R5NpUgQZn69JDJZG1qt8kz4jrJhkPvZyYLSPE1Lj8",
+            "lastValidBlockHeight": 423180744
+          }
+        },
+        "id": 1
+      },
+      "avg_latency_ms": 340.895
+    },
+    {
+      "url": "https://solana-devnet.g.alchemy.com/v2/SvtEhMMoeXyNIy0WARnZn",
+      "success_getHealth": true,
+      "rtt_getHealth_ms": 509.22,
+      "resp_getHealth": {
+        "jsonrpc": "2.0",
+        "result": "ok",
+        "id": 1
+      },
+      "success_getLatestBlockhash": true,
+      "rtt_getLatestBlockhash_ms": 196.85,
+      "resp_getLatestBlockhash": {
+        "jsonrpc": "2.0",
+        "result": {
+          "context": {
+            "apiVersion": "3.0.6",
+            "slot": 435271104
+          },
+          "value": {
+            "blockhash": "755R5NpUgQZn69JDJZG1qt8kz4jrJhkPvZyYLSPE1Lj8",
+            "lastValidBlockHeight": 423180744
+          }
+        },
+        "id": 1
+      },
+      "avg_latency_ms": 353.035
+    }
+  ]
+}

@@ -57,8 +57,9 @@ async def test_flash_cache_deduplication(monkeypatch):
     # The underlying HTTP client should have been triggered exactly once
     assert call_count['n'] == 1
     # And the rate-limiter should have recorded a single reservation
-    assert isinstance(brain._birdeye_ts, list)
-    assert len(brain._birdeye_ts) == 1
+    # Use compatibility property that returns a list view of recent timestamps
+    assert isinstance(brain.birdeye_ts_list, list)
+    assert len(brain.birdeye_ts_list) == 1
 
 
 @pytest.mark.asyncio

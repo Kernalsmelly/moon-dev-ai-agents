@@ -25,14 +25,16 @@ aster_bots_path = '/Users/md/Dropbox/dev/github/Aster-Dex-Trading-Bots'
 if aster_bots_path not in sys.path:
     sys.path.insert(0, aster_bots_path)
 
-# Try importing Aster modules
+# Try importing Aster modules. If unavailable, mark as not available and
+# avoid exiting at import time so test collection remains unharmed.
+ASTER_AVAILABLE = True
 try:
     from aster_api import AsterAPI  # type: ignore
     from aster_funcs import AsterFuncs  # type: ignore
 except ImportError as e:
+    ASTER_AVAILABLE = False
     cprint(f"❌ Failed to import Aster modules: {e}", "red")
     cprint(f"Make sure Aster-Dex-Trading-Bots exists at: {aster_bots_path}", "yellow")
-    sys.exit(1)
 
 # Load environment variables
 load_dotenv()
@@ -41,15 +43,22 @@ load_dotenv()
 ASTER_API_KEY = os.getenv('ASTER_API_KEY')
 ASTER_API_SECRET = os.getenv('ASTER_API_SECRET')
 
-# Verify API keys are loaded
-if not ASTER_API_KEY or not ASTER_API_SECRET:
-    cprint("❌ ASTER API keys not found in .env file!", "red")
-    cprint("Please add ASTER_API_KEY and ASTER_API_SECRET to your .env file", "yellow")
-    sys.exit(1)
-
-# Initialize API
-api = AsterAPI(ASTER_API_KEY, ASTER_API_SECRET)
-funcs = AsterFuncs(api)
+# Initialize API only if modules and keys are available. Do not sys.exit
+# during import; scripts run as __main__ can still enforce exits.
+api = None
+funcs = None
+if ASTER_AVAILABLE:
+    if not ASTER_API_KEY or not ASTER_API_SECRET:
+        cprint("❌ ASTER API keys not found in .env file!", "red")
+        cprint("Please add ASTER_API_KEY and ASTER_API_SECRET to your .env file", "yellow")
+        ASTER_AVAILABLE = False
+    else:
+        try:
+            api = AsterAPI(ASTER_API_KEY, ASTER_API_SECRET)
+            funcs = AsterFuncs(api)
+        except Exception as e:
+            cprint(f"❌ Failed to initialize Aster API: {e}", "red")
+            ASTER_AVAILABLE = False
 
 # Configuration
 SYMBOL = 'BTCUSDT'
