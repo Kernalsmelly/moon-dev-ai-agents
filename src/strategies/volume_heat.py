@@ -12,6 +12,8 @@ and as an easy-to-integrate strategy building block.
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import src.config as config
 
 
 @dataclass
@@ -48,11 +50,53 @@ class VolumeHeatIndex:
             return 100 if vol_1m_f > 0 else 0
 
         ratio = vol_1m_f / per_min_avg
-        # normalize ratio to [0, max_ratio]
-        norm = max(0.0, min(ratio, self.max_ratio))
-        # map to 0..100
-        strength = int(round((norm / self.max_ratio) * 100.0))
+        # Session-aware dynamic thresholding: compute an effective maximum
+        # ratio that makes it proportionally harder/easier to reach full
+        # strength depending on the active market session. We expose a
+        # get_dynamic_threshold() helper below which returns a target score
+        # value (0-100) for the current UTC hour; translate that into an
+        # adjustment factor relative to the default baseline (55).
+        try:
+            effective_max = float(self.max_ratio)
+            if getattr(config, 'DYNAMIC_THRESHOLD', False):
+                # baseline score mapping uses 55 as the reference threshold
+                baseline = 55.0
+                dyn = float(self.get_dynamic_threshold())
+                # larger dyn -> harder to reach 100, so shrink effective_max
+                factor = baseline / dyn if dyn > 0 else 1.0
+                effective_max = float(self.max_ratio) * float(factor)
+        except Exception:
+            effective_max = float(self.max_ratio)
+
+        # normalize ratio to [0, effective_max]
+        norm = max(0.0, min(ratio, effective_max))
+        # map to 0..100 (scale by original max_ratio so higher effective_max
+        # reduces the mapped strength, making it harder during high-noise sessions)
+        try:
+            strength = int(round((norm / float(effective_max)) * 100.0))
+        except Exception:
+            strength = 0
         return max(0, min(100, strength))
+
+    def get_dynamic_threshold(self) -> int:
+        """Return a session-aware score threshold (0-100) based on UTC hour.
+
+        Rules:
+            - NY Open (13:00 - 16:00 UTC): 70
+            - Asia (00:00 - 08:00 UTC): 45
+            - All other times: 55
+        """
+        try:
+            now_h = datetime.now(timezone.utc).hour
+            # NY open roughly 13:00-16:00 UTC
+            if 13 <= now_h < 16:
+                return 70
+            # Asia session roughly midnight - 08:00 UTC
+            if 0 <= now_h < 8:
+                return 45
+            return 55
+        except Exception:
+            return 55
 
 
 if __name__ == '__main__':

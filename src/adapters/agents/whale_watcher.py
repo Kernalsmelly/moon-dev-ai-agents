@@ -218,16 +218,29 @@ class WhaleWatcher:
                                                 pass
                                     else:
                                         # sync callback: run in executor to avoid blocking
-                                        loop = asyncio.get_event_loop()
                                         try:
-                                            fut = loop.run_in_executor(None, self.callback, action)
-                                            # ensure_future returns a Task-like future we can register
+                                            loop = asyncio.get_running_loop()
+                                        except RuntimeError:
+                                            loop = None
+
+                                        if loop is not None:
                                             try:
-                                                self._create_tracked_task(asyncio.ensure_future(fut))
+                                                fut = loop.run_in_executor(None, self.callback, action)
+                                                # ensure_future returns a Task-like future we can register
+                                                try:
+                                                    self._create_tracked_task(asyncio.ensure_future(fut))
+                                                except Exception:
+                                                    pass
                                             except Exception:
                                                 pass
-                                        except Exception:
-                                            pass
+                                        else:
+                                            # No running event loop: best-effort background thread
+                                            import threading
+                                            try:
+                                                t = threading.Thread(target=self.callback, args=(action,), daemon=True)
+                                                t.start()
+                                            except Exception:
+                                                pass
                                 except Exception:
                                     pass
                         except Exception:

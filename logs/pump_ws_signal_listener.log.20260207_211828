@@ -1,0 +1,218 @@
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS error: received 1001 (going away) upstream went away; then sent 1001 (going away) upstream went away
+WS status: seen=1 backoff=0s
+WS status: seen=8 backoff=0s
+WS status: seen=9 backoff=0s
+WS status: seen=11 backoff=0s
+WS status: seen=12 backoff=0s
+WS status: seen=17 backoff=0s
+WS status: seen=22 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=25 backoff=0s
+WS status: seen=28 backoff=0s
+WS status: seen=32 backoff=0s
+WS status: seen=36 backoff=0s
+WS status: seen=36 backoff=0s
+WS status: seen=37 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=38 backoff=0s
+WS status: seen=42 backoff=0s
+WS status: seen=46 backoff=0s
+WS status: seen=48 backoff=0s
+WS status: seen=49 backoff=0s
+WS status: seen=52 backoff=0s
+WS status: seen=49 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=54 backoff=0s
+WS status: seen=50 backoff=0s
+WS status: seen=60 backoff=0s
+WS status: seen=53 backoff=0s
+WS status: seen=54 backoff=0s
+WS status: seen=64 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=64 backoff=0s
+WS status: seen=71 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=75 backoff=0s
+WS status: seen=82 backoff=0s
+WS status: seen=82 backoff=0s
+WS status: seen=82 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=83 backoff=0s
+WS status: seen=87 backoff=0s
+WS status: seen=87 backoff=0s
+WS status: seen=89 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=91 backoff=0s
+WS status: seen=95 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=99 backoff=0s
+WS status: seen=101 backoff=0s
+WS status: seen=101 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=104 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=107 backoff=0s
+WS status: seen=110 backoff=0s
+WS status: seen=111 backoff=0s
+WS status: seen=119 backoff=0s
+WS status: seen=123 backoff=0s
+WS status: seen=125 backoff=0s
+WS status: seen=125 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=129 backoff=0s
+WS status: seen=132 backoff=0s
+WS status: seen=133 backoff=0s
+WS status: seen=136 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=137 backoff=0s
+WS status: seen=139 backoff=0s
+WS status: seen=143 backoff=0s
+WS status: seen=149 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=153 backoff=0s
+WS status: seen=158 backoff=0s
+WS status: seen=162 backoff=0s
+WS status: seen=164 backoff=0s
+WS status: seen=165 backoff=0s
+WS status: seen=165 backoff=0s
+WS status: seen=167 backoff=0s
+WS status: seen=169 backoff=0s
+WS status: seen=169 backoff=0s
+WS status: seen=170 backoff=0s
+WS status: seen=170 backoff=0s
+WS status: seen=170 backoff=0s
+WS status: seen=172 backoff=0s
+WS status: seen=175 backoff=0s
+WS status: seen=176 backoff=0s
+WS status: seen=178 backoff=0s
+WS status: seen=181 backoff=0s
+WS status: seen=183 backoff=0s
+WS status: seen=184 backoff=0s
+WS status: seen=185 backoff=0s
+WS status: seen=186 backoff=0s
+WS status: seen=187 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=188 backoff=0s
+WS status: seen=190 backoff=0s
+WS status: seen=194 backoff=0s
+WS status: seen=196 backoff=0s
+WS status: seen=199 backoff=0s
+WS status: seen=202 backoff=0s
+WS status: seen=203 backoff=0s
+WS status: seen=204 backoff=0s
+WS status: seen=205 backoff=0s
+WS status: seen=206 backoff=0s
+WS status: seen=207 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=210 backoff=0s
+WS status: seen=217 backoff=0s
+WS status: seen=218 backoff=0s
+WS status: seen=220 backoff=0s
+WS status: seen=221 backoff=0s
+WS status: seen=221 backoff=0s
+WS status: seen=223 backoff=0s
+WS status: seen=223 backoff=0s
+WS status: seen=225 backoff=0s
+WS status: seen=229 backoff=0s
+WS status: seen=234 backoff=0s
+WS status: seen=235 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=237 backoff=0s
+WS status: seen=243 backoff=0s
+WS status: seen=244 backoff=0s
+WS status: seen=244 backoff=0s
+WS status: seen=246 backoff=0s
+WS status: seen=249 backoff=0s
+WS status: seen=249 backoff=0s
+WS status: seen=250 backoff=0s
+WS status: seen=252 backoff=0s
+WS status: seen=255 backoff=0s
+WS status: seen=255 backoff=0s
+WS error: sent 1011 (internal error) keepalive ping timeout; no close frame received
+WS status: seen=256 backoff=0s
+WS status: seen=257 backoff=0s
+WS status: seen=262 backoff=0s
+WS status: seen=264 backoff=0s
+WS status: seen=264 backoff=0s
+WS status: seen=266 backoff=0s
+WS status: seen=266 backoff=0s
+WS status: seen=266 backoff=0s
+WS status: seen=267 backoff=0s
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS error: $QUICKNODE_WSS_URL isn't a valid URI: scheme isn't ws or wss
+WS status: seen=267 backoff=0s
+WS status: seen=272 backoff=0s
+WS status: seen=273 backoff=0s
+WS status: seen=273 backoff=0s
+WS status: seen=274 backoff=0s
+WS status: seen=278 backoff=0s
+WS status: seen=279 backoff=0s
+WS status: seen=280 backoff=0s
+WS status: seen=281 backoff=0s
+env ws_url_starts_dollar=False quicknode_wss_set=True
+WS status: seen=281 backoff=0s
+WS status: seen=288 backoff=0s
+WS status: seen=290 backoff=0s
+WS status: seen=292 backoff=0s
+WS status: seen=296 backoff=0s
+WS status: seen=297 backoff=0s
+WS status: seen=298 backoff=0s
+WS status: seen=300 backoff=0s
+WS status: seen=300 backoff=0s
+WS status: seen=300 backoff=0s
+WS status: seen=302 backoff=0s
+WS status: seen=302 backoff=0s
+WS status: seen=303 backoff=0s
+WS status: seen=303 backoff=0s
+WS status: seen=304 backoff=0s
+WS status: seen=307 backoff=0s

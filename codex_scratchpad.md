@@ -1,0 +1,3331 @@
+# Codex Scratchpad
+
+This file tracks what went right, what went wrong, and how we should adjust across sessions. It is meant to be short, honest, and actionable.
+
+## Project Snapshot
+- Project: Solana Meme Token Execution Agent
+- Current goal: maintain a reliable signal pipeline without paid data while we validate strategy in paper mode.
+
+## Preferences (What the user likes)
+- Be direct, pragmatic, and specific.
+- Don’t ask the user to run terminal commands unless needed.
+- Keep momentum, show results, and avoid stalling on “blocked” items.
+
+## Mistakes / Missteps
+- Process management was inconsistent. Background jobs were started in ways that didn’t persist reliably, leading to false assumptions about running state.
+- `meme_onchain_signal_tracker` was running but not producing signals, and we didn’t verify it with a synthetic mint early enough.
+- WS assumptions were wrong for several providers; we spent time trying WS endpoints that do not support `logsSubscribe` or require paid tiers.
+
+## Corrections / Fixes Applied
+- Made the supervisor and pipeline entrypoints load `.env` so the bot actually runs in the intended mode when started from a clean shell.
+- Fixed WS indirection issues (dotenv values like `$QUICKNODE_WSS_URL`) by resolving them at runtime in `src/solana/helius_ws.py`.
+- Added an RPC rotation client (`src/solana/rpc_pool.py`) and generated `data/rpc_pool.json` via `scripts/key_health_check.py`.
+- Implemented a signal-first path: discovery comes from Pump WS logs, evaluation uses Jupiter quotes + RPC decimals (no DexScreener/Birdeye per-token calls).
+- Added outcome labeling to `data/signal_outcomes.jsonl` using Jupiter quotes (`scripts/signal_outcome_recorder.py`).
+- Added lightweight analysis tooling (`scripts/analyze_signal_outcomes.py`) to summarize expectancy by horizon/impact.
+
+## What Worked
+- QuickNode WSS accepts `logsSubscribe` and can stream Pump program logs for discovery.
+- RPC pool rotation keeps `getTransaction` and `getTokenSupply` calls from hard-failing when a single endpoint throttles.
+- “Signal-first” mode keeps discovery bounded (no “discover 60k tokens” loops).
+
+## What Didn’t Work
+- Free tiers throttle unpredictably; we must treat *all* external calls as budgeted and fall back/rotate aggressively.
+- Shell-style env indirection in `.env` (e.g. `$FOO`) caused WS URL misconfiguration until resolved/removed.
+
+## Open Questions
+- How to best derive “early demand” metrics cheaply (buy burst, unique wallets, SOL inflows) from Pump program txs without paid indexers.
+- What entry/exit parameter set maximizes expectancy under realistic slippage (paper uses quotes, not fills).
+
+## Decisions Made
+- Discovery: Pump program WS logs -> mint extraction -> JSONL signals.
+- Evaluation: Jupiter quote confirms tradability and bounds impact.
+- Stability: rotate RPC endpoints via `data/rpc_pool.json`.
+
+## Next Actions (Short)
+- Add a “burst activity” gate to discovery (min hits in a short window) so we don’t enter dead launches.
+- Use `scripts/analyze_signal_outcomes.py` to tune `MEME_SIGNAL_MAX_IMPACT_PCT`, confirmation thresholds, and position sizing.
+- Improve signal metrics to include early activity features (derived from txs) so scoring isn't “mostly impact”.
+
+## Session Footer
+Add a new entry at the bottom each session (keep it tight; link to files).
+
+### Entry Template
+- Date:
+- What went wrong (1-3):
+- What we changed (1-5):
+- What we learned (1-3):
+- What’s next (1-5):
+- Files touched:
+- Processes running:
+
+### Log
+- Date: 2026-02-07
+- What went wrong (1-3):
+- Process management was inconsistent and led to false assumptions about what was running.
+- Several WS endpoints didn’t support `logsSubscribe` on free tiers.
+- What we changed (1-5):
+- Moved to “signal-first” (Pump WS logs for discovery; Jupiter quotes for confirm/label).
+- Added RPC rotation and endpoint health tooling.
+- What we learned (1-3):
+- “Scan everything” discovery burns free tiers; event-driven discovery is mandatory.
+- What’s next (1-5):
+- Improve early-demand features and tune gates with labeled outcomes.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/codex_scratchpad.md`
+
+- Date: 2026-02-08
+- What went wrong (1-3):
+- Signals and outcomes had limited features, making it hard to tune entry/exit beyond impact and drift.
+- What we changed (1-5):
+- Added richer WS-derived early-demand features to Pump discovery (concentration, buy size stats, buy accel, time-to-first-sell).
+- Outcome recorder now preserves the full signal metrics object and can compute marketcap with minimal extra RPC load.
+- Analyzer now supports marketcap buckets, demand/concentration filters, and a conservative round-trip cost adjustment.
+- Signal-first scoring now incorporates early-demand metrics to move beyond impact-only selection.
+- What we learned (1-3):
+- After filtering for early demand and reasonable concentration, the best-looking horizons are around ~2-5 minutes; longer holds degrade.
+- What’s next (1-5):
+- Collect a larger sample of enriched outcomes, then tune gates and implement plateau-aware exits based on marketcap/curve behavior.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/pump_ws_signal_listener.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/signal_outcome_recorder.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/analyze_signal_outcomes.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/meme_bot.py`
+
+- Date: 2026-02-09
+- What went wrong (1-3):
+- Signal-first entries were starved by miscalibrated filters: `MEME_SIGNAL_MAX_IMPACT_PCT` was too tight and market cap filtering rejected most launches.
+- Signal-score reporting was broken because trades are recorded as realized `SELL` legs, but the report filtered to `BUY`.
+- What we changed (1-5):
+- Reduced quote probe size to avoid inflating impact (`MEME_SIGNAL_QUOTE_SOL=0.002`) and relaxed impact gate (`MEME_SIGNAL_MAX_IMPACT_PCT=0.35`).
+- Disabled confirmation for now to unblock trade flow (`MEME_CONFIRM_ENABLED=false`) and lowered min score to increase sample (`MEME_MIN_VHI_SCORE=25`).
+- Signal-first market cap filter now defaults to OFF unless explicitly configured (many Pump launches start far below 25k).
+- Pump WS signals now compute a real 0-100 `score` instead of a placeholder, and we persist signal score/tier into position state so exits can record it.
+- Fixed `scripts/meme_signal_outcome_report.py` to include realized trade legs (SELL) and use exit timestamps.
+- What we learned (1-3):
+- For early Solana launches, impact and market cap are not good hard filters; they’re better as sizing/exit inputs.
+- Persisting signal metadata at entry matters because launch-signal TTL can expire before exit.
+- What’s next (1-5):
+- Let the pipeline run to accumulate a few hundred labeled outcomes with realistic cost assumptions, then re-sweep gates.
+- Add a small “reason counter” dashboard from `data/meme_signal_debug.jsonl` to quickly spot starvation causes.
+- Revisit confirmation with lighter settings after we confirm baseline expectancy.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/pump_ws_signal_listener.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_signal_outcome_report.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/meme_exit_manager.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/meme_bot.py`
+
+- Date: 2026-02-10
+- What went wrong (1-3):
+- The live PAPER run was producing lots of trades but negative expectancy; last 120m was dominated by `MAX_LOSS_CAP` and `FAIL_FAST`.
+- Signal gates were too permissive when key demand metrics were missing, and most entries were at extremely low estimated market cap.
+- What we changed (1-5):
+- Persisted WS demand metrics (hits/buys/sells/unique/net SOL in/top buyer share/t_first_sell) into `PositionState` and trade metadata so we can tune with evidence.
+- Added a lightweight trade feature report (`scripts/meme_trade_feature_report.py`) and debug rollup (`scripts/meme_signal_debug_rollup.py`) for fast iteration.
+- Tightened signal-first gates in `.env`: require demand metrics, raise WS score floor, reduce max impact, add a minimum entry market cap.
+- Restarted the pipeline so new code/env applies.
+- What we learned (1-3):
+- Recent losses were concentrated in low market-cap entries; a simple min-mcap gate is a plausible first-order fix.
+- Without persisting per-entry signal features, we were blind to what the gates are actually selecting.
+- What’s next (1-5):
+- Let the new gates run until we have ~30-50 exits with feature-rich metadata, then bucket P&L by `signal_net_sol_in`, `signal_unique_buyers`, and `market_cap_entry`.
+- If `MAX_LOSS_CAP` still dominates, enable quote confirmation (`MEME_CONFIRM_ENABLED=true`) and reduce candidate evaluation budget.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/meme_bot.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/meme_exit_manager.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_trade_feature_report.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_signal_debug_rollup.py`
+- Provider “health” probes were misleading: some endpoints answered `getHealth` but were paywalled/unauthorized for real RPC methods.
+- RPC pool selection included endpoints that could not return `getLatestBlockhash`, causing flaky downstream behavior.
+- What we changed (1-5):
+- Added WS URL rotation support (`HELIUS_WS_URLS`) and made `run_multi_log_subscribe` resilient to downstream handler exceptions.
+- Added a minimal provider probe script (`scripts/provider_smoke_test.py`) and tightened RPC pool generation to require `getLatestBlockhash` success.
+- Updated RPC pool loader to only ingest endpoints proven usable via blockhash.
+- Added a Birdeye global cooldown when quota is exhausted (HTTP 200 + `success=false` case).
+- Tightened tail-risk controls (lower max loss; full exits on fail-fast and momentum dumps) and applied the latest gate sweep recommendations (higher net SOL inflow, tighter top-buyer concentration).
+- What we learned (1-3):
+- Free-tier Solana RPC “works” only if you validate real methods, not just `getHealth`.
+- Tail losses dominate: partial exits on “bad momentum” were leaving a residual bag that later hit max-loss.
+- What’s next (1-5):
+- Let the stricter gates run long enough to measure if expectancy improves (focus: fewer MAX_LOSS_CAP events).
+- Add a small daily report script that prints last N trades by exit_reason and by signal metrics thresholds.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/solana/helius_ws.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/solana/rpc_pool.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/brain.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/key_health_check.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/provider_smoke_test.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+
+- Date: 2026-02-08 23:26:36 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-12 09:20 PST
+- What went wrong (1-3):
+- Health output had no run-scoped funnel visibility, so we could not quickly tell "signals alive, prequote blocked" vs "discovery dead".
+- What we changed (1-5):
+- Added run-scoped funnel status to `scripts/meme_pipeline_health.py` (`run_id`, `last_debug_age_s`, `last_pass_prequote_age_s`).
+- Added optional Discord stall alerts (signal stall + prequote funnel stall) with cooldown.
+- Enabled health alert env knobs in `.env` and restarted `meme_pipeline_health.py` so new settings are active.
+- What we learned (1-3):
+- The fastest operational win right now is alerting on funnel stalls, not only PnL snapshots.
+- Run-scoped checks avoid false debugging conclusions from stale historical logs.
+- What's next (1-5):
+- Watch for first funnel-stall alerts and correlate with `meme_auto_attribution` reject buckets.
+- If alerts fire while WS emits are healthy, loosen one prequote gate at a time (single-lever).
+- Files touched:
+- scripts/meme_pipeline_health.py
+- .env
+- codex_handoff.md
+
+- Date: 2026-02-12 09:26 PST
+- What went wrong (1-3):
+- Debug funnel showed heavy re-checking of the same small mint set (high `pass_prequote` count with almost no unique mints).
+- What we changed (1-5):
+- Expanded `MEME_SIGNAL_REJECT_COOLDOWN_REASONS` in `.env` to include prequote/core/liquidity reject classes.
+- Updated `src/meme_bot.py` default reject-cooldown reason set to match.
+- Restarted `src/meme_bot.py` under supervisor (new run_id: `run_1770870010`).
+- What we learned (1-3):
+- The reject-cooldown class list is a major throughput control lever in signal-first mode.
+- What's next (1-5):
+- Observe whether unique mint throughput improves without increasing junk entries.
+
+- Date: 2026-02-12 10:12 PST
+- What went wrong (1-3):
+- Signal stream briefly stalled after listener restart; logs showed low/no fresh emissions and old-mint starvation.
+- Core-metric gate was rejecting on missing `market_cap` before hydration, creating avoidable funnel drop.
+- What we changed (1-5):
+- Set `PUMP_WS_USE_BLOCK_SUBSCRIBE=true` in `.env` and restarted pump listener.
+- Confirmed WS resumed with high-throughput stats (`emitted=6`, `eval=187`, `tx_calls=0`) and launch file growth.
+- Raised top-share caps to 0.50 at WS and prequote stages.
+- Added `MEME_SIGNAL_CORE_REQUIRE_MCAP_PREQUOTE=false` and updated `src/meme_bot.py` accordingly.
+- Restarted bot; new run `run_1770872956` now shows `pass_prequote -> reject_mcap_low` (no `reject_core_metrics` for missing mcap).
+- What we learned (1-3):
+- Block-subscribe mode is currently the best free-tier path: more discovery with lower HTTP RPC burn.
+- Core metric integrity should gate demand quality prequote, while mcap should be enforced post-hydration.
+- What's next (1-5):
+- Keep collecting this run; if rejects remain mostly `mcap_low`, maintain floor and wait for >=10k cohort rather than loosening floor.
+- Files touched:
+- .env
+- src/meme_bot.py
+- codex_handoff.md
+
+- Date: 2026-02-12 10:40 PST
+- What went wrong (1-3):
+- `blockSubscribe` path entered repeated stale sessions (`stale_ws_no_msgs_for=90s`), causing discovery downtime.
+- QuickNode WSS showed intermittent upstream disconnect behavior in direct WS tests.
+- What we changed (1-5):
+- Added auto fallback logic in `scripts/pump_ws_signal_listener.py`: after repeated stale block sessions, switch to logs mode.
+- Added `mode=block|logs` to WS status lines for faster diagnosis.
+- Set `.env` to run pump listener directly in logs mode (`PUMP_WS_USE_BLOCK_SUBSCRIBE=false`) with fallback enabled.
+- Pinned WS rotation to Syndica-only (`HELIUS_WS_URLS=$SYNDICA_WSS_URL`) for stability.
+- Removed `mcap_low/mcap_missing` from reject cooldown reasons so mcap-threshold candidates can be rechecked quickly.
+- Relaxed score-bypass top-share cap and lowered liquidity fallback net floor.
+- What we learned (1-3):
+- Discovery continuity is more important than theoretical tx-call efficiency; stable logs mode beats unstable block mode.
+- Current funnel is mostly `prequote_score` and `mcap_low`; this is the right place to tune next.
+- What's next (1-5):
+- Let `run_1770874133` gather fresh samples under stable WS logs mode.
+- Re-check run-scoped debug rollup in ~20-30 minutes and decide next single lever from actual reject mix.
+- Files touched:
+- scripts/pump_ws_signal_listener.py
+- .env
+- src/meme_bot.py
+- codex_handoff.md
+
+- Date: 2026-02-12 10:48 PST
+- What went wrong (1-3):
+- Unit test subset is significantly stale against current `MarketBrain` interface (15 failures) and can’t currently serve as a guardrail.
+- What we changed (1-5):
+- Ran offline walk-forward tuner: `scripts/meme_prequote_walkforward.py` (horizon 300, lookback 4000).
+- Applied recommended single lever: `MEME_SIGNAL_PREQUOTE_MIN_HITS=2` in `.env`.
+- Restarted bot under supervisor; new run id `run_1770874496`.
+- What we learned (1-3):
+- Walk-forward shows only marginal uplift; throughput/sampling is the current benefit, not immediate expectancy flip.
+- What's next (1-5):
+- Collect run-scoped samples on `run_1770874496`.
+- Repair stale tests in `tests/test_exit_logic.py` and `tests/test_rpc_resilience.py` so we can iterate safely without regressions.
+
+- Date: 2026-02-12 11:00 PST
+- What went wrong (1-3):
+- `MarketBrain` had a structural indentation regression: many critical methods were not class members.
+- `test_exit_logic` monitor tests were hanging due background monitor interaction in fast-sleep mode.
+- What we changed (1-5):
+- Re-scoped `src/brain.py` methods back into `MarketBrain` by fixing the misplaced helper boundary.
+- Fixed `_monitor_position_exits` iteration counter logic (no per-loop reset).
+- Added bounded shutdown waits in `shutdown()` (client close + task gather timeouts).
+- Updated `tests/test_exit_logic.py` to use `start_monitor=False` for deterministic unit behavior.
+- Re-ran guardrail suite: `tests/test_exit_logic.py`, `tests/test_session_stats.py`, `tests/test_rpc_resilience.py`.
+- Swapped deprecated coroutine check to `inspect.iscoroutinefunction` and confirmed the same suite still passes.
+- What we learned (1-3):
+- Keeping exit/RPC tests green materially de-risks rapid strategy iteration.
+- Test harness stability can be improved without waiting for market data and directly increases dev velocity.
+- What's next (1-5):
+- Add one more deterministic test set around signal-first gate flow (`mcap_low`, `prequote_score`, `liq_missing_signal`) to lock in current behavior while tuning.
+
+## 2026-02-11 Notes
+- Added continuous attribution: `scripts/meme_auto_attribution.py` (enabled via `MEME_AUTO_ATTRIBUTION=1`).
+- Supervisor WS detection now includes `HELIUS_WS_URLS` so WS rotation doesn’t disable WS discovery.
+- Pump WS listener reconnect loop now resets stale timers per reconnect attempt and applies a small reconnect backoff.
+- `scripts/key_health_check.py` now de-dupes RPC URLs when building `config/rpc_pool.json` rankings.
+- Added `codex_handoff.md` as a stable “where are we?” snapshot for future sessions.
+
+- Date: 2026-02-10 09:45:00 (local)
+- What went wrong (1-3):
+- P&L was dominated by occasional large losers (MAX_LOSS_CAP). Even with a USD loss cap configured, fast rugs can gap far past the cap between price samples.
+- Analysis scripts were inconsistent about timestamps (some used UTC ISO strings, others used local created_at), causing “no trades” false negatives.
+- What we changed (1-5):
+- Added global position-size clamps in `src/meme_bot.py` (`MEME_MAX_POSITION_USD`, `MEME_MAX_POSITION_LIQ_PCT`) to bound tail risk from gap-to-zero events.
+- Enabled those clamps in `.env`.
+- Fixed `scripts/meme_trade_feature_report.py` to window by `created_at` (local) and ignore 0-valued `signal_*` fields as “missing” in non-signal modes.
+- What we learned (1-3):
+- With meme coins, reducing tail risk is mostly about sizing and liquidity-relative caps; filters help but won’t eliminate instant rugs.
+- Always evaluate config changes with a run-scoped window (or at least a consistent timestamp field) to avoid confusing “it’s running” with “it’s improving”.
+- What's next (1-5):
+- Let the current run accumulate ~30-50 exits, then tune exactly one lever (entry thresholds vs exits) based on `meme_trade_feature_report.py`.
+- If MAX_LOSS_CAP still dominates after caps, raise liquidity/mcap floors or add additional entry-side sell-pressure constraints.
+- Files touched:
+- .env
+- scripts/meme_trade_feature_report.py
+- src/meme_bot.py
+
+- Date: 2026-02-11 10:35 (local)
+- What went wrong (1-3):
+- Prequote rejects were dominated by `prequote_score`, which hid whether hard demand gates were the actual blocker.
+- Launch signal stream still contained historical degraded rows (missing demand metrics), creating noise for analysis.
+- What we changed (1-5):
+- Added score-bypass logic in `src/meme_bot.py` so very strong explicit demand can pass prequote even when heuristic score is slightly low.
+- Added new prequote env controls for score bypass thresholds and top-buyer cap.
+- Updated `scripts/pump_ws_signal_listener.py` with `PUMP_SIGNAL_ALLOW_DEGRADED_EMIT` (default false) to stop emitting missing-metric signals.
+- Restarted `pump_ws_signal_listener.py` and `src/meme_bot.py` via supervisor.
+- What we learned (1-3):
+- The score gate should be secondary to explicit demand metrics; otherwise we over-filter due to heuristic drift.
+- Preventing degraded upstream emits simplifies downstream tuning and reduces wasted candidate evaluation.
+- What’s next (1-5):
+- Measure 2-4h post-change funnel counts (`prequote_score_bypass`, `pass_prequote`, `reject_mcap_low`) and trade quality.
+- If entries remain starved, tune only one lever next (likely `MEME_SIGNAL_PREQUOTE_MIN_SIGNAL_SCORE` or scout lane thresholds), then re-measure.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/meme_bot.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/pump_ws_signal_listener.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/codex_scratchpad.md`
+- Processes running:
+- meme_pipeline_supervisor + children (pump_ws_signal_listener, meme_bot, signal_outcome_recorder)
+
+- Date: 2026-02-11 19:07 (local)
+- What went wrong (1-3):
+- Score bypass thresholds were initially too strict to materially affect flow.
+- What we changed (1-5):
+- Re-tuned bypass thresholds in `.env` using outcome data: `hits>=4`, `buys>=3`, `unique_buyers>=4`, `net_sol_in>=1.0`.
+- Restarted `src/meme_bot.py` under supervisor so new prequote behavior is active.
+- What we learned (1-3):
+- In historical outcomes, low-score but strong-demand cohorts can still have positive 5m expectancy after costs; bypass should key off demand, not an extreme score.
+- What's next (1-5):
+- Collect 2-4h of post-change funnel data and verify `prequote_score_bypass` starts appearing.
+- If still starved, next single lever is lowering `MEME_SIGNAL_PREQUOTE_MIN_HITS` from 4 to 3 or enabling lightweight confirmation.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/codex_scratchpad.md`
+
+- Date: 2026-02-11 20:03 (local)
+- What went wrong (1-3):
+- While waiting for samples, we lacked a single run-scoped readiness signal that combines throughput, performance, and tail risk.
+- What we changed (1-5):
+- Added `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_live_readiness.py` (auto run-id, paper-only deployment gates).
+- Integrated readiness output into `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_auto_attribution.py`.
+- Restarted auto attribution worker so readiness snapshots are emitted every cycle.
+- What we learned (1-3):
+- Current run now shows early funnel movement (`pass_prequote` and `reject_prequote_net`), but still zero trades; readiness stays NO for correct reasons (sample size/win-rate).
+- What's next (1-5):
+- Keep collecting data on `run_1770868788`; next lever should target `reject_prequote_net` only if it remains dominant in subsequent cycles.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_live_readiness.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_auto_attribution.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/codex_scratchpad.md`
+
+- Date: 2026-02-11 20:11 (local)
+- What went wrong (1-3):
+- “Wait time” work lacked a formal go-live definition and quick offline gate-sensitivity check.
+- What we changed (1-5):
+- Added offline gate what-if tool: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_gate_whatif.py`.
+- Integrated gate what-if output into attribution loop (`meme_auto_attribution.py`).
+- Added formal go-live criteria doc: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/docs/meme_live_go_live_checklist.md`.
+- What we learned (1-3):
+- Current offline what-if shows no clear one-step gate improvement at h=300 with current cohort; best action is continue sampling under current settings.
+- What's next (1-5):
+- Keep collecting run-scoped events/trades; only tune when run-scoped data shows a dominant reject/loss mode.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_gate_whatif.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_auto_attribution.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/docs/meme_live_go_live_checklist.md`
+
+- Date: 2026-02-11 19:22 (local)
+- What went wrong (1-3):
+- Attribution/rollup tooling was mixing historical trades with the current run, creating misleading “progress” snapshots.
+- What we changed (1-5):
+- Added `--run-id/--auto-run-id` support to:
+  - `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_signal_debug_rollup.py`
+  - `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_signal_outcome_report.py`
+  - `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_exit_only_tuner.py`
+  - `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_trade_feature_report.py`
+- Updated `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_auto_attribution.py` to call trade feature report with `--auto-run-id`.
+- Restarted `meme_auto_attribution.py` under supervisor.
+- Ran offline exit sweep (`scripts/meme_exit_sweep.py`) on `data/meme_snapshots.jsonl`: all 12 tested exit variants were similarly poor (net PnL around -$785), confirming edge issue is mostly entry quality, not TP/trailing knobs.
+- What we learned (1-3):
+- Run-scoped reporting is mandatory; otherwise we overfit to stale history.
+- Exit-only tuning has low leverage compared to discovery/entry gating on this dataset.
+- What's next (1-5):
+- Keep live run collecting; use run-scoped debug funnel every 30–60 min and only make one entry-gate adjustment at a time.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_signal_debug_rollup.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_signal_outcome_report.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_exit_only_tuner.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_trade_feature_report.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_auto_attribution.py`
+
+- Date: 2026-02-11 19:42 (local)
+- What went wrong (1-3):
+- Current-run attribution was still thin; we needed more funnel visibility while waiting for trade samples.
+- What we changed (1-5):
+- Extended `meme_auto_attribution.py` to include run-scoped `meme_signal_debug_rollup.py` and `meme_signal_outcome_report.py` each cycle.
+- Tuned one entry lever: `MEME_SIGNAL_PREQUOTE_MAX_TOP_BUYER_SHARE` from `0.40` to `0.45` (historical outcome check suggested slightly better 5m expectancy with more flow).
+- Restarted `src/meme_bot.py` under supervisor (new run id now active).
+- What we learned (1-3):
+- Recent run funnel (before restart) showed major blockers: `reject_prequote_hits` and `reject_prequote_top_share`.
+- Small top-share relaxation is a controlled way to increase candidate throughput without broad gate loosening.
+- What's next (1-5):
+- Let this run collect fresh events; compare top-share reject rate and pass_prequote rate over next 1-2 attribution cycles before touching another lever.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_auto_attribution.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/codex_scratchpad.md`
+
+- Date: 2026-02-11 20:00 (local)
+- What went wrong (1-3):
+- Even with healthy WS flow, entries remained starved due sequential gates (`mcap_low` first, then `prequote_hits`).
+- What we changed (1-5):
+- Aligned market-cap floors to the user constraint (“no sub-10k”), lowering strict floors from 15k/25k to 10k:
+  - `MEME_SIGNAL_MIN_MCAP_USD=10000`
+  - `MEME_SIGNAL_PREQUOTE_MIN_MCAP_USD=10000`
+  - `MEME_SIGNAL_SCOUT_MIN_MCAP_USD=10000`
+  - `MEME_MIN_MCAP=10000`
+- Then reduced `MEME_SIGNAL_PREQUOTE_MIN_HITS` from `4` to `3` to improve throughput after mcap gating.
+- Restarted `src/meme_bot.py` after each single-lever env change.
+- What we learned (1-3):
+- The current regime can be throughput-starved even with valid signals if early gates are stacked too tightly.
+- One-lever tuning reveals true bottlenecks faster than broad config edits.
+- What's next (1-5):
+- Let `run_1770868788` accumulate fresh events/trades for at least 1-2 hours before the next gate adjustment.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/codex_scratchpad.md`
+
+- Date: 2026-02-10 01:32:30 PST
+- What went wrong (1-3):
+- Meme bot was entering many positions with `market_cap_entry=0` (unknown) and sub-$10k mcap; this violates the stated constraint and dominates the loss tail.
+- Signal-first mode was bypassing DexScreener-style liquidity/mcap/microstructure gates by default.
+- What we changed (1-5):
+- Implemented signal-first "hybrid Dex" hydration: cache DexScreener token metrics and require liquidity/mcap validation when in signal-first mode.
+- In signal-first mode, default `MEME_SIGNAL_MIN_MCAP_USD` to the global `MIN_MARKET_CAP_USD` unless explicitly overridden.
+- Disabled the unconditional signal-first early-return so hybrid mode continues into the standard Dex microstructure filters.
+- What we learned (1-3):
+- The single biggest controllable quality lever is refusing to trade when mcap/liquidity are unknown; those are the trades that inflate churn and MAX_LOSS_CAP events.
+- What's next (1-5):
+- Let the new run accumulate run-scoped exits and re-check performance by run_id (expect fewer trades, higher average quality).
+- Add run-scoped reporting for entry mcap/liquidity distributions and sub-threshold counts (quick sanity check that constraints are being honored).
+- Files touched:
+- src/meme_bot.py
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 00:50:00 PST
+- What went wrong (1-3):
+- Trade/position attribution was weak because `positions.metadata` was getting overwritten on updates (run_id + entry features were being wiped).
+- RPC/WSS free-tier limits continue to be the bottleneck; QuickNode is hard-limited, Chainstack quota exhausted, DRPC methods paywalled, Ankr key blocked.
+- What we changed (1-5):
+- `src/position_store.py` now merges metadata on UPDATE instead of replacing it.
+- `src/meme_bot.py` restore now carries forward entry microstructure fields if present in store metadata.
+- `src/meme_bot.py` writes a redacted run manifest to `data/meme_runs/<run_id>.json` so iteration can be run-scoped without guessing.
+- RPC pool now prefers `config/rpc_pool.json` (gitignored) and supervisor defaults to that path.
+- Added `scripts/meme_run_report.py` to generate a run_id-scoped markdown report from `data/positions.db`.
+- What we learned (1-3):
+- Without durable per-trade metadata, we end up tuning blind; preserving run_id + entry features is non-negotiable.
+- Free-tier providers are fine for PAPER iteration if we aggressively avoid WS-heavy methods; they are not fine for on-chain discovery at scale.
+- What's next (1-5):
+- Let the bot run without restarts until we have ~50-100 run-scoped trades, then tune using `scripts/meme_run_report.py`.
+- Decide whether to enable scale-in by default for high-WR baselines.
+- Files touched:
+- /Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/position_store.py
+- /Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/meme_bot.py
+- /Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_pipeline_supervisor.py
+- /Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_run_report.py
+- /Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.gitignore
+
+- Date: 2026-02-08 23:31:25 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+
+- Date: 2026-02-10
+- What went wrong (1-3):
+- Paper performance (last 24h) was negative and dominated by tail losses: `MAX_LOSS_CAP` and `FAIL_FAST`.
+- Signal-first entries were being evaluated at a tiny quote size (`0.002 SOL`), which can hide real impact/fragility at actual position sizes.
+- What we changed (1-5):
+- Signal-first entry now quotes Jupiter at the intended `size_sol` before entering, and auto-scales size down when impact exceeds `MEME_ENTRY_MAX_IMPACT_PCT`.
+- Added a hard cap for signal-first entry risk: `MEME_SIGNAL_MAX_POSITION_USD` (default $6) to constrain tail loss while iterating.
+- Restarted the pipeline to ensure changes are applied to the running bot.
+- What we learned (1-3):
+- The fastest path to stopping bleed is position sizing realism (quote at intended size) plus hard caps, not more filters.
+- What’s next (1-5):
+- Let the new settings run for 30-60 minutes, then re-run `scripts/meme_trade_feature_report.py --minutes 60` and confirm `MAX_LOSS_CAP`/`FAIL_FAST` average loss shrinks materially.
+- If tail losses persist, implement probe-entry + scale-in (small initial size, add only after +X% in Y seconds).
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/src/meme_bot.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/codex_scratchpad.md`
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-08 23:37:49 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-08 23:39:02 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 00:57:34 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 17:08:36 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 17:11:34 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 17:13:06 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 17:23:32 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 17:29:49 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 17:30:43 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 18:41:03 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 18:51:52 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 18:55:16 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 18:57:45 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 19:01:27 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 19:05:06 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 19:08:03 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 19:12:56 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 19:26:37 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 20:06:33 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 20:09:42 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 21:10:26 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 21:22:12 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 21:23:02 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:12:00 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:14:47 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:15:28 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:16:06 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:18:52 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:22:13 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:24:25 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:28:41 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:30:51 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:34:15 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-09 23:38:54 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, GETBLOCK_RPC_URL:http_402, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 00:04:44 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- src/data/polymarket_micro/niche_markets.db-wal
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 01:00:57 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 01:30:48 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 10:06:57 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 16:23:22 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 16:23:38 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 20:21:03 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 21:46:00 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 22:21:27 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 22:21:55 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-10 22:24:00 PST
+- What went wrong (1-3):
+- Signal-first pipeline was dropping most candidates on `reject_liq_missing_signal`; winner model had too few valid attempts.
+- Signal score buckets are non-monotonic vs PnL, so high score alone is not enough.
+- What we changed (1-5):
+- Added guarded liquidity fallback estimator in `src/meme_bot.py` using hits/unique_buyers/net_sol_in (+ concentration penalties).
+- Added `liquidity_estimated` tracking to candidate and position state (`src/meme_bot.py`, `src/meme_exit_manager.py`).
+- Added estimated-liquidity size reduction via `MEME_SIGNAL_EST_LIQ_SIZE_MULT`.
+- Restarted supervisor stack to load new runtime.
+- What we learned (1-3):
+- Historical debug sample: 566 `reject_liq_missing_signal`; ~480 (~84.8%) would clear min-liq gate with current fallback formula.
+- Metadata completeness remains low; fallback is needed to keep flow moving while data quality recovers.
+- What's next (1-5):
+- Monitor `liquidity_fallback` and resulting entry outcomes for 2-6h.
+- Re-rank winner cohorts once new trades include `winner_score` + `liquidity_estimated`.
+- Tighten/loosen fallback thresholds based on realized PnL by fallback vs non-fallback entries.
+- Files touched:
+- src/meme_bot.py
+- src/meme_exit_manager.py
+
+- Date: 2026-02-10 22:33:30 PST
+- What went wrong (1-3):
+- After liquidity fallback, candidates were still blocked by `reject_uniq` (global min unique buyers).
+- Full replay ranking over all files is expensive due very large `data/` cardinality.
+- What we changed (1-5):
+- Added adaptive unique-buyer gate for estimated-liquidity candidates (`min_uniq_effective = min_uniq - 1`) in `src/meme_bot.py`.
+- Restarted bot through supervisor; new run id active (`run_1770791239`).
+- Added auto run report loop writing `data/meme_run_report_auto.md` every 10 minutes.
+- What we learned (1-3):
+- Run-scoped rejects before this patch were dominated by `liquidity_fallback` then `reject_uniq` on same mints.
+- Need bounded sampling for replay analytics; full directory sweeps can stall iteration speed.
+- What's next (1-5):
+- Watch fresh run for reduction in `reject_uniq` after fallback.
+- Recompute `meme_signal_outcome_report` once new trades include fallback metadata.
+- If flow remains too sparse, tune `MEME_SIGNAL_MIN_UNIQUE_BUYERS` from 4 -> 3 or make it score-dependent.
+- Files touched:
+- src/meme_bot.py
+- logs/meme_run_report_auto.log
+- data/meme_run_report_auto.md
+
+- Date: 2026-02-10 23:01:20 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-11 00:45:11 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-11 00:46:00 PST
+- What went wrong (1-3):
+- Hard to compare scout lane impact manually while run is active.
+- What we changed (1-5):
+- Added `scripts/meme_scout_decider.py` (strict vs scout performance decision engine).
+- Added `scripts/meme_scout_decider_watcher.py` (periodic decision refresh).
+- Hooked watcher into `scripts/meme_pipeline_supervisor.py` with `MEME_SCOUT_DECIDER_AUTO`.
+- Added dynamic crowd and scout-lane env controls in `.env`.
+- Restarted supervisor; new run id `run_1770799513` is active.
+- What we learned (1-3):
+- Opportunity-cost report still dominated by `reject_liq_missing_signal`.
+- Scout decider currently in `collect` mode (strict=13, scout=0).
+- What's next (1-5):
+- Wait for scout-tagged exits and let decider move from `collect` to actionable state.
+- Use decider output to keep/tighten/disable scout without ad-hoc tuning.
+- Files touched:
+- src/meme_bot.py
+- src/meme_exit_manager.py
+- scripts/meme_pipeline_supervisor.py
+- scripts/meme_opportunity_cost_report.py
+- scripts/meme_opportunity_cost_watcher.py
+- scripts/meme_scout_decider.py
+- scripts/meme_scout_decider_watcher.py
+- .env
+
+- Date: 2026-02-11 00:53:00 PST
+- What went wrong (1-3):
+- Report windows were mixing historical runs, so decisions could be biased.
+- Opportunity-cost report applied run_id to rejects but not to traded/winning mints.
+- What we changed (1-5):
+- Added `scripts/meme_run_id_utils.py` for auto run-id resolution (log + manifest fallback).
+- Added `--auto-run-id` support to `scripts/meme_opportunity_cost_report.py`.
+- Fixed run-scoped trade filtering in `scripts/meme_opportunity_cost_report.py` by parsing trade metadata.run_id.
+- Added `--auto-run-id` support to `scripts/meme_scout_decider.py`.
+- Updated both watcher loops to use auto run-id by default when explicit run_id is unset.
+- What we learned (1-3):
+- Current active run is cleanly isolated now (`run_1770799513`) in both reports.
+- Current-run rejects are mostly `reject_mcap_low` with very low mcap candidates.
+- Pipeline is healthy; feed is live but current run has not yet produced trades.
+- What's next (1-5):
+- Keep collecting current-run outcomes for 3-6h, then review run-scoped reject/opportunity/decider together.
+- If `liq_missing_signal` grows again, tune hybrid hydration path before loosening mcap floor.
+- Maintain hard no-sub-10k policy and evaluate scout lane strictly as additive edge.
+- Files touched:
+- scripts/meme_run_id_utils.py
+- scripts/meme_opportunity_cost_report.py
+- scripts/meme_opportunity_cost_watcher.py
+- scripts/meme_scout_decider.py
+- scripts/meme_scout_decider_watcher.py
+
+- Date: 2026-02-11 00:58:00 PST
+- What went wrong (1-3):
+- We were still spending candidate-eval budget on weak signals before quote/hydration.
+- Current-run reports were clean, but we needed a direct winner-first gate earlier in the flow.
+- What we changed (1-5):
+- Added prequote winner gate controls in `src/meme_bot.py`.
+- New early rejects before hydration: `reject_prequote_missing_demand`, `reject_prequote_score`, `reject_prequote_hits`, `reject_prequote_uniq`, `reject_prequote_net`.
+- Added env knobs in `.env`:
+  - `MEME_SIGNAL_PREQUOTE_REQUIRE_DEMAND`
+  - `MEME_SIGNAL_PREQUOTE_MIN_SIGNAL_SCORE`
+  - `MEME_SIGNAL_PREQUOTE_MIN_HITS`
+  - `MEME_SIGNAL_PREQUOTE_MIN_UNIQUE_BUYERS`
+  - `MEME_SIGNAL_PREQUOTE_MIN_NET_SOL_IN`
+- Added explicit run-auto toggles in `.env` for decider/report watchers.
+- Restarted `meme_bot` via supervisor (new run id: `run_1770829767`).
+- What we learned (1-3):
+- Feed quality is mixed; many emitted signals are low net SOL and should be screened before quote spend.
+- New run has started cleanly with updated logic; pipeline remains healthy.
+- What's next (1-5):
+- Let current run accumulate and verify prequote reject mix over 1-3h.
+- If prequote rejects dominate and no trades trigger, relax exactly one prequote knob at a time.
+- Keep strict no-sub-10k policy and evaluate scout lane only on run-scoped sample.
+- Files touched:
+- src/meme_bot.py
+- .env
+
+- Date: 2026-02-11 01:11:00 PST
+- What we changed:
+- Extended `scripts/meme_live_status.py` with run-scoped reject breakdown from `data/meme_signal_debug.jsonl`.
+- Why:
+- Lets us tune current-run bottlenecks quickly even when run has few/no exits yet.
+- Files touched:
+- scripts/meme_live_status.py
+
+- Date: 2026-02-11 01:23:00 PST
+- What we changed:
+- Added `MEME_SIGNAL_PREQUOTE_MIN_BUYS` gate to prequote filtering in `src/meme_bot.py`.
+- Set `MEME_SIGNAL_PREQUOTE_MIN_BUYS=4` in `.env` (based on fast sweep recommendation).
+- Added proposal dedupe in `scripts/meme_edge_decider.py` to suppress repeated identical tuning suggestions for 6h (`EDGE_DECIDER_DEDUP_HOLD_S`).
+- Restarted `meme_bot` and `meme_edge_decider` under supervisor.
+- Why:
+- Tightens winner-first selection before quote spend and reduces tuning-loop noise.
+- Active run:
+- `run_1770831500`
+
+- Date: 2026-02-11 09:48:51 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-11 09:49:00 PST
+- What we changed (progress while waiting for data):
+- Added walk-forward tuner for prequote gates: `scripts/meme_prequote_walkforward.py`.
+- Added watcher: `scripts/meme_prequote_walkforward_watcher.py` and wired into supervisor.
+- Added run-scoped winner-miss report: `scripts/meme_winner_miss_report.py`.
+- Added watcher: `scripts/meme_winner_miss_watcher.py` and wired into supervisor.
+- Added A/B paper harness with isolated DB/run IDs: `scripts/meme_ab_paper_runner.py`.
+- Added `MEME_POSITIONS_DB` support to global PositionStore path resolution in `src/position_store.py`.
+- Added prequote pass telemetry and prequote min-buys gate in `src/meme_bot.py`.
+- Restarted the full supervisor stack cleanly to load new specs.
+- Current run and signal:
+- Active run: `run_1770831500`
+- Walk-forward currently recommends relaxing one knob: `MEME_SIGNAL_PREQUOTE_MIN_BUYS=2` (single-change recommendation).
+
+- Date: 2026-02-11 09:57:27 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-11 10:02:14 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=6 fail=8 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, QUICKNODE_RPC_URL:http_429, HELIUS_RPC_URL:http_401)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-12 10:10 PST
+- What went wrong (1-3):
+- Run reports were leg-inflated: multi-exit positions looked like many separate trades, overstating confidence.
+- What we changed (1-5):
+- Added position-cluster normalization in `scripts/meme_run_report.py` using reconstructed entry anchor (`exit_ts - hold_time_sec`).
+- Added fallback clustering for legacy rows missing hold-time.
+- Added tests in `tests/test_meme_run_report_clusters.py` and validated (`2 passed`).
+- What we learned (1-3):
+- The latest +$1.05 / 100% 1h window is one clustered position (`SHUTDOWN`), so edge is still concentrated and sample-small.
+- What's next (1-5):
+- Keep using normalized cluster view for go/no-go decisions.
+- Prioritize breadth: require positive expectancy across multiple clustered positions, not leg-level hit rate.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_run_report.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/tests/test_meme_run_report_clusters.py`
+- Added normalized metrics to `scripts/meme_live_readiness.py` and optional gate `--min-clusters`.
+- Immediate read: despite positive leg-level PnL, cluster breadth and tail-loss concentration are still not acceptable for live.
+- Applied single-lever mcap tighten: `MEME_SIGNAL_PREQUOTE_MIN_MCAP_USD` from `10000` -> `12000`; restarted bot child under supervisor.
+- Date: 2026-02-12 23:55 PST
+- What went wrong (1-3):
+- Leg-level reporting was still mixing positives into "losers" when losses were sparse.
+- MCap floor was inconsistent (`PREQUOTE_MIN_MCAP=12000` but final `SIGNAL_MIN_MCAP=10000`), allowing low-mcap entries to pass later-stage gating.
+- What we changed (1-5):
+- Tightened reporting: losers/cluster-losers are now strictly negative, added dominant-cluster concentration stats and mcap cohorts.
+- Added/ran tests for report clustering + render behavior (`4 passed`).
+- Extended readiness script with optional cluster-tail-loss gate.
+- Patched live status DB freshness to include WAL mtime.
+- Aligned `.env` mcap floors: `MEME_SIGNAL_MIN_MCAP_USD=12000` and restarted bot.
+- What we learned (1-3):
+- Positive leg-level windows can still hide concentration risk; cluster concentration metrics are necessary.
+- In this codepath, final mcap gate mattered more than prequote mcap gate for preventing ~11-12k entries.
+- What's next (1-5):
+- Collect post-alignment sample on run `run_1770969031` and verify low-mcap losers disappear.
+- Reassess reject mix (`reject_prequote_score`, `reject_liq_low_signal`) after enough new entries.
+- Files touched:
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_run_report.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_live_readiness.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_live_status.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_gate_whatif.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/tests/test_meme_run_report_render.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/tests/test_meme_run_report_clusters.py`
+- `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/.env`
+- Added cluster concentration readout directly to `scripts/meme_live_status.py` so we can monitor edge breadth without waiting for full run reports.
+- Added startup config guardrails in `src/meme_bot.py` (warn/strict modes) and used them to catch real top-share drift in `.env`.
+- Added `scripts/meme_replay_regression_check.py` to compare baseline vs variants on drawdown/tail-loss/cluster concentration, not just net PnL.
+- Added `scripts/meme_reject_tuning_report.py` for run-scoped reject-mix suggestions while trade sample is still small.
+
+- Date: 2026-02-13 00:56:42 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+- Added `meme_sample_ready_watcher` + supervisor wiring so we auto-generate run decision bundles once sample/cluster thresholds are met (no manual polling).
+- Added replay regression check script and updated replay to make mcap bounds variant-configurable; useful for non-idle offline guardrails while live sample is sparse.
+
+- Date: 2026-02-13 01:16:02 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+- Added supervisor singleton lock to prevent accidental duplicate pipeline stacks.
+- Extended sample-ready watcher to emit periodic not-ready heartbeat files with explicit blockers, so progress is visible even before thresholds are met.
+
+- Date: 2026-02-13 15:59:24 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-14 00:15 PST
+- What we changed (1-5):
+- Added winner-zone load/match/enforce path in `src/meme_bot.py` (prequote gate + metadata persistence).
+- Added run-scoped, cluster-concentration regime hard brakes in `src/meme_bot.py`.
+- Added coarse-fallback zone construction in `scripts/meme_winner_zone_builder.py` to avoid zero-zone outputs on sparse data.
+- Wired `meme_winner_zone_watcher` into supervisor (`scripts/meme_pipeline_supervisor.py`) and enabled via `.env`.
+- Started isolated A/B zone lanes (`scripts/meme_ab_zone_runner.py start`).
+- What we learned (1-3):
+- Fine 4D bins often produce zero viable zones at current sample depth; coarse fallback with min_samples=8 produced at least one zone.
+- Winner-zone should remain isolated/A-B first to avoid choking the primary bot before sample depth grows.
+- Run-scoped regime stats prevent cross-run contamination in pause decisions.
+- What's next (1-5):
+- Let A/B zone lanes run until both have enough trades for a meaningful comparison.
+- Review zone lane reject mix (`reject_winner_zone`) vs realized PnL delta.
+- If zone lane improves loss concentration without collapsing opportunity, turn on zone enforcement in main lane.
+- Refit winner zones every 30m from outcomes and raise min_samples as data accumulates.
+- Keep regime cluster brakes active; tune thresholds only from run-scoped reports.
+
+- Date: 2026-02-14 00:12 PST
+- What we changed (1-5):
+- Added `scripts/meme_ab_zone_report.py` for run-scoped baseline vs zone lane comparison.
+- Emitted `data/meme_reports/ab_zone_latest.md` as current checkpoint artifact.
+- What we learned (1-3):
+- A/B lane infra is healthy, but still no closed-trade sample in this window.
+- Next leverage is sample accumulation + periodic compare snapshots.
+- What's next (1-5):
+- Keep A/B lanes running.
+- Re-run `meme_ab_zone_report.py` once sample has >=10 closed trades/lane.
+- Decide zone promotion to main lane only after zone beats base on pnl and concentration metrics.
+
+- Date: 2026-02-14 00:18 PST
+- What we changed (1-5):
+- Added `scripts/meme_ab_zone_watcher.py` to auto-refresh A/B report snapshots.
+- Launched detached watcher process (run-scoped, writes `data/meme_reports/ab_zone_latest.md`).
+- What we learned (1-3):
+- Detached process via `subprocess.Popen(..., start_new_session=True)` is stable in this environment.
+- What's next (1-5):
+- Wait for first closed trades, then evaluate zone-vs-base deltas before promoting zone to primary lane.
+
+- Date: 2026-02-14 00:28 PST
+- What we changed (1-5):
+- Fixed dotenv override precedence in `src/meme_bot.py` so lane env overrides actually work.
+- Added per-lane signal debug defaults in `scripts/meme_ab_zone_runner.py`.
+- Extended `scripts/meme_ab_zone_report.py` with run-scoped signal-debug reject/pass breakdown.
+- Rebuilt zones with broader coarse fallback (3 zones).
+- What we learned (1-3):
+- Before fix, A/B zone toggle could be silently neutralized by `.env` overwrite at bot startup.
+- Zone filter quality looks strong offline but coverage is low (high selectivity).
+- What's next (1-5):
+- Keep A/B running until both lanes have enough closed trades.
+- If zone lane starves, add controlled bypass (e.g., only enforce zone below a score threshold).
+
+- Date: 2026-02-14 00:45 PST
+- What we changed (1-5):
+- Added controlled winner-zone bypass in `src/meme_bot.py` with explicit env thresholds.
+- Moved winner-zone enforcement after baseline prequote filters to avoid double-reject noise.
+- Added bypass visibility to signal debug + trade metadata.
+- Added zone-bypass metric to `scripts/meme_ab_zone_report.py`.
+- Tuned A/B zone lane bypass thresholds in `.env` for controlled throughput.
+- What we learned (1-3):
+- Zone gate before prequote created misleading reject mix; post-prequote ordering is cleaner for A/B.
+- Missing mcap at prequote is common; bypass needs optional unknown-mcap handling or it starves.
+- What's next (1-5):
+- Let current A/B run accumulate data; watch `zone_bypass_passes` and closed-trade deltas.
+- If zone still starves, lower bypass score to 68 or net floor to 1.8 in A/B lane only.
+
+- Date: 2026-02-14 00:54 PST
+- What we changed (1-5):
+- Added JSON summary output to `meme_ab_zone_report.py`.
+- Added `meme_ab_zone_decider.py` with clear action states (promote/loosen/hold).
+- Updated `meme_ab_zone_watcher.py` to run report + decider continuously.
+- Restarted watcher and verified decision artifacts are being refreshed.
+- What we learned (1-3):
+- Bypass now produces measurable flow (`zone_bypass_passes=2`) even before closed-trade sample matures.
+- Decision loop can now drive future A/B policy changes deterministically.
+- What's next (1-5):
+- Let A/B run to minimum trade sample; use decider action as the promotion gate.
+- If decider flips to `loosen_zone_bypass`, apply only A/B knobs (not main lane).
+
+- Date: 2026-02-14 01:13 PST
+- What we changed (1-5):
+- Added entry attribution buckets (zone_match/zone_bypass/non_zone) into A/B report JSON+MD.
+- Added `meme_ab_zone_readiness.py` to produce explicit promotion readiness artifacts.
+- Added `meme_zone_main_rollout.py` one-command promote script with rollback guard.
+- Updated A/B apply flow to require readiness before auto-promote and to trigger rollout script.
+- Updated watcher chain to run report -> decider -> readiness -> apply continuously.
+- What we learned (1-3):
+- First A/B closed trades are now visible and attributable; zone lane entry source was bypass.
+- Readiness is now explicit and machine-checkable; promotion cannot happen accidentally.
+- What's next (1-5):
+- Let sample grow to readiness thresholds; watch whether zone_match starts contributing (not only bypass).
+- Revisit zone bins if zone_match stays near zero while bypass dominates.
+
+- Date: 2026-02-14 01:16 PST
+- What we changed (1-5):
+- Added `zone_match_passes` and richer attribution into A/B summary/report.
+- Added new decider action `widen_zone_builder` for coverage expansion when bypass dominates.
+- Added auto-apply support for `widen_zone_builder` and immediate zone-file rebuild.
+- What we learned (1-3):
+- Coverage loop works: decider -> apply -> rebuild can safely widen zone map without touching main lane.
+- Zone policy can now be adapted in two dimensions: bypass thresholds and zone builder strictness.
+- What's next (1-5):
+- Watch whether `zone_match_passes` starts increasing under widened zone map.
+- If yes, hold bypass; if no, continue controlled widening until match flow appears.
+
+
+- Date: 2026-02-13 17:28 PST
+- What we changed (1-5):
+- Finished unknown-mcap winner-zone match gating and confirmed it works in A/B zone lane.
+- Added A/B-only prequote override mapping in `meme_ab_zone_runner.py`.
+- Added `.env` knobs `MEME_AB_ZONE_PREQUOTE_*` (looser than main) to increase A/B sample throughput.
+- Restarted A/B lanes on fresh run IDs and regenerated latest report/decision/readiness artifacts.
+- What we learned (1-3):
+- Zone-match starvation was partly an mcap-availability artifact; allowing unknown mcap fixed early-zone matches.
+- A/B needed independent prequote controls; otherwise we were sample-starved before zone logic could be evaluated.
+- What's next (1-5):
+- Let current A/B run accumulate enough trades for readiness/decider thresholds.
+- Watch if zone lane keeps positive `zone_match_passes` vs reverting to bypass-only flow.
+- If still sparse, continue coarse-zone widening before touching main lane.
+
+- Date: 2026-02-13 17:35 PST
+- What we changed (1-5):
+- Deduped orphan watcher/listener processes and kept only one active instance per script.
+- Restarted/verified A/B zone watcher after process cleanup.
+- Ran pump-vs-dump commonality extraction and prequote walkforward recommendation jobs.
+- Refreshed winner profile JSON with lowered `--min-group` for current sample size.
+- Ran replay comparisons (default vs thresholded vs hot-only) on walkforward test snapshots.
+- What we learned (1-3):
+- Process duplication was a hidden API/RPC drain and likely contributed to rate-limit pressure.
+- Strongest separator remains `signal_net_sol_in` (~3.2+), with score and liquidity also meaningful.
+- Thresholding improved loss profile materially but still needs stronger winner conditioning to cross positive expectancy.
+- What's next (1-5):
+- Keep A/B zone run collecting live paper trades with cleaned process topology.
+- Promote walkforward recommendation into A/B-only net-sol gate candidate (test first, not main).
+- Continue gating around winner-like flow (net_sol + score + liquidity) and monitor PnL per attribution bucket.
+
+- Date: 2026-02-13 17:39 PST
+- What we changed (1-5):
+- Analyzed `reject_winner_zone` breakdown and confirmed failures were mostly score/net out-of-zone.
+- Relaxed A/B-only bypass thresholds (score/net/top-share) to improve zone-lane throughput.
+- Restarted A/B lanes on new run IDs and refreshed report artifacts.
+- What we learned (1-3):
+- Unknown-mcap fix worked, but zone map currently has only one coarse zone; bypass remains essential for coverage.
+- A small bypass relaxation immediately restored zone-lane flow (`zone_bypass_passes` > 0).
+- What's next (1-5):
+- Let this run accumulate trades; compare zone vs base PnL with attribution buckets.
+- If bypass dominates too heavily, widen zone builder again before considering main-lane promotion.
+
+- Date: 2026-02-13 18:12 PST
+- What we changed (1-5):
+- Added tri-lane runner (`base` vs `match-only` vs `bypass-only`) and launched it live.
+- Added bot-level `MEME_WINNER_ZONE_FORCE_BYPASS_ONLY` toggle for clean bypass-isolation testing.
+- Added tri report + watcher with entry-type expectancy outputs.
+- Added winner-zone sanity guard with fallback rebuild + alert artifact.
+- Raised A/B prequote winner gate (score/net) to bias toward stronger momentum flow.
+- What we learned (1-3):
+- With stricter winner prequote gate, early tri rejects are now mainly `reject_prequote_net` (as intended).
+- We now have infrastructure to directly answer whether match-only or bypass-only has better expectancy.
+- Zone watcher now has self-healing behavior if zone file collapses to empty.
+- What's next (1-5):
+- Let tri run accumulate closed trades and compare expectancy columns in `ab_zone_tri_latest.*`.
+- If tri is over-filtered (no fills), slightly relax net gate in tri-only path before touching main lane.
+- Keep main lane unchanged until tri shows stable positive edge in either match or bypass leg.
+
+- Date: 2026-02-13 18:17 PST
+- What we changed (1-5):
+- Added supervisor-managed tri watcher toggle and enabled it in `.env`.
+- Verified tri watcher process is now persistent under supervisor.
+- Confirmed tri report files update from watcher loop.
+- What we learned (1-3):
+- Tri lanes are currently over-filtered by the new net gate (all early rejects are prequote net).
+- Infrastructure is now in place to compare match-only vs bypass-only once fills resume.
+- What's next (1-5):
+- Decide: keep strict net gate for more time, or relax tri-only net floor (e.g., 1.8) to restore sample flow.
+
+- Date: 2026-02-13 19:21 PST
+- What we changed (1-5):
+- Disabled scale-in in tri lanes to prevent execution-style aborts from contaminating gate comparison.
+- Added tri-bypass-only threshold knobs and applied looser bypass settings.
+- Lowered tri prequote mcap floor to 10k and restarted tri lanes.
+- What we learned (1-3):
+- SCALE_IN_ABORT was the dominant source of early tri losses; removing scale-in is a cleaner gate A/B test.
+- Right now sample growth is constrained by fresh signal cadence, not lane runtime health.
+- What's next (1-5):
+- Keep tri lanes alive and collect first no-scale-in fills, then compare expectancy by lane.
+
+- Date: 2026-02-14 02:23:21 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-14 10:33 PST
+- What we changed (1-5):
+- Set overnight topology to supervisor + tri lanes only (disabled legacy AB watcher).
+- Restarted pump WS and loosened source thresholds to keep signal flow alive overnight.
+- Tuned tri to isolate zone/bypass effects (no winner-profile, no scale-in).
+- Relaxed tri prequote net/top-share to increase fill probability while preserving structure.
+- What we learned (1-3):
+- Biggest blockers shifted from net/mcap to top-share; tuning source + prequote caps was required for throughput.
+- Tri comparisons are much cleaner without scale-in abort behavior.
+- What's next (1-5):
+- Let overnight run accumulate closed trades and compare lane expectancy in ab_zone_tri_latest.json.
+
+
+- Date: 2026-02-14 11:45 PST
+- What we changed (1-5):
+- Added mcap recheck exponential backoff in `src/meme_bot.py` to stop repeated low-mcap quote hammering on the same mint.
+- Added tri-lane override wiring for sparse-liquidity experiments in `scripts/meme_ab_zone_tri_runner.py` (`MEME_AB_TRI_REQUIRE_LIQUIDITY`).
+- Tightened tri min mcap to `10000` and eased prequote score to `56` in `.env`.
+- Extended tri report markdown with explicit top reject reasons in `scripts/meme_ab_zone_tri_report.py`.
+- Restarted tri lanes on run `ab_tri_*_1771098266`.
+- What we learned (1-3):
+- Current blockers shifted from pure prequote rejection to `liq_missing_signal` + `mcap_low` + zone-gate rejects.
+- Throughput is present (launch signals continue), but conversion still needs better tradability/mcap hydration.
+- What's next (1-5):
+- Let run `1771098266` collect more samples, then compare reject mix and first-trade conversion.
+- Date: 2026-02-14 11:49 PST
+- What we changed (1-5):
+- Added tri override for core-metric gate (`MEME_AB_TRI_REQUIRE_CORE_METRICS`) in `scripts/meme_ab_zone_tri_runner.py`.
+- Set `.env` `MEME_AB_TRI_REQUIRE_CORE_METRICS=0` to avoid liquidity-field sparsity blocking tri conversion tests.
+- Restarted tri lanes on run `ab_tri_*_1771098457`.
+
+- Date: 2026-02-14 12:54:44 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+- Date: 2026-02-14 12:10 PST
+- Bottleneck work done:
+- Restored pipeline heartbeat: supervisor and pump listener were down; restarted supervisor (`scripts/meme_pipeline_supervisor.py`) and confirmed live signal appends to `data/meme_launch_signals.jsonl`.
+- Added tri-only `MEME_SIGNAL_HYBRID_DEX` override and set `MEME_AB_TRI_SIGNAL_HYBRID_DEX=0` to remove `reject_liq_missing` bottleneck in tri.
+- Added tri-only demand gate overrides (`MEME_AB_TRI_SIGNAL_MIN_*`) and eased to buys=2, uniq=2, net=0.8.
+- Added launch-signal truncation recovery in `src/meme_bot.py` (`_ingest_launch_signals` resets offset when file shrinks below offset).
+- Lowered tri prequote score bottleneck (`MEME_AB_ZONE_PREQUOTE_MIN_SIGNAL_SCORE=54`) and widened score-bypass top-share cap (`0.60`).
+- Updated tri bypass thresholds to reduce winner-zone starvation (`score=56`, `uniq=2`, `net=1.2`, `min_mcap=10000`).
+- Date: 2026-02-14 12:28 PST
+- Winner-zone bottleneck pass:
+- Disabled auto winner-zone rebuild (`MEME_WINNER_ZONE_AUTO_BUILD=0`) for test stability; restored coarse zone snapshot from `data/meme_winner_zones.tmp.json`.
+- Added manual bridge winner zones in `data/meme_winner_zones.json` for recurring rejected clusters (55-60 score + 1.0-2.5 net and 2.5-5.0 net bands, top-share up to 0.65, mcap floor kept at 10k).
+- Tri lanes now show zone coverage parity: match and bypass pass zone gate at same count as prequote.
+- Remaining dominant bottleneck is now `reject_mcap_low` only.
+- Date: 2026-02-14 12:37 PST
+- Added signal freshness gate to reduce sub-10k churn before quote: `MEME_SIGNAL_MIN_AGE_SECONDS` in `src/meme_bot.py`.
+- Tri override wired via `MEME_AB_TRI_SIGNAL_MIN_AGE_SECONDS=45` in `scripts/meme_ab_zone_tri_runner.py` + `.env`.
+- Effect: reject mix shifted from `mcap_low` dominance to mostly `prequote_score` / `age_fresh` in short windows.
+- Winner-zone bottleneck materially reduced after manual zone bridge additions; current main choke remains prequote quality + low flow windows.
+
+- Date: 2026-02-14 20:35 PST
+- Execution-focused update:
+- Added entry pacing controls in `src/meme_bot.py`:
+- `MEME_MAX_NEW_ENTRIES_PER_TICK` to cap fills per loop.
+- `MEME_MIN_SECONDS_BETWEEN_ENTRIES` to avoid bursty back-to-back entries.
+- Added debug reasons `reject_entry_spacing` and `skip_tick_entry_cap` for traceability.
+- Set defaults in `.env` for live paper runs: `MEME_MAX_NEW_ENTRIES_PER_TICK=1`, `MEME_MIN_SECONDS_BETWEEN_ENTRIES=12`.
+- Tri tuning refresh:
+- Aligned tri final crowd cap to prequote (`MEME_AB_TRI_FINAL_MAX_TOP_BUYER_SHARE=0.65`).
+- Raised tri min net-sol demand (`MEME_AB_TRI_SIGNAL_MIN_NET_SOL_IN=1.00`).
+- Reduced tri signal min-age from 60s to 20s to improve conversion.
+- Restarted tri lanes on run `ab_tri_*_1771130083`.
+- Lowered bypass-lane score floor to `MEME_AB_TRI_BYPASS_MIN_SIGNAL_SCORE=48` after observing repeated `reject_winner_zone` with score ~49 and strong net-sol.
+- Restarted tri lanes on run `ab_tri_*_1771130216`.
+- Added supervisor toggle in `scripts/meme_pipeline_supervisor.py`: `MEME_SUPERVISOR_ENABLE_BOT` (default on).
+- Set `.env` `MEME_SUPERVISOR_ENABLE_BOT=0` so supervisor keeps data services up but does not spawn an extra main `meme_bot` during tri experiments.
+- Restarted supervisor cleanly and removed duplicate legacy child processes.
+- Added tri override wiring `MEME_AB_TRI_LAUNCH_SIGNAL_IGNORE_HISTORY` and set it to `0` to process recent backlog immediately after each tri restart.
+- Added tri override `MEME_AB_TRI_SIGNAL_QUOTE_FAIL_COOLDOWN_S=45` to reduce quote-failure lockout time.
+- Restarted tri lanes on run `ab_tri_*_1771130471`.
+- Added tri isolation controls:
+- `MEME_AB_TRI_RESTORE_OPEN_POSITIONS=0` applied in `scripts/meme_ab_zone_tri_runner.py` so tri lanes do not restore stale opens.
+- `MEME_AB_TRI_RESET_DBS_ON_START=1` to start tri runs on clean DB files.
+- Added run-attribution hardening for restored positions in `src/meme_bot.py` (`run_id` fallback becomes `restored_preexisting` when metadata is missing).
+- Extended tri report (`scripts/meme_ab_zone_tri_report.py`) with position coverage fields:
+- `entries`, `open_positions_run`, `open_positions_total`.
+- Made tri report resilient when fresh DBs have no `trades`/`positions` tables yet.
+
+- Date: 2026-02-15 09:53 PST
+- Execution tuning pass:
+- Added tri execution overrides in `scripts/meme_ab_zone_tri_runner.py`:
+- `MEME_AB_TRI_POLL_INTERVAL -> MEME_POLL_INTERVAL`
+- `MEME_AB_TRI_SIGNAL_MAX_POSITION_USD -> MEME_SIGNAL_MAX_POSITION_USD`
+- `MEME_AB_TRI_MAX_LOSS_PER_TRADE -> MEME_MAX_LOSS_PER_TRADE`
+- Added configurable quote retries in `src/meme_bot.py`:
+- `MEME_SIGNAL_QUOTE_RETRY_COUNT`, `MEME_SIGNAL_QUOTE_RETRY_DELAY_S`.
+- Wired tri-specific quote retry overrides in runner:
+- `MEME_AB_TRI_SIGNAL_QUOTE_RETRY_COUNT`, `MEME_AB_TRI_SIGNAL_QUOTE_RETRY_DELAY_S`.
+- Current tri env posture:
+- Faster monitoring (`POLL_INTERVAL=5` for tri), higher position quote reserve (`AB_ZONE_JUP_RESERVED_POS=8`).
+- Lower quote fail cooldown (`20s`) + 2 retries.
+- Smaller tri position cap (`$4.5`) and lower max-loss cap (`$2.0`).
+- MCap floor adjusted from 12k to 11.5k to recover some flow while still filtering low-tail.
+- Current run id set: `ab_tri_*_1771178028`.
+- Ops cleanup:
+- Removed duplicate `meme_ab_zone_tri_watcher.py` process; left single supervisor-managed watcher.
+
+- Date: 2026-02-14 20:38:24 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-15 10:08 PST
+- Entry safety hardening:
+- Added entry-time hard risk gates in `/src/meme_bot.py` for BOTH paper/live entries:
+- mint/freeze authority check (existing on-chain SPL decode)
+- holder concentration check (existing RPC check) now with cache
+- new round-trip sellability probe (`SOL -> token -> SOL`) to block no-sell / weak-route mints
+- New env knobs wired in bot init:
+- `MEME_ENTRY_HARD_RISK_CHECKS_ENABLED`
+- `MEME_ENTRY_SELLABILITY_CHECK_ENABLED`
+- `MEME_ENTRY_SELLABILITY_MIN_BACK_PCT`
+- `MEME_ENTRY_SELLABILITY_MAX_SELL_IMPACT_PCT`
+- `MEME_ENTRY_SELLABILITY_SLIPPAGE_BPS`
+- `MEME_ENTRY_SELLABILITY_PROBE_SOL`
+- `MEME_ENTRY_SELLABILITY_CACHE_S`
+- `MEME_HOLDER_CHECK_CACHE_S`
+- Updated `.env` defaults to enable these checks.
+- Restarted tri lanes with new run IDs: `ab_tri_base_1771192050`, `ab_tri_match_1771192050`, `ab_tri_bypass_1771192050`.
+- Date: 2026-02-15 10:12 PST
+- Simple-but-missing fix shipped:
+- Position monitoring was using buy-side quote (`WSOL -> token`) even for open positions.
+- Added quote `side` support to `_fetch_signal_quote_data` and switched monitor path to sell-side (`token -> WSOL`) with position token size.
+- This makes ongoing PnL/exit decisions reflect actual exit routeability instead of entry-side pricing.
+- Restarted tri lanes on run `ab_tri_*_1771192306`.
+- Date: 2026-02-15 10:22 PST
+- User insight integrated: meme coins behave like market-cap level ladders (15k/30k/60k/100k/200k/500k/1m) with frequent level-failure dumps.
+- Implemented discrete mcap level engine in bot runtime:
+- New config in `src/meme_bot.py` for `MEME_MCAP_LEVELS_*`.
+- New monitor logic emits level-reached events and exits on confirmed level failure (`MCAP_LEVEL_FAIL`) after retrace.
+- Added env defaults in `.env`:
+- `MEME_MCAP_LEVELS_ENABLED=true`
+- `MEME_MCAP_LEVELS=15000,30000,60000,100000,200000,500000,1000000`
+- `MEME_MCAP_LEVEL_RETRACE_PCT=0.18`
+- `MEME_MCAP_LEVEL_RETRACE_CONFIRM_S=8`
+- `MEME_MCAP_LEVEL_MIN_HOLD_SECONDS=45`
+- `MEME_MCAP_LEVEL_SELL_FRACTION=1.0`
+- Restarted tri lanes: `ab_tri_*_1771192933`.
+- Date: 2026-02-15 10:35 PST
+- Added lifecycle research tooling and report:
+- New script: `scripts/meme_lifecycle_research.py`
+- Generated: `data/meme_reports/lifecycle_research_latest.md`
+- Added longer forward-return capture horizons to `.env` for signal outcomes:
+- `SIGNAL_OUTCOME_HORIZONS=30,120,300,900,1800,3600,7200,14400,21600`
+- `SIGNAL_OUTCOME_MAX_PENDING=1200`
+- `SIGNAL_OUTCOME_INGEST_PER_TICK=30`
+- `SIGNAL_OUTCOME_EVAL_PER_TICK=6`
+- Restarted outcome recorder under supervisor by killing child process; supervisor respawned it with new env.
+- Cleaned duplicate orphan raydium listener process.
+- Date: 2026-02-15 10:57 PST
+- Implemented next step from lifecycle research: stateful entry pattern gate.
+- Code changes in `src/meme_bot.py`:
+- Added `_entry_pattern_gate` with two branches:
+- impulse level transition (fresh level cross + demand + momentum)
+- base breakout (touches + span + breakout above base high + demand)
+- Gate is enforced in `should_enter` with debug events:
+- `pass_entry_pattern`, `reject_entry_pattern`
+- Added configurable env knobs (`MEME_ENTRY_PATTERN_*`) and defaults in `.env`.
+- Restarted tri lanes with run IDs `ab_tri_*_1771195056`.
+- Date: 2026-02-15 11:20 PST
+- Tuned tri lane flow to reduce stale-loop waste and align threshold-first discovery:
+- In `src/meme_bot.py`, age rejects now use `_reject("age")` / `_reject("age_fresh")` (instead of direct `False`) so launch-signal cooldown applies.
+- Expanded default reject cooldown reasons in code to include `age`, `age_fresh`, and `mcap_low`.
+- In `.env`:
+- Added age/mcap/winner-missing to `MEME_SIGNAL_REJECT_COOLDOWN_REASONS`.
+- Lowered tri mcap floors from 20k to 15k (`MEME_AB_TRI_FINAL_MIN_MCAP_USD`, `MEME_AB_TRI_BYPASS_MIN_MCAP_USD`, `MEME_AB_ZONE_PREQUOTE_MIN_MCAP_USD`, and related bypass floors) to avoid sub-10k while improving sample flow.
+- Set `MEME_AB_TRI_LAUNCH_SIGNAL_IGNORE_HISTORY=1` so restarts don’t reprocess stale backlog.
+- Next: restart tri lanes and validate reject distribution shift + conversion.
+- Date: 2026-02-15 11:23 PST
+- Corrected cooldown interaction: removed `age_fresh` from reject cooldown reasons.
+- Rationale: fresh-signal warmup should re-evaluate quickly after min-age window, not wait full reject cooldown.
+- Restarted tri lanes with run IDs `ab_tri_*_1771196110`.
+- Date: 2026-02-15 18:44 PST
+- Online health + de-dup cleanup:
+- Confirmed tri lanes and collectors alive; files updating.
+- Killed orphan duplicate watcher processes (PPID=1) and kept supervisor-managed watchers only.
+- Throughput tuning to improve sampling without going sub-10k:
+- Entry pattern relaxed for early threshold winners: `MIN_LEVEL=15000`, impulse mom5m `0.0`, base span `120s`, touches `2`, breakout `3%`.
+- Tri mcap floors lowered from `15000` to `12000` (`PREQUOTE` + `FINAL` + `BYPASS`) for better candidate flow.
+- Pump signal source loosened moderately: `MIN_NET_SOL_IN=0.8`, `MAX_TOP_BUYER_SHARE=0.65`, `EMIT_MAX_SELLS=2`, `MIN_T_FIRST_SELL_S=0.5`.
+- Restarted tri lanes (`ab_tri_*_1771209551`) and restarted pump listener child under supervisor to load new env.
+- Date: 2026-02-15 18:50 PST
+- Further flow tuning after live check:
+- Tri mcap floor moved to exactly `10k` (prequote/final/bypass) to keep `no sub-10k` constraint while increasing eligible flow.
+- Removed `mcap_low` from reject cooldown reasons so mints can be rechecked faster when they cross threshold.
+- Restarted tri lanes on run `ab_tri_*_1771209859`.
+- Date: 2026-02-15 19:02 PST
+- Post-miss fix: cleared entry-pattern cooldown on failed hard-entry checks.
+- Root cause observed on 7Pb4: pattern passed and reached entry checks, then holder risk rejected; subsequent attempts were blocked by stale pattern cooldown.
+- Code fix in `src/meme_bot.py`:
+- Added `_entry_pattern_clear_cooldown(mint, reason)`.
+- Call it on `reject_entry_mint_freeze`, `reject_entry_holder`, and `reject_entry_sellability` before returning from `execute_entry`.
+- Restarted tri lanes with run IDs `ab_tri_*_1771213257`.
+- Date: 2026-02-15 19:11 PST
+- Additional logic bug fixes around pattern cooldown consumption:
+- `should_enter`: clear pattern cooldown when blocked by max positions or already-holding checks.
+- run loop: clear pattern cooldown when `_can_enter_now()` blocks or when `execute_entry()` returns `None` (no actual open).
+- This prevents false lockout from gating side-effects when no position was opened.
+- Date: 2026-02-15 19:14 PST
+- Analytics bug fix: `scripts/meme_signal_reject_report.py` now defaults to true reject/suppression kinds only.
+- Added `--include-non-reject` flag for full event view.
+- Prevents pass events (e.g., `pass_prequote`) from being misread as reject percentages.
+- Date: 2026-02-15 19:27 PST
+- Added per-mint entry reject backoff to reduce re-attempt thrash while preserving re-evaluation.
+- New runtime knobs in `src/meme_bot.py` + `.env`:
+- `MEME_ENTRY_REJECT_COOLDOWN_S=45`
+- `MEME_ENTRY_REJECT_HOLDER_COOLDOWN_S=120`
+- `MEME_ENTRY_REJECT_MINT_FREEZE_COOLDOWN_S=180`
+- `MEME_ENTRY_REJECT_SELLABILITY_COOLDOWN_S=90`
+- Applied in signal-first flow:
+- `_discover_from_launch_signals` skips mints under entry-reject cooldown.
+- Main loop emits `skip_entry_reject_cooldown` and skips while backoff active.
+- `execute_entry` sets cooldown on entry-time failures (liq/confirm/quote/hard risk/live-block/exception).
+- Cooldown clears on successful entry.
+- Restarted tri lanes with run IDs `ab_tri_*_1771214810`.
+
+- Date: 2026-02-17 12:00:09 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=7 fail=7 fails=(HELIUS_URL:http_401, CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, HELIUS_RPC_URL:http_401, CHAINSTACK_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/dashboard.py
+- src/data/polymarket_micro/niche_markets.db-shm
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-20 13:06:47 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=10 fail=5 fails=(CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, CHAINSTACK_RPC_URL:http_403, ANKR_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- src/connection_test.py
+- src/dashboard.py
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-20 13:24:00 PST
+- What went wrong (1-3):
+- TP tiers were effectively selling fractions of remaining position, so realized TP behavior drifted from intended 90% cumulative offload + 10% moon bag.
+- Partial exits could produce very small slices ("penny exits") on low notional remnants.
+- What we changed (1-5):
+- Added TP execution mode in `src/meme_exit_manager.py` to interpret TP fractions against original position (`MEME_TP_FRACTIONS_AS_ORIGINAL`, default on).
+- Added cumulative-original tracking in TP logs (`sold_fraction_original`) and fixed `get_next_tp_target` to start at TP0.
+- Added exit normalization in `src/meme_bot.py`: enforce moon bag floor on non-risk exits and minimum partial slice USD (`MEME_EXIT_MIN_SLICE_USD`) with bounded bumping/skipping.
+- Added config knobs in `src/meme_config.py`: `TP_FRACTIONS_AS_ORIGINAL`, `EXIT_MIN_SLICE_USD`, `MOON_BAG_MIN_USD`.
+- Set runtime profile defaults in `config/meme_ab_tri_profile.json` for the above knobs.
+- Added tests in `tests/test_meme_exit_manager.py` for TP cumulative behavior, legacy mode, and next-target correctness.
+- What we learned (1-3):
+- TP intent and TP execution basis (original vs remaining) must be explicit; otherwise cumulative behavior is not what operators expect.
+- A minimum slice guard is required to avoid noisy/uneconomic partial exits in small-paper runs.
+- What's next (1-5):
+- Restart base runner so new TP/moonbag settings are live.
+- Watch first 10-20 exits for `requested_sell_fraction` vs `effective_sell_fraction` in metadata.
+- Review top winners to confirm moon bag is preserved and not prematurely drained.
+- Files touched:
+- src/meme_config.py
+- src/meme_exit_manager.py
+- src/meme_bot.py
+- config/meme_ab_tri_profile.json
+- tests/test_meme_exit_manager.py
+
+- Date: 2026-02-20 14:16:00 PST
+- What went wrong (1-3):
+- Not quiet: pipeline was active but starved by gate stacking and scheduling bias.
+- Root misses observed: strict static prequote gates + 15m age cap + newest-first capped scheduling.
+- Concrete miss: `JCGznr9GNxy3cLN1QNBx5CHEUJokcsWwyZBazgZqpump` signaled in-run, later ~149k mcap, never evaluated/accepted under prior gates.
+- What we changed (1-5):
+- Added fair round-robin rotation for signal-first candidate scheduling in `src/meme_bot.py` to prevent older active mints from starvation when `MEME_SIGNAL_MAX_CANDIDATES_PER_TICK` is capped.
+- Relaxed prequote/final signal gates in `config/meme_ab_tri_profile.json` while keeping strict `MEME_SIGNAL_MIN_MCAP_USD=10000`.
+- Increased launch TTL and late-age window (`MEME_LAUNCH_SIGNAL_TTL=3600`, late max age 3600s) so mints can be re-evaluated as they mature to >=10k mcap.
+- Raised candidate throughput per tick from 3 -> 5.
+- Post-change telemetry (new run) shows all observed mints passing prequote and reaching mcap gate rather than dying early at prequote.
+- What we learned (1-3):
+- The bottleneck was architecture/scheduling + stale early microstructure thresholds, not lack of raw WS data.
+- Keeping mcap floor strict while relaxing early prequote is a better separation: discovery broad, execution strict.
+- What's next (1-5):
+- Observe this run for first >=10k crossover entries.
+- If still sparse, add a dedicated "promotion" lane for >=10k mcap with stronger live-demand checks.
+- Files touched:
+- src/meme_bot.py
+- config/meme_ab_tri_profile.json
+
+- Date: 2026-02-21 21:07:58 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=10 fail=5 fails=(CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, CHAINSTACK_RPC_URL:http_403, ANKR_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .github/workflows/main_ci.yml
+- .github/workflows/python-tests.yml
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-21 22:00:38 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=10 fail=5 fails=(CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, CHAINSTACK_RPC_URL:http_403, ANKR_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .github/workflows/main_ci.yml
+- .github/workflows/python-tests.yml
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-21 22:10:30 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=10 fail=5 fails=(CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, CHAINSTACK_RPC_URL:http_403, ANKR_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .github/workflows/main_ci.yml
+- .github/workflows/python-tests.yml
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-21 22:14:00 PST
+- What went wrong (1-3):
+- Leaderboard lane was silently starved: Axiom consumed full HTTP budget, GMGN never got calls.
+- `wallet_outlier` had external allowlist loader present but not wired into emit path.
+- Mixed old/new supervisor children caused duplicate workers and noisy telemetry.
+- What we changed (1-5):
+- Wired allowlist-driven emits into `wallet_outlier_signal_listener.py` with `wallet_alpha_origin=leaderboard|internal`.
+- Added `leaderboard_wallet_discovery.py` process to supervisor and enabled env toggles.
+- Added DexScreener pair resolver to improve Axiom `pairAddress` requests.
+- Split HTTP budget across Axiom/GMGN and added provider status telemetry in logs.
+- Clean restarted supervisor tree; topology now shows `orphaned=0`.
+- What we learned (1-3):
+- In this environment, Axiom endpoints currently return `502` and GMGN returns `403` (Cloudflare), so direct scrape throughput is effectively zero.
+- Quiet logs can be a tooling bug; status histograms are required to distinguish no-opportunity vs blocked providers.
+- What's next (1-5):
+- Feed leaderboard data via import path (`data/leaderboard_wallet_import.jsonl`) while direct APIs are blocked.
+- Keep wallet-outlier lane active so imported leaderboard wallets immediately influence entries.
+
+- Date: 2026-02-21 23:05:00 PST
+- What went wrong (1-3):
+- External leaderboard discovery depended on blocked providers (Axiom 502 / GMGN 403), so allowlist stayed empty.
+- What we changed (1-5):
+- Added SolanaTracker provider lane to `scripts/leaderboard_wallet_discovery.py` (API-key based).
+- Added budget splitting across enabled providers and status telemetry (`st_status`) in discovery logs.
+- Added significance features to wallet state (`z_ema`, `pnl_per_trade_ema`, `impossible_ema`) and optional significance gating.
+- Added `.env` knobs for SolanaTracker and statistical thresholds.
+- What we learned (1-3):
+- We need at least one functioning external leaderboard credential to populate outlier allowlist in real time.
+- What's next (1-5):
+- Add `SOLANATRACKER_API_KEY` (or authenticated Axiom/GMGN cookie) and verify non-empty allowlist growth.
+
+- Date: 2026-02-23 14:14:00 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=10 fail=5 fails=(CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, CHAINSTACK_RPC_URL:http_403, ANKR_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .github/workflows/main_ci.yml
+- .github/workflows/python-tests.yml
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-23 14:41:39 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=10 fail=5 fails=(CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, CHAINSTACK_RPC_URL:http_403, ANKR_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .github/workflows/main_ci.yml
+- .github/workflows/python-tests.yml
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-23 19:48:04 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=10 fail=5 fails=(CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, CHAINSTACK_RPC_URL:http_403, ANKR_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .github/workflows/main_ci.yml
+- .github/workflows/python-tests.yml
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- Processes running:
+- meme_pipeline_supervisor + children
+
+- Date: 2026-02-24 09:53:56 PST
+- What went wrong (1-3):
+- provider_smoke_test: rpc_ok=10 fail=5 fails=(CHAINSTACK_URL:http_403, ANKR_URL:http_403, DRPC_RPC_URL:http_400, CHAINSTACK_RPC_URL:http_403, ANKR_RPC_URL:http_403)
+- What we changed (1-5):
+- Session start (auto log).
+- What we learned (1-3):
+- (fill in)
+- What's next (1-5):
+- (fill in)
+- Files touched:
+- .github/workflows/main_ci.yml
+- .github/workflows/python-tests.yml
+- .gitignore
+- README.md
+- config/rpc_pool.json
+- infrastructure/jito_manager.py
+- infrastructure/telegram_agent.py
+- requirements.txt
+- rich/__init__.py
+- rich/console.py
+- rich/panel.py
+- rich/table.py
+- scripts/key_health_check.py
+- src/adapters/agents/whale_watcher.py
+- src/agents/liquidation_agent.py
+- src/agents/polymarket_micro_edge_agent.py
+- src/alerts.py
+- src/brain.py
+- src/config.py
+- src/config/__init__.py
+- Processes running:
+- meme_pipeline_supervisor + children

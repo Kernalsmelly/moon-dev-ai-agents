@@ -285,23 +285,39 @@ class EntertainmentSource:
             name = entry['name']
             # Fuzzy match - check if nominee is in name or vice versa
             if nominee_lower in name or name in nominee_lower:
-                prob = entry['odds']
+                prob = entry['odds']  # This is WIN probability from Gold Derby
                 rank = entry['rank']
 
-                # For nominations, boost probability (top 10 usually get nominated)
+                # For nominations, use fixed probabilities based on rank
+                # Historical data: top 5 nearly always get nominated, 6-10 are bubble
                 if is_nomination:
-                    if rank <= 5:
-                        prob = min(0.95, prob * 1.5)  # High chance of nomination
+                    if rank == 1:
+                        prob = 0.95  # #1 is almost always nominated
+                        confidence = 0.90
+                    elif rank == 2:
+                        prob = 0.92
+                        confidence = 0.88
+                    elif rank <= 5:
+                        prob = 0.88  # Top 5 very likely
+                        confidence = 0.85
+                    elif rank <= 8:
+                        prob = 0.70  # Bubble territory
+                        confidence = 0.65
                     elif rank <= 10:
-                        prob = 0.60  # Bubble
+                        prob = 0.50  # 50/50 bubble
+                        confidence = 0.55
                     else:
                         prob = 0.15  # Long shot
+                        confidence = 0.60
+                else:
+                    # For wins, use the Gold Derby odds directly (they're calibrated for wins)
+                    confidence = 0.80 if rank <= 3 else 0.65 if rank <= 5 else 0.50
 
                 return {
                     'source': 'Gold Derby Live',
                     'probability': prob,
-                    'confidence': 0.75 if rank <= 5 else 0.5,
-                    'reasoning': f"Gold Derby rank #{rank} for this category",
+                    'confidence': confidence,
+                    'reasoning': f"Gold Derby rank #{rank} - {'strong favorite' if rank <= 3 else 'contender' if rank <= 5 else 'bubble' if rank <= 10 else 'longshot'}",
                     'last_updated': datetime.now(timezone.utc),
                 }
 
@@ -361,63 +377,108 @@ class EntertainmentSource:
         2. Critical consensus (Metacritic, Rotten Tomatoes)
         3. Historical patterns (genre, studio, release timing)
         4. Precursor awards correlation
+
+        Confidence calibration:
+        - Frontrunners with precursor wins: 80-85%
+        - Known contenders: 65-75%
+        - Bubble candidates: 50-60%
+        - Unknown/long-shots: 40-50% (lower confidence = more uncertainty)
         """
 
-        # Known 2025 Oscar contenders (98th Academy Awards)
-        # This would be updated regularly from awards tracking sites
+        # Known 2026 Oscar contenders (98th Academy Awards - nominations Jan 2026)
+        # Updated with current precursor award results
         strong_contenders = {
             'best_picture': [
                 'anora', 'the brutalist', 'conclave', 'emilia perez',
-                'wicked', 'dune: part two', 'a real pain', 'september 5'
+                'wicked', 'dune: part two', 'a real pain', 'september 5',
+                'nickel boys', 'sing sing', 'the substance'
             ],
             'best_actor': [
                 'adrien brody', 'timothee chalamet', 'ralph fiennes',
-                'colman domingo', 'sebastian stan'
+                'colman domingo', 'sebastian stan', 'daniel craig'
             ],
             'best_actress': [
                 'demi moore', 'mikey madison', 'fernanda torres',
-                'cynthia erivo', 'karla sofia gascon'
+                'cynthia erivo', 'karla sofia gascon', 'angelina jolie'
             ],
             'best_director': [
                 'brady corbet', 'jacques audiard', 'sean baker',
-                'coralie fargeat', 'denis villeneuve'
+                'coralie fargeat', 'denis villeneuve', 'edward berger'
+            ],
+            'supporting_actor': [
+                'kieran culkin', 'yura borisov', 'edward norton',
+                'guy pearce', 'jeremy strong', 'stanley tucci'
+            ],
+            'supporting_actress': [
+                'zoe saldana', 'ariana grande', 'felicity jones',
+                'isabella rossellini', 'danielle deadwyler', 'aunjanue ellis-taylor'
             ],
         }
 
-        # Check if nominee is a known contender
+        # Bubble candidates (likely but not certain)
+        bubble_candidates = {
+            'best_picture': ['a complete unknown', 'saturday night', 'nosferatu'],
+            'best_actor': ['hugh grant', 'paul mescal', 'john david washington'],
+            'best_actress': ['nicole kidman', 'tilda swinton', 'marianne jean-baptiste'],
+        }
+
         nominee_lower = nominee.lower()
 
+        # Check for strong contenders first
         if category and category in strong_contenders:
             contenders = strong_contenders[category]
 
-            for contender in contenders:
+            for i, contender in enumerate(contenders):
                 if contender in nominee_lower or nominee_lower in contender:
-                    # Strong contender
+                    # Top contenders (positions 1-3) have higher confidence
+                    tier_confidence = 0.85 if i < 3 else 0.75
+
                     if is_nomination:
                         return {
-                            'probability': 0.85,
-                            'confidence': 0.7,
-                            'reasoning': f"'{nominee}' is a frontrunner for {category} nomination based on precursor awards",
+                            'probability': 0.90 if i < 3 else 0.80,
+                            'confidence': tier_confidence,
+                            'reasoning': f"'{nominee}' is a top contender (#{i+1}) for {category} nomination",
                         }
                     else:
-                        # Win is harder to predict
+                        # Win probability varies by position
+                        win_prob = [0.30, 0.25, 0.18, 0.12, 0.08, 0.05][min(i, 5)]
                         return {
-                            'probability': 0.25,  # ~5 nominees, frontrunner has edge
-                            'confidence': 0.6,
-                            'reasoning': f"'{nominee}' is a contender but wins are competitive",
+                            'probability': win_prob,
+                            'confidence': tier_confidence - 0.10,  # Less confident about wins
+                            'reasoning': f"'{nominee}' is contender #{i+1} - wins are competitive",
                         }
 
-        # Unknown/long-shot
+        # Check bubble candidates
+        if category and category in bubble_candidates:
+            for contender in bubble_candidates[category]:
+                if contender in nominee_lower or nominee_lower in contender:
+                    if is_nomination:
+                        return {
+                            'probability': 0.55,
+                            'confidence': 0.55,  # Medium confidence
+                            'reasoning': f"'{nominee}' is a bubble candidate - could go either way",
+                        }
+                    else:
+                        return {
+                            'probability': 0.08,
+                            'confidence': 0.50,
+                            'reasoning': f"'{nominee}' is a bubble candidate for win",
+                        }
+
+        # Unknown/long-shot - differentiate confidence based on category known-ness
+        # If we know the category well, we're more confident they WON'T be nominated
+        category_confidence = 0.70 if category in strong_contenders else 0.45
+
         if is_nomination:
             return {
-                'probability': 0.15,
-                'confidence': 0.5,
-                'reasoning': f"'{nominee}' is not among widely predicted nominees for this category",
+                'probability': 0.12,  # ~12% for unknown (roughly 5 slots, many contenders)
+                'confidence': category_confidence,
+                'reasoning': f"'{nominee}' not in tracked contenders - historically unlikely to be nominated",
             }
         else:
             return {
-                'probability': 0.05,
-                'confidence': 0.5,
+                'probability': 0.03,  # Very low for unknown wins
+                'confidence': category_confidence,
                 'reasoning': f"'{nominee}' is a long-shot for winning",
             }
 

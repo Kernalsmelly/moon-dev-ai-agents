@@ -1,0 +1,11 @@
+{
+  "parameters": {
+    "MIN_PRICE_CHANGE_5M": 0.0,
+    "MIN_BUYS_5M": 10,
+    "MIN_TXNS_5M": 20,
+    "MIN_VOLUME_5M": 2000.0,
+    "MIN_VOL5M_SHARE": 0.15,
+    "MAX_5M_PUMP": 25,
+    "MIN_VHI_SCORE": 55
+  }
+}

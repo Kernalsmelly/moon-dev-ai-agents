@@ -113,8 +113,10 @@ class ExtendedExchangeAPI:
         """Get or create event loop for async operations"""
         if self._event_loop is None or self._event_loop.is_closed():
             try:
-                self._event_loop = asyncio.get_event_loop()
+                # Prefer the running loop if present (modern asyncio)
+                self._event_loop = asyncio.get_running_loop()
             except RuntimeError:
+                # No running loop: create and set a new one for synchronous callers
                 self._event_loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self._event_loop)
         return self._event_loop

@@ -77,6 +77,17 @@ async def run_check():
                 table.add_row("balance_SOL", f"{sol:.9f} SOL ({bal} lamports)")
             except Exception as e:
                 table.add_row("balance", f"Error: {e}")
+    except Exception as e:
+        table.add_row("run_check", f"Fatal: {e}")
+    finally:
+        close_fn = getattr(brain, "close", None)
+        if callable(close_fn):
+            try:
+                maybe = close_fn()
+                if asyncio.iscoroutine(maybe):
+                    await maybe
+            except Exception:
+                pass
 
     panel = Panel(table, title="Moon Dev — Pre-Flight Report", expand=False)
     console.print(panel)

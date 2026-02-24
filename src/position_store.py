@@ -42,8 +42,19 @@ from typing import Optional
 # Project paths
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
-DEFAULT_DB_PATH = os.path.join(DATA_DIR, 'positions.db')
 LEGACY_JSON_PATH = os.path.join(DATA_DIR, 'positions_state.json')
+
+
+def _resolve_default_db_path() -> str:
+    raw = str(os.getenv('MEME_POSITIONS_DB', '') or '').strip()
+    if not raw:
+        return os.path.join(DATA_DIR, 'positions.db')
+    if os.path.isabs(raw):
+        return raw
+    return os.path.join(PROJECT_ROOT, raw)
+
+
+DEFAULT_DB_PATH = _resolve_default_db_path()
 
 
 @dataclass
@@ -364,8 +375,23 @@ class PositionStore:
                         updates.append('status = ?')
                         params.append(status)
                     if metadata is not None:
+                        # Merge metadata for existing rows so callers can safely update a subset
+                        # without wiping previously captured attributes (run_id, entry features, etc).
+                        try:
+                            cur = conn.execute('SELECT metadata FROM positions WHERE mint = ?', (mint,))
+                            row = cur.fetchone()
+                            existing_md = json.loads((row['metadata'] if row else None) or '{}')
+                            if not isinstance(existing_md, dict):
+                                existing_md = {}
+                        except Exception:
+                            existing_md = {}
+                        try:
+                            incoming_md = metadata if isinstance(metadata, dict) else {}
+                        except Exception:
+                            incoming_md = {}
+                        existing_md.update(incoming_md)
                         updates.append('metadata = ?')
-                        params.append(json.dumps(metadata))
+                        params.append(json.dumps(existing_md))
 
                     updates.append('updated_at = ?')
                     params.append(datetime.now().isoformat())
@@ -414,6 +440,75 @@ class PositionStore:
         except Exception as e:
             print(f"[PositionStore] Error deleting position: {e}")
             return False
+
+    def reap_stale_open_positions(
+        self,
+        *,
+        max_age_hours: float,
+        status_from: str = "open",
+        status_to: str = "stale",
+        limit: int = 10_000,
+    ) -> int:
+        """Mark very old 'open' positions as stale so they don't wedge dashboards/limits.
+
+        This repo runs many long-lived paper sessions. If the bot crashes or is killed,
+        we can end up with positions stuck in `status='open'` indefinitely. The trading
+        bot itself tracks active positions in memory, but dashboards and analysis tools
+        often query `status='open'`.
+
+        We deliberately do NOT record a synthetic trade here because we do not know the
+        real exit price. Callers can still inspect metadata later if needed.
+
+        Returns:
+            Number of positions updated.
+        """
+        try:
+            max_age_hours = float(max_age_hours)
+        except Exception:
+            return 0
+        if max_age_hours <= 0:
+            return 0
+
+        cutoff = datetime.now() - timedelta(hours=max_age_hours)
+        cutoff_iso = cutoff.isoformat()
+        now_iso = datetime.now().isoformat()
+
+        conn = self._get_conn()
+        cur = conn.execute(
+            """
+            SELECT mint, metadata
+            FROM positions
+            WHERE status = ?
+              AND COALESCE(updated_at, entry_timestamp) < ?
+            ORDER BY COALESCE(updated_at, entry_timestamp) ASC
+            LIMIT ?
+            """,
+            (status_from, cutoff_iso, int(limit)),
+        )
+        rows = cur.fetchall() or []
+        if not rows:
+            return 0
+
+        updated = 0
+        with self._transaction() as tx:
+            for row in rows:
+                mint = row["mint"]
+                try:
+                    md = json.loads(row["metadata"] or "{}")
+                except Exception:
+                    md = {}
+                if not isinstance(md, dict):
+                    md = {}
+                md.setdefault("stale_prev_status", status_from)
+                md["stale_reaped_at"] = now_iso
+                md.setdefault("stale_reason", f"reaped_after_{max_age_hours:g}h")
+                tx.execute(
+                    "UPDATE positions SET status = ?, metadata = ?, updated_at = ? WHERE mint = ?",
+                    (status_to, json.dumps(md), now_iso, mint),
+                )
+                updated += 1
+
+        return updated
 
     # =========================================================================
     # Trade History API
@@ -622,8 +717,16 @@ _store: Optional[PositionStore] = None
 def get_store() -> PositionStore:
     """Get the global PositionStore instance."""
     global _store
+    db_path = _resolve_default_db_path()
     if _store is None:
-        _store = PositionStore()
+        _store = PositionStore(db_path=db_path)
+    else:
+        try:
+            current = str(getattr(_store, 'db_path', '') or '')
+        except Exception:
+            current = ''
+        if current != str(db_path):
+            _store = PositionStore(db_path=db_path)
     return _store
 
 

@@ -1,0 +1,3 @@
+zsh:1: command not found: setsid
+hourly_summary post window=60m n=24 pnl=$-12.75 wr=12% ok=True
+hourly_summary post window=60m n=27 pnl=$-12.97 wr=11% ok=True

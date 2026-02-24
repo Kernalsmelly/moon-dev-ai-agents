@@ -31,7 +31,7 @@ Usage:
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 # Add project root to path
@@ -66,7 +66,22 @@ MIN_PNL_FOR_ALERT = 0.0  # Alert on all trades, set higher to filter noise
 
 def _get_webhook_url() -> Optional[str]:
     """Get Discord webhook URL from environment."""
-    return os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL")
+    # Prefer environment variables so operators can rotate webhooks without code edits.
+    env_url = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL")
+    if env_url:
+        return env_url
+
+    # Fallback: explicit configuration in src.config if present.
+    try:
+        # import config lazily to avoid circular imports during early init
+        from src import config
+        cfg = getattr(config, 'DISCORD_WEBHOOK_URL', None)
+        if cfg:
+            return cfg
+    except Exception:
+        pass
+
+    return None
 
 
 def _send_discord(content: str = None, embed: dict = None) -> bool:
@@ -90,20 +105,37 @@ def _send_discord(content: str = None, embed: dict = None) -> bool:
     if embed:
         payload['embeds'] = [embed]
 
-    try:
-        if HAS_REQUESTS:
-            res = requests.post(webhook, json=payload, timeout=10)
-            return res.status_code in (200, 204)
-        elif HAS_HTTPX:
-            import httpx
-            res = httpx.post(webhook, json=payload, timeout=10)
-            return res.status_code in (200, 204)
-        else:
-            print(f"[No HTTP library] {content or 'Alert'}")
-            return False
-    except Exception as e:
-        print(f"[Discord error] {e}")
-        return False
+    import time as _time
+
+    for attempt in range(3):
+        try:
+            if HAS_REQUESTS:
+                res = requests.post(webhook, json=payload, timeout=10)
+            elif HAS_HTTPX:
+                import httpx
+                res = httpx.post(webhook, json=payload, timeout=10)
+            else:
+                print(f"[No HTTP library] {content or 'Alert'}")
+                return False
+
+            if res.status_code in (200, 204):
+                return True
+
+            # Handle rate limiting with Retry-After header
+            if res.status_code == 429:
+                retry_after = float(res.headers.get('Retry-After', 2 ** attempt))
+                _time.sleep(min(retry_after, 10))
+                continue
+
+            # Other error — retry with backoff
+            _time.sleep(2 ** attempt)
+
+        except Exception as e:
+            print(f"[Discord error attempt {attempt + 1}] {e}")
+            if attempt < 2:
+                _time.sleep(2 ** attempt)
+
+    return False
 
 
 def send_trade_alert(
@@ -182,9 +214,9 @@ def send_trade_alert(
             },
         ],
         'footer': {
-            'text': f"Moon Dev Trading System • {datetime.now().strftime('%H:%M:%S')}",
-        },
-        'timestamp': datetime.utcnow().isoformat(),
+            'text': f"Moon Dev Trading System • {datetime.now(timezone.utc).strftime('%H:%M:%S')}",
+            },
+            'timestamp': datetime.now(timezone.utc).isoformat(),
     }
 
     # Add position size if available
@@ -247,9 +279,9 @@ def send_system_alert(
         'description': description,
         'color': color,
         'footer': {
-            'text': f"Moon Dev System • {datetime.now().strftime('%H:%M:%S')}",
+            'text': f"Moon Dev System • {datetime.now(timezone.utc).strftime('%H:%M:%S')}",
         },
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
     }
 
     if fields:
@@ -343,9 +375,9 @@ def send_daily_summary() -> bool:
             },
         ],
         'footer': {
-            'text': f"Moon Dev Trading System • {datetime.now().strftime('%Y-%m-%d')}",
+            'text': f"Moon Dev Trading System • {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
         },
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
     }
 
     return _send_discord(embed=embed)
@@ -359,7 +391,7 @@ def send_startup_alert(mode: str = 'SHADOW') -> bool:
         level='success',
         fields=[
             {'name': 'Mode', 'value': mode, 'inline': True},
-            {'name': 'Time', 'value': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'inline': True},
+            {'name': 'Time', 'value': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'), 'inline': True},
         ]
     )
 
@@ -372,7 +404,7 @@ def send_shutdown_alert(reason: str = 'Manual shutdown') -> bool:
         level='warning',
         fields=[
             {'name': 'Reason', 'value': reason, 'inline': True},
-            {'name': 'Time', 'value': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'inline': True},
+            {'name': 'Time', 'value': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'), 'inline': True},
         ]
     )
 

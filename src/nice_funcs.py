@@ -11,6 +11,7 @@ import re as reggie
 import os
 import time
 import json
+import random
 import pandas_ta as ta
 from datetime import datetime, timedelta
 import math
@@ -37,6 +38,71 @@ os.makedirs('temp_data', exist_ok=True)
 # Simple in-memory cache for token symbols to avoid 'Unknown' labels
 TOKEN_CACHE = {}
 
+# Birdeye throttles on free tiers with responses like:
+# {"success":false,"message":"Compute units usage limit exceeded"}
+# We treat that as a soft rate limit and apply a global cooldown so callers don't spin.
+BIRDEYE_COOLDOWN_UNTIL = 0.0
+BIRDEYE_BACKOFF_S = 0.0
+BIRDEYE_FAILS = 0
+TOKEN_SECURITY_CACHE: dict[str, tuple[float, dict]] = {}
+
+
+def _birdeye_get_data(url: str, headers: dict, *, timeout_s: float = 6.0) -> dict | None:
+    global BIRDEYE_COOLDOWN_UNTIL, BIRDEYE_BACKOFF_S
+    global BIRDEYE_FAILS
+    now = time.time()
+    if BIRDEYE_COOLDOWN_UNTIL and now < BIRDEYE_COOLDOWN_UNTIL:
+        return None
+
+    def _apply_backoff(base_s: float) -> None:
+        """Global cooldown to avoid spinning when Birdeye throttles."""
+        global BIRDEYE_COOLDOWN_UNTIL, BIRDEYE_BACKOFF_S, BIRDEYE_FAILS
+        BIRDEYE_FAILS = int(BIRDEYE_FAILS or 0) + 1
+        base_s = float(base_s)
+        BIRDEYE_BACKOFF_S = min(600.0, max(base_s, (BIRDEYE_BACKOFF_S * 2.0) if BIRDEYE_BACKOFF_S else base_s))
+        jitter = random.uniform(0.0, min(3.0, BIRDEYE_BACKOFF_S * 0.1))
+        BIRDEYE_COOLDOWN_UNTIL = now + BIRDEYE_BACKOFF_S + jitter
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout_s)
+        try:
+            j = resp.json()
+        except Exception:
+            j = None
+
+        # hard rate-limit
+        if resp.status_code == 429:
+            ra = resp.headers.get("Retry-After")
+            try:
+                ra_s = float(ra) if ra is not None else None
+            except Exception:
+                ra_s = None
+            _apply_backoff(ra_s if ra_s is not None and ra_s > 0 else 10.0)
+            return None
+
+        # transient provider errors, treat as soft-throttle
+        if 500 <= int(resp.status_code) <= 599:
+            _apply_backoff(5.0)
+            return None
+
+        # soft rate-limit via "compute units" messages (often still HTTP 200)
+        if isinstance(j, dict) and j.get("success") is False:
+            msg = str(j.get("message") or "")
+            if "compute units" in msg.lower() or "usage limit" in msg.lower():
+                _apply_backoff(20.0)
+                return None
+        if resp.status_code != 200 or not isinstance(j, dict):
+            return None
+        if j.get("success") is False:
+            return None
+        # success resets global cooldown
+        BIRDEYE_FAILS = 0
+        BIRDEYE_BACKOFF_S = 0.0
+        BIRDEYE_COOLDOWN_UNTIL = 0.0
+        return j.get("data") or {}
+    except Exception:
+        _apply_backoff(5.0)
+        return None
 
 def get_cached_symbol(address: str) -> str:
     """
@@ -195,12 +261,11 @@ def token_overview(address):
     overview_url = f"{BASE_URL}/token_overview?address={address}"
     headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
 
-    response = requests.get(overview_url, headers=headers)
+    # Use the shared Birdeye helper so we respect global cooldowns/backoff.
+    overview_data = _birdeye_get_data(overview_url, headers, timeout_s=6.0) or {}
     result = {}
- 
 
-    if response.status_code == 200:
-        overview_data = response.json().get('data', {})
+    if overview_data:
 
         # Retrieve buy1h, sell1h, and calculate trade1h
         buy1h = overview_data.get('buy1h', 0)
@@ -278,7 +343,7 @@ def token_overview(address):
         # Return result dictionary with all the data
         return result
     else:
-        print(f"Failed to retrieve token overview for address {address}: HTTP status code {response.status_code}")
+        print(f"Failed to retrieve token overview for address {address} (Birdeye unavailable or rate-limited)")
         return None
 
 
@@ -326,12 +391,10 @@ def token_security_info(address):
     url = f"{BASE_URL}/token_security?address={address}"
     headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
 
-    # Sending a GET request to the API
-    response = requests.get(url, headers=headers)
+    # Use the shared Birdeye helper so we respect global cooldowns/backoff.
+    security_data = _birdeye_get_data(url, headers, timeout_s=6.0)
 
-    if response.status_code == 200:
-        # Parse the JSON response
-        security_data = response.json()['data']
+    if security_data:
         # Cache any symbol/name we can find to reduce Unknown labels elsewhere
         token_name = security_data.get('tokenName') or security_data.get('name') or security_data.get('symbol')
         if token_name:
@@ -342,7 +405,30 @@ def token_security_info(address):
 
         print_pretty_json(security_data)
     else:
-        print("Failed to retrieve token security info:", response.status_code)
+        print("Failed to retrieve token security info (Birdeye unavailable or rate-limited)")
+
+
+def token_security_raw(address: str):
+    """Return Birdeye token_security data without printing/logging.
+
+    Returns dict or None if unavailable.
+    """
+    api_key = getattr(config, "BIRDEYE_API_KEY", None) or os.getenv("BIRDEYE_API_KEY")
+    if not api_key:
+        return None
+    url = f"{BASE_URL}/token_security?address={address}"
+    headers = {"X-API-KEY": api_key}
+    try:
+        cached = TOKEN_SECURITY_CACHE.get(address)
+        if cached and (time.time() - cached[0]) < 900:
+            return cached[1] or None
+        data = _birdeye_get_data(url, headers, timeout_s=6.0)
+        if not data:
+            return None
+        TOKEN_SECURITY_CACHE[address] = (time.time(), data)
+        return data or None
+    except Exception:
+        return None
 
 
 def send_discord_message(content: str):
@@ -381,11 +467,16 @@ def is_momentum_reject(address: str):
     headers = {"X-API-KEY": config.BIRDEYE_API_KEY}
 
     try:
-        resp = requests.get(url, headers=headers, timeout=6)
-        if resp.status_code != 200:
-            return (False, address, {"error": f"http_{resp.status_code}"})
-
-        data = resp.json().get('data', {}) or {}
+        cached = TOKEN_SECURITY_CACHE.get(address)
+        if cached and (time.time() - cached[0]) < 900:
+            data = cached[1] or {}
+        else:
+            data = _birdeye_get_data(url, headers, timeout_s=6.0) or {}
+            if data:
+                TOKEN_SECURITY_CACHE[address] = (time.time(), data)
+        if not data:
+            # Treat rate limits / transient errors as "unknown", not an automatic reject.
+            return (False, address, {"error": "birdeye_unavailable"})
 
         # Try to derive a friendly token name from available fields
         token_name = data.get('tokenName') or data.get('name') or data.get('symbol') or address

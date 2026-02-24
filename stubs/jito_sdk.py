@@ -12,11 +12,13 @@ class JitoSDK:
       - sendBundle(bundle): returns a simple bundle_id dict
     """
 
-    def __init__(self, units_fixed: int | None = None, units_range: tuple[int, int] = (150_000, 300_000), malformed: bool = False):
+    def __init__(self, units_fixed: int | None = None, units_range: tuple[int, int] = (150_000, 300_000), malformed: bool = False, fail_count: int = 0):
         # If units_fixed provided, always return that value for determinism in tests
         self.units_fixed = units_fixed
         self.units_range = units_range
         self.malformed = bool(malformed)
+        self.fail_count = fail_count  # Number of sendBundle calls that should fail before succeeding
+        self._send_attempt = 0
         self.sim_calls: list[dict[str, Any]] = []
         self.sent_calls: list[dict[str, Any]] = []
 
@@ -49,6 +51,11 @@ class JitoSDK:
         return resp
 
     async def sendBundle(self, bundle: list[bytes] | Any) -> dict:
+        self._send_attempt += 1
+        if self._send_attempt <= self.fail_count:
+            self.sent_calls.append({'bundle': bundle, 'bundle_id': None, 'failed': True})
+            await asyncio.sleep(0)
+            return {'success': False, 'error': 'expired blockhash'}
         bid = str(uuid.uuid4())
         self.sent_calls.append({'bundle': bundle, 'bundle_id': bid})
         await asyncio.sleep(0)
@@ -71,3 +78,16 @@ class JitoManager:
             return await self.sdk.simulateBundle(batch)
         else:
             return await self.sdk.sendBundle(batch)
+
+    async def submit_with_retry(self, batch: list[bytes], max_retries: int = 3, **kwargs) -> dict:
+        """Retry-aware submit that delegates to submit_atomic_exit."""
+        for attempt in range(max_retries):
+            result = await self.submit_atomic_exit(batch, simulate=False, **kwargs)
+            if result.get('bundle_id') or result.get('success'):
+                return result
+            # Check for non-retryable errors
+            error = str(result.get('error', '')).lower()
+            if 'simulation failed' in error or 'invalid transaction' in error:
+                return result
+            await asyncio.sleep(0)
+        return result

@@ -10,7 +10,7 @@ WSOL_MINT_LITERAL = "So11111111111111111111111111111111111111112"
 
 @pytest.mark.asyncio
 async def test_tp1_amount_and_live_gate(mock_jupiter, mock_versioned_tx, mock_async_client, monkeypatch):
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'FakeTokenMint11111111111111111111111111111111'
 
     # patch price and decimals
@@ -46,7 +46,7 @@ async def test_live_flag_controls_send(mock_jupiter, mock_versioned_tx, mock_asy
     of direct send_raw_transaction calls. This test verifies the simulation-only
     path for live=False.
     """
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'FakeTokenMint22222222222222222222222222222222'
 
     monkeypatch.setattr(brain, '_get_birdeye_price', AsyncMock(return_value=1.0))
@@ -85,17 +85,27 @@ async def test_monitor_lifecycle_tp_hit(mock_jupiter, mock_versioned_tx, mock_as
 
     Expectation: _execute_exit_swap called exactly twice and monitor exits.
     """
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'LifecycleMint1111111111111111111111111111111'
 
-    # Prepare price sequence; after list exhausted, return last value repeatedly
-    prices = [105.0, 126.0, 201.0]
-    async def price_side_effect():
-        if prices:
-            return prices.pop(0)
-        return 201.0
+    # Bound iterations to prevent infinite loops in test
+    monkeypatch.setenv('MONITOR_MAX_ITERATIONS', '10')
 
-    monkeypatch.setattr(brain, '_get_birdeye_price', AsyncMock(side_effect=price_side_effect))
+    # Prepare price sequence; after list exhausted, return last value repeatedly
+    # _monitor_position_exits calls _call_birdeye_price which returns (price, liquidity)
+    prices = [(105.0, None), (126.0, None), (201.0, None)]
+    call_idx = [0]
+    async def price_side_effect(maddr):
+        # Return SOL price for WSOL lookups
+        if maddr == WSOL_MINT_LITERAL:
+            return (100.0, None)
+        if call_idx[0] < len(prices):
+            p = prices[call_idx[0]]
+            call_idx[0] += 1
+            return p
+        return (201.0, None)
+
+    monkeypatch.setattr(brain, '_call_birdeye_price', AsyncMock(side_effect=price_side_effect))
 
     # Ensure token decimals and other Jupiter plumbing use defaults from fixtures
     monkeypatch.setattr(brain, '_get_token_decimals', AsyncMock(return_value=6))
@@ -115,17 +125,25 @@ async def test_monitor_lifecycle_tp_hit(mock_jupiter, mock_versioned_tx, mock_as
 @pytest.mark.asyncio
 async def test_monitor_sequence_tp1_then_sl(mock_jupiter, mock_versioned_tx, mock_async_client, monkeypatch, fast_sleep):
     """Sequence: TP1 then crash to SL — ensure partial then full exit occurs."""
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'SeqMint11111111111111111111111111111111'
 
-    # Price sequence: first TP1 (>=25%), then crash to SL (<= -15%)
-    prices = [126.0, 85.0]
-    async def price_side_effect():
-        if prices:
-            return prices.pop(0)
-        return 85.0
+    # Bound iterations to prevent infinite loops in test
+    monkeypatch.setenv('MONITOR_MAX_ITERATIONS', '10')
 
-    monkeypatch.setattr(brain, '_get_birdeye_price', AsyncMock(side_effect=price_side_effect))
+    # Price sequence: first TP1 (>=25%), then crash to SL (<= -15%)
+    prices = [(126.0, None), (85.0, None)]
+    call_idx = [0]
+    async def price_side_effect(maddr):
+        if maddr == WSOL_MINT_LITERAL:
+            return (100.0, None)
+        if call_idx[0] < len(prices):
+            p = prices[call_idx[0]]
+            call_idx[0] += 1
+            return p
+        return (85.0, None)
+
+    monkeypatch.setattr(brain, '_call_birdeye_price', AsyncMock(side_effect=price_side_effect))
     monkeypatch.setattr(brain, '_get_token_decimals', AsyncMock(return_value=6))
 
     exec_mock = AsyncMock(return_value=True)
@@ -144,7 +162,7 @@ async def test_monitor_sequence_tp1_then_sl(mock_jupiter, mock_versioned_tx, moc
 
 @pytest.mark.asyncio
 async def test_zero_decimals_aborts_and_does_not_quote(mock_jupiter, mock_versioned_tx, mock_async_client, monkeypatch):
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'ZeroDecimalsMint111111111111111111111111111111'
 
     monkeypatch.setattr(brain, '_get_birdeye_price', AsyncMock(return_value=1.0))
@@ -162,7 +180,7 @@ async def test_zero_decimals_aborts_and_does_not_quote(mock_jupiter, mock_versio
 
 @pytest.mark.asyncio
 async def test_rounding_of_odd_base_units(mock_jupiter, mock_versioned_tx, mock_async_client, monkeypatch):
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'OddBaseMint11111111111111111111111111111111'
 
     # choose price so that base_amount for amount_sol=0.1 becomes 100001 (odd)
@@ -179,7 +197,7 @@ async def test_rounding_of_odd_base_units(mock_jupiter, mock_versioned_tx, mock_
 
 @pytest.mark.asyncio
 async def test_flash_crash_oracle_defers(mock_jupiter, mock_versioned_tx, mock_async_client, monkeypatch):
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'FlashCrashMint111111111111111111111111111111'
 
     # Price returns 0 -> should defer and call trigger_dry_run_swap
@@ -202,7 +220,7 @@ async def test_flash_crash_oracle_defers(mock_jupiter, mock_versioned_tx, mock_a
 @pytest.mark.asyncio
 async def test_exit_aborts_on_low_liquidity(mock_jupiter, mock_versioned_tx, mock_async_client, monkeypatch):
     """If estimated impact > 15% (sell size >> pool liquidity), the exit should be deferred."""
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'ThinLiquidityMint11111111111111111111111111111'
 
     # token price in SOL and pool liquidity USD
@@ -243,7 +261,7 @@ async def test_circuit_breaker_halts_on_repeat_failure(mock_jupiter, mock_versio
     - Make the first 2 chunks fail all 3 retries each (6 exceptions)
     - Ensure the circuit breaker log event is emitted and the 3rd chunk is NOT attempted
     """
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'CircuitBreakerMint11111111111111111111111111111'
 
     token_price_sol = 1.0
@@ -291,7 +309,7 @@ async def test_circuit_breaker_halts_on_repeat_failure(mock_jupiter, mock_versio
 @pytest.mark.asyncio
 async def test_chunked_exit_on_high_impact(mock_jupiter, mock_versioned_tx, mock_async_client, monkeypatch, fast_sleep):
     """When impact > MAX_IMPACT_PCT, _execute_exit_swap should split into chunks and call Jupiter per chunk."""
-    brain = MarketBrain(rpc='http://localhost')
+    brain = MarketBrain(rpc='http://localhost', start_monitor=False)
     mint = 'ChunkMint11111111111111111111111111111111'
 
     # Setup prices such that impact is 30% and MAX_IMPACT_PCT default is 15% -> 2 chunks
@@ -323,7 +341,7 @@ async def test_chunked_exit_on_high_impact(mock_jupiter, mock_versioned_tx, mock
     @pytest.mark.asyncio
     async def test_chunked_exit_with_retry_recovery(mock_jupiter, mock_versioned_tx, mock_async_client, monkeypatch, fast_sleep):
         """Simulate chunk1 failing first attempt then succeeding, chunk2 succeeds immediately."""
-        brain = MarketBrain(rpc='http://localhost')
+        brain = MarketBrain(rpc='http://localhost', start_monitor=False)
         mint = 'RetryChunkMint111111111111111111111111111111'
 
         token_price_sol = 1.0

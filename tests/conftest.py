@@ -353,3 +353,18 @@ def ensure_brain_shutdown(monkeypatch):
                     pass
         except Exception:
             pass
+
+
+@pytest.fixture(autouse=True)
+def stub_discord_alert(monkeypatch):
+    """Autouse fixture to stub out MarketBrain._send_discord_alert and avoid
+    actual webhook calls during tests.
+    """
+    try:
+        from src.brain import MarketBrain
+        # Use AsyncMock so tests can assert it was awaited
+        mock = AsyncMock(return_value=True)
+        monkeypatch.setattr(MarketBrain, '_send_discord_alert', mock, raising=False)
+    except Exception:
+        pass
+    yield

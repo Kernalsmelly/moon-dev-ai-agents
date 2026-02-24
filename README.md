@@ -109,6 +109,111 @@ Project updates will be posted in Discord, join here: [discord.gg/8UPuVZ53bh](ht
 
 ---
 
+## Quick Start: Discord
+
+This project now uses a single Discord webhook for operator notifications.
+
+Environment variable:
+
+```bash
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/....
+```
+
+Only `DISCORD_WEBHOOK_URL` is required for alerts. The repository keeps a compatibility shim
+for older Telegram helpers, but all alerting is routed to the Discord webhook by default.
+
+Smoke test:
+
+```bash
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/XXX/YYY" python scripts/smoke_discord.py
+```
+
+This will send a single green embed to the configured webhook.
+
+## Bot Lifecycle
+
+The MarketBrain component runs several background monitors (heartbeat, trailing-stop checker, RPC health probes, and optional whale watcher). These background loops are started when you explicitly start the brain runtime. This prevents accidental background tasks from running during import or tests.
+
+Usage (async):
+
+1. Instantiate the brain:
+
+```py
+from src.brain import MarketBrain
+brain = MarketBrain(start_monitor=False)
+```
+
+2. Start automated monitoring:
+
+```py
+await brain.start()
+# or run() to enter the full run loop (will not return):
+await brain.run()
+```
+
+Notes:
+- During tests the codebase detects pytest and avoids starting background tasks automatically. If you need to run the background loops locally, set `start_monitor=True` when constructing `MarketBrain` inside an active event loop, or call `await brain.start()` to begin monitoring.
+- Control live execution with `LIVE_TRADING_ENABLED=1` to allow `auto_exit_trade` to perform real exits. Keep `USE_REAL_JITO=0` (default) to use the local Jito stub unless you explicitly install and enable the real Jito SDK.
+
+## Testing
+
+Background tasks (heartbeat, trailing-stop monitor, whale watcher, etc.) are disabled automatically during pytest runs so tests don't hang during import or collection. The test-suite also stubs external HTTP calls and Discord webhook sends.
+
+Key notes:
+- The test-runner sets `PYTEST_CURRENT_TEST` in the environment; the code uses this to avoid starting background tasks during import.
+- Discord webhook sends are automatically stubbed by `tests/conftest.py` with an AsyncMock; you can assert `MarketBrain._send_discord_alert.await_count` in tests to verify alerts were sent.
+- To run the full test-suite locally in the repository virtualenv:
+
+```bash
+. .venv/bin/activate
+pytest -q
+```
+
+- To run the smoke Discord test (this starts the brain in the current event loop, lets background loops initialize for 5s, and sends two test embeds):
+
+```bash
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/XXX/YYY" python scripts/smoke_discord.py
+```
+
+If you want a global timeout to help surface hanging tests, install `pytest-timeout` and run `pytest --timeout=10` to fail tests that exceed 10s.
+
+---
+
+## Manual Jito Guide (Troubleshooting)
+
+If you want the repository to use the upstream Jito searcher for live bundles,
+you have two options depending on how the upstream package is published in
+PyPI or the Jito project layout:
+
+- If `jito-py` (or a similarly named package) is available on PyPI, install it:
+
+```bash
+pip install jito-py
+```
+
+- If the upstream repository is not pip-packaged (common for SDK repos that
+  require additional packaging steps or use git submodules), clone it and add
+  it to your `PYTHONPATH` manually:
+
+```bash
+git clone https://github.com/jito-labs/jito-python.git ~/src/jito-python
+export PYTHONPATH="$PYTHONPATH:~/src/jito-python"
+```
+
+After installing or adding the upstream project to `PYTHONPATH`, enable the
+real client at runtime by setting the environment variable:
+
+```bash
+USE_REAL_JITO=1
+```
+
+The repository contains a safe local stub used for development and testing. To
+use the real Jito client instead, set `USE_REAL_JITO=1` and ensure the real
+package/module is importable. If the import fails, the code will automatically
+fall back to the local stub and log the error.
+
+---
+
 ## 🚀 Quick Start Guide - RBI Backtesting Agent
 
 **Why Start with Backtesting?**
@@ -135,7 +240,6 @@ The RBI Agent takes your trading ideas (from YouTube videos, PDFs, or plain text
 ```bash
 git clone https://github.com/YOUR_USERNAME/moon-dev-ai-agents-for-trading.git
 cd moon-dev-ai-agents-for-trading
-```
 
 **Recommended IDEs:**
 - [Cursor](https://www.cursor.com/) - AI-enabled coding
@@ -145,9 +249,48 @@ cd moon-dev-ai-agents-for-trading
 
 The RBI Agent needs API keys to function. Create a `.env` file in the root directory:
 
+---
+
+## Timezone Policy
+
+All code in this repository MUST use timezone-aware UTC datetimes. Concretely, prefer:
+
+- from datetime import datetime, timezone
+- datetime.now(timezone.utc)
+
+Do NOT use offset-naive calls like datetime.utcnow() or datetime.now() without tzinfo. Mixing naive and aware datetimes causes TypeError when comparing or subtracting values and breaks session windows, scheduled reports, and circuit-breaker logic.
+
+## Circuit Breakers
+
+The system enforces a daily circuit breaker to stop live trading after excessive losses:
+
+- If the aggregated daily net PnL falls below -1.5 SOL, the agent will set `LIVE_TRADING_ENABLED = False` and send an alert to configured telemetry channels (Telegram / Discord).
+- This is an operator safety mechanism. After a circuit breaker trip, manual investigation and a deliberate reset of configuration are required before re-enabling live trading.
+
+For development and testing, `LIVE_TRADING_ENABLED` defaults to `False` (paper-trading mode).
 ```bash
 # Copy the example file
 cp .env.example .env
+```
+
+## Testing
+
+Background tasks (heartbeat, trailing-stop monitor, whale watcher) are disabled during pytest runs to keep test collection fast and deterministic. The test suite provides fixtures that:
+
+- Stub external HTTP calls (httpx) so tests do not make real network requests.
+- Provide an AsyncMock for `MarketBrain._send_discord_alert` so tests can assert alerts were attempted without sending webhooks.
+
+To run the smoke script (manually exercise Discord alerts and background loops):
+
+```bash
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/XXX/YYY" python scripts/smoke_discord.py
+```
+
+If you'd like tests to fail fast on hangs, install the pytest-timeout plugin and run tests with a timeout:
+
+```bash
+pip install pytest-timeout
+pytest --timeout=10
 ```
 
 **Required API Keys for RBI Agent:**

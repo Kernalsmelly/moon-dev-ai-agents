@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 
 from rich.console import Console
 from rich.panel import Panel
@@ -82,6 +83,30 @@ JUPITER_QUOTE = "https://api.jup.ag/swap/v1/quote"
 JUPITER_SWAP = "https://api.jup.ag/swap/v1/swap"
 
 DEFAULT_SLIPPAGE_BPS = 50  # 0.5%
+MAX_PRICE_IMPACT_PCT = float(os.getenv("MAX_PRICE_IMPACT_PCT", "5.0"))  # % threshold
+DYNAMIC_SLIPPAGE_ENABLED = os.getenv("DYNAMIC_SLIPPAGE", "true").lower() in ("1", "true", "yes")
+MAX_SLIPPAGE_BPS = int(os.getenv("MAX_SLIPPAGE_BPS", "250"))  # 2.5%
+
+
+def _extract_price_impact_pct(quote: dict) -> float | None:
+    try:
+        data = quote.get("data") or quote.get("routes") or quote.get("quote") or quote.get("results")
+        if isinstance(data, list) and data:
+            q = data[0]
+        else:
+            q = quote
+        val = None
+        if isinstance(q, dict):
+            val = q.get("priceImpactPct") or q.get("priceImpact") or q.get("price_impact_pct")
+        if val is None:
+            return None
+        val = float(val)
+        # Normalize: if value looks like percent (e.g., 3.5), convert to fraction
+        if val > 1.0:
+            val = val / 100.0
+        return val
+    except Exception:
+        return None
 
 
 def load_key():
@@ -157,7 +182,7 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
     brain = MarketBrain(rpc=rpc)
 
     lamports = int(amount * 1e9)
-    # Use the DEFAULT_SLIPPAGE_BPS (50 bps) unless a caller explicitly provided a priority argument
+    # Use the DEFAULT_SLIPPAGE_BPS unless dynamic slippage overrides it
     slippage_bps = DEFAULT_SLIPPAGE_BPS
 
     console.print(Panel(f"Preparing swap: {amount} SOL -> USDC | Slippage: {slippage_bps} bps\nRPC: {rpc}", title="Trade Executor"))
@@ -166,6 +191,43 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
     env_live = os.getenv('TRADE_LIVE', '0') in ('1', 'true', 'True')
     priority_fee_value = int(priority_fee) if priority_fee is not None else int(os.getenv('PRIORITY_FEE', str(DEFAULT_PRIORITY_FEE)))
     final_live_env = live or env_live
+
+    # Attempt to fetch recent prioritization fees and use the 95th percentile
+    # from the last N slots to set a high compute-unit price for inclusion.
+    try:
+        try:
+            resp = await brain._call_rpc('getRecentPrioritizationFees', [150])
+        except Exception:
+            resp = await brain._call_rpc('getRecentPrioritizationFees', [])
+        fees_list = None
+        if isinstance(resp, dict):
+            # common shapes: {'result': [...]} or {'value': [...]} or direct list
+            fees_list = resp.get('result') or resp.get('value') or resp.get('fees')
+        else:
+            fees_list = resp
+        if isinstance(fees_list, list) and len(fees_list) > 0:
+            # extract numeric values robustly
+            nums = []
+            for e in fees_list:
+                try:
+                    if isinstance(e, dict):
+                        # common key 'prioritizationFee' or 'fee'
+                        v = e.get('prioritizationFee') or e.get('fee') or list(e.values())[0]
+                    else:
+                        v = e
+                    nums.append(float(v))
+                except Exception:
+                    continue
+            if nums:
+                nums_sorted = sorted(nums)
+                idx = max(0, min(len(nums_sorted) - 1, int(round(0.95 * len(nums_sorted))) - 1))
+                percentile_fee = int(nums_sorted[idx])
+                # use percentile_fee as the compute-unit price (fallback to existing if zero)
+                if percentile_fee and percentile_fee > 0:
+                    priority_fee_value = int(percentile_fee)
+    except Exception:
+        # best-effort: leave priority_fee_value as-is
+        pass
 
     # 1) Get quote
     try:
@@ -180,6 +242,21 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
     solders_key = KEY
 
     if not quote_failed and quote is not None:
+        # Guard against excessive price impact
+        price_impact = _extract_price_impact_pct(quote)
+        if price_impact is not None and MAX_PRICE_IMPACT_PCT > 0:
+            if (price_impact * 100.0) > MAX_PRICE_IMPACT_PCT:
+                console.print(Panel(
+                    f"Price impact too high: {price_impact*100:.2f}% (max {MAX_PRICE_IMPACT_PCT}%). Aborting.",
+                    style="red",
+                ))
+                return
+
+        # Dynamic slippage: scale based on price impact but cap it
+        if DYNAMIC_SLIPPAGE_ENABLED and price_impact is not None:
+            dynamic_bps = int((price_impact * 10000) * 1.5 + 10)
+            slippage_bps = max(slippage_bps, min(dynamic_bps, MAX_SLIPPAGE_BPS))
+
         # Try to extract and display a friendly route summary for visibility
         def extract_route_summary(q):
             try:
@@ -211,6 +288,33 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
 
         route_summary = extract_route_summary(quote)
         console.print(Panel(f"Route: {route_summary}\n(Full quote available in logs)", title="Route Info", style="cyan"))
+        try:
+            with open("logs/jupiter_price_impact.log", "a", encoding="utf-8") as fh:
+                fh.write(f"{datetime.now(timezone.utc).isoformat()} price_impact={price_impact} slippage_bps={slippage_bps}\\n")
+        except Exception:
+            pass
+
+        # Route sanity guard: block obvious low-liquidity or junk routes
+        try:
+            data = quote.get("data") or quote.get("routes") or []
+            if isinstance(data, list) and data:
+                r0 = data[0]
+                # Heuristic: if route contains only 1 hop and price impact is high, skip
+                hops = None
+                if isinstance(r0, dict):
+                    hops = r0.get("marketInfos") or r0.get("routePlan") or r0.get("swapInfo")
+                if hops is not None and isinstance(hops, list):
+                    hop_count = len(hops)
+                else:
+                    hop_count = 1
+                if price_impact is not None and price_impact * 100.0 > (MAX_PRICE_IMPACT_PCT * 0.8) and hop_count <= 1:
+                    console.print(Panel(
+                        f"Route sanity guard: high price impact {price_impact*100:.2f}% on 1-hop route. Aborting.",
+                        style="red",
+                    ))
+                    return
+        except Exception:
+            pass
 
         # Deep route scan: robust extraction of AMM/program names from multiple possible fields
         def deep_route_list(q):
@@ -617,6 +721,21 @@ async def main(amount: float, input_mint: str, output_mint: str, slippage: float
                         sig = getattr(resp, 'result', None) or getattr(resp, 'value', None)
 
                     console.print(Panel(f"Send result: {sig}", title="TX Result"))
+                    # best-effort: record signature into MarketBrain telemetry so
+                    # simulated_trades can be correlated with on-chain TXs
+                    try:
+                        mint_for_telemetry = output_mint or input_mint
+                        try:
+                            # brain.record_tx_signature added to MarketBrain
+                            brain.record_tx_signature(mint_for_telemetry, str(sig))
+                        except Exception:
+                            # fallback: attempt to append minimal entry
+                            try:
+                                brain.simulated_trades.append({'mint': mint_for_telemetry, 'tx_sig': str(sig), 'status': 'submitted', 'timestamp': datetime.now(timezone.utc).isoformat()})
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
                 except Exception as e:
                     console.print(Panel(f"Failed to send transaction: {e}", style="red"))
                     return

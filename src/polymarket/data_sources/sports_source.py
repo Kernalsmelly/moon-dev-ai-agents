@@ -2,11 +2,15 @@
 Sports Data Source
 
 Uses The Odds API to get betting odds from major sportsbooks.
-Compare sportsbook odds to Polymarket prices to find edge.
+Falls back to ESPN (free, no key) when Odds API is exhausted.
 
 The Odds API: https://the-odds-api.com/
 - Free tier: 500 requests/month
 - Covers: NFL, NBA, MLB, NHL, UFC, Soccer, Golf, Tennis, etc.
+
+ESPN API (fallback):
+- Free, no key required
+- Provides team records, rankings, and ESPN's win predictions
 """
 
 import os
@@ -16,6 +20,14 @@ from datetime import datetime, timezone
 from typing import Dict, Optional, List
 
 logger = logging.getLogger(__name__)
+
+# Import ESPN fallback
+try:
+    from .espn_source import ESPNSource, get_espn_source
+    HAS_ESPN = True
+except ImportError:
+    HAS_ESPN = False
+    ESPNSource = None
 
 # API endpoint
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
@@ -37,7 +49,34 @@ SPORT_KEYS = {
     'college football': 'americanfootball_ncaaf',
     'college basketball': 'basketball_ncaab',
     'march madness': 'basketball_ncaab',
+    # Championship markets
+    'nba championship': 'basketball_nba_championship',
+    'super bowl': 'americanfootball_nfl_super_bowl_winner',
+    'stanley cup': 'icehockey_nhl_championship',
+    'world series': 'baseball_mlb_world_series_winner',
 }
+
+# NBA team names for matching
+NBA_TEAMS = [
+    'lakers', 'celtics', 'warriors', 'nets', 'clippers', 'heat', 'bucks', 'suns',
+    'nuggets', 'sixers', '76ers', 'mavericks', 'grizzlies', 'cavaliers', 'hawks',
+    'bulls', 'knicks', 'raptors', 'pacers', 'magic', 'hornets', 'wizards', 'pistons',
+    'thunder', 'rockets', 'pelicans', 'spurs', 'kings', 'timberwolves', 'blazers', 'jazz',
+    'boston', 'golden state', 'los angeles', 'brooklyn', 'miami', 'milwaukee', 'phoenix',
+    'denver', 'philadelphia', 'dallas', 'memphis', 'cleveland', 'atlanta', 'chicago',
+    'new york', 'toronto', 'indiana', 'orlando', 'charlotte', 'washington', 'detroit',
+    'oklahoma city', 'houston', 'new orleans', 'san antonio', 'sacramento', 'minnesota',
+    'portland', 'utah',
+]
+
+# NHL team names for matching
+NHL_TEAMS = [
+    'golden knights', 'vegas', 'bruins', 'avalanche', 'panthers', 'rangers', 'oilers',
+    'hurricanes', 'stars', 'maple leafs', 'lightning', 'jets', 'wild', 'kraken',
+    'flames', 'canucks', 'blues', 'islanders', 'capitals', 'penguins', 'red wings',
+    'senators', 'blackhawks', 'predators', 'devils', 'ducks', 'kings', 'flyers',
+    'coyotes', 'sharks', 'sabres', 'canadiens', 'blue jackets',
+]
 
 
 class SportsSource:
@@ -47,27 +86,32 @@ class SportsSource:
     Aggregates odds from major sportsbooks:
     - DraftKings, FanDuel, BetMGM, Caesars, etc.
 
-    Compares average implied probability to Polymarket price.
+    Falls back to ESPN (free) when Odds API is exhausted.
     """
 
     def __init__(self):
         self.client = httpx.Client(timeout=15.0)
         self.cache = {}
-        self.cache_ttl = 300  # 5 minute cache
+        self.cache_ttl = 3600  # 1 hour cache (conserve API calls - only 500/month free)
+        self.api_calls_made = 0
+        self.max_api_calls_per_session = 10  # Limit calls per session
+        self.odds_api_exhausted = False  # Track if we've hit rate limits
+        self.espn_source = get_espn_source() if HAS_ESPN else None
 
     def get_probability(self, market: Dict) -> Optional[Dict]:
         """
         Get probability estimate for a sports market.
-        """
-        if not ODDS_API_KEY:
-            logger.warning("ODDS_API_KEY not set - get free key at the-odds-api.com")
-            return None
 
+        Uses The Odds API if available, falls back to ESPN.
+        """
         question = (market.get('question') or '').lower()
 
         # Detect sport
         sport_key = self._detect_sport(question)
         if not sport_key:
+            # Try ESPN even without sport detection - it has its own detection
+            if self.espn_source:
+                return self.espn_source.get_probability(market)
             return None
 
         # Get team/player name
@@ -75,45 +119,82 @@ class SportsSource:
         if not team:
             return None
 
-        # Get odds from API
-        odds = self._get_odds(sport_key, team)
-        if not odds:
-            return None
+        # Try The Odds API first (if we have a key and haven't exhausted it)
+        if ODDS_API_KEY and not self.odds_api_exhausted:
+            odds = self._get_odds(sport_key, team)
+            if odds:
+                return odds
 
-        return odds
+        # Fallback to ESPN (free, no key required)
+        if self.espn_source:
+            logger.debug(f"Using ESPN fallback for sports market")
+            result = self.espn_source.get_probability(market)
+            if result:
+                # Mark as ESPN fallback
+                result['source'] = f"ESPN (fallback) - {result.get('source', '')}"
+                return result
+
+        return None
 
     def _detect_sport(self, question: str) -> Optional[str]:
         """Detect sport from question text."""
         question_lower = question.lower()
 
+        # Check explicit sport keywords first
         for keyword, sport_key in SPORT_KEYS.items():
             if keyword in question_lower:
                 return sport_key
+
+        # Detect sport from team names
+        for team in NBA_TEAMS:
+            if team in question_lower:
+                # Check if it's a championship/playoff market
+                if 'championship' in question_lower or 'win the' in question_lower:
+                    return 'basketball_nba_championship'
+                return 'basketball_nba'
+
+        for team in NHL_TEAMS:
+            if team in question_lower:
+                if 'stanley cup' in question_lower or 'playoff' in question_lower:
+                    return 'icehockey_nhl_championship'
+                return 'icehockey_nhl'
 
         return None
 
     def _extract_team(self, question: str) -> Optional[str]:
         """Extract team or player name from question."""
-        # Common patterns
-        # "Will the Lakers win..."
-        # "Will Patrick Mahomes..."
-        # "Chiefs to win..."
+        question_lower = question.lower()
 
-        # This is a simplified extraction - in production you'd use NER
-        # For now, return the question for matching
+        # Check for NBA teams
+        for team in NBA_TEAMS:
+            if team in question_lower:
+                return team
+
+        # Check for NHL teams
+        for team in NHL_TEAMS:
+            if team in question_lower:
+                return team
+
+        # Return the question for fallback matching
         return question
 
     def _get_odds(self, sport_key: str, team_query: str) -> Optional[Dict]:
         """Get odds from The Odds API."""
         cache_key = f"{sport_key}:{team_query[:50]}"
 
-        # Check cache
+        # Check cache first (1 hour TTL to conserve API calls)
         if cache_key in self.cache:
             cached = self.cache[cache_key]
             if (datetime.now(timezone.utc) - cached['timestamp']).seconds < self.cache_ttl:
                 return cached['data']
 
+        # Check API call limit (free tier = 500/month, be conservative)
+        if self.api_calls_made >= self.max_api_calls_per_session:
+            logger.warning(f"API call limit reached ({self.max_api_calls_per_session}/session) - using cache only")
+            return None
+
         try:
+            self.api_calls_made += 1
             url = f"{ODDS_API_BASE}/sports/{sport_key}/odds"
             params = {
                 'apiKey': ODDS_API_KEY,
@@ -123,6 +204,14 @@ class SportsSource:
             }
 
             response = self.client.get(url, params=params)
+            if response.status_code == 401:
+                logger.warning("Odds API key invalid or exhausted - switching to ESPN fallback")
+                self.odds_api_exhausted = True
+                return None
+            if response.status_code == 429:
+                logger.warning("Odds API rate limited - switching to ESPN fallback")
+                self.odds_api_exhausted = True
+                return None
             if response.status_code != 200:
                 logger.error(f"Odds API error: {response.status_code}")
                 return None

@@ -33,6 +33,10 @@ project_root = str(Path(__file__).parent.parent.parent)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# Load environment variables from .env
+from dotenv import load_dotenv
+load_dotenv(os.path.join(project_root, '.env'))
+
 from termcolor import cprint
 
 from src.config.polymarket_micro_config import (
@@ -51,6 +55,7 @@ from src.polymarket.liquidity_analyzer import LiquidityAnalyzer
 from src.polymarket.resolution_timer import ResolutionTimer
 from src.polymarket.correlation_engine import CorrelationEngine
 from src.polymarket.micro_store import MicroEdgeStore, get_store
+from src.polymarket.resolution_monitor import get_monitor as get_resolution_monitor
 
 # Optional: AI swarm for validation
 try:
@@ -75,6 +80,48 @@ try:
 except ImportError:
     HAS_DISCORD = False
     send_system_alert = None
+
+# Optional: Telegram/Discord signal alerts
+try:
+    from src.polymarket.telegram_alerts import get_alerts, send_signal_alert
+    HAS_SIGNAL_ALERTS = True
+except ImportError:
+    HAS_SIGNAL_ALERTS = False
+    get_alerts = None
+    send_signal_alert = None
+
+# Optional: Kelly position sizing
+try:
+    from src.polymarket.position_sizer import get_sizer as get_position_sizer
+    HAS_KELLY = True
+except ImportError:
+    HAS_KELLY = False
+    get_position_sizer = None
+
+# Optional: Simulated PnL tracking
+try:
+    from src.polymarket.pnl_tracker import get_tracker as get_pnl_tracker
+    HAS_PNL_TRACKER = True
+except ImportError:
+    HAS_PNL_TRACKER = False
+    get_pnl_tracker = None
+
+# Optional: Signal quality scoring
+try:
+    from src.polymarket.signal_scorer import get_scorer, score_signal
+    HAS_SCORER = True
+except ImportError:
+    HAS_SCORER = False
+    get_scorer = None
+    score_signal = None
+
+# Optional: Category performance tracking
+try:
+    from src.polymarket.category_performance import get_category_tracker
+    HAS_CATEGORY_TRACKER = True
+except ImportError:
+    HAS_CATEGORY_TRACKER = False
+    get_category_tracker = None
 
 # Optional: External data sources for real edge
 try:
@@ -176,7 +223,7 @@ class PolymarketMicroEdgeAgent:
         }
 
         # Step 1: Fetch truly active markets with upcoming resolutions
-        cprint("\n[1/5] Fetching ACTIVE markets with upcoming resolutions...", "cyan")
+        cprint("\n[1/7] Fetching ACTIVE markets with upcoming resolutions...", "cyan")
         markets = self.api.get_active_markets_with_upcoming_resolution(max_pages=10)
 
         if not markets:
@@ -188,7 +235,7 @@ class PolymarketMicroEdgeAgent:
         cprint(f"   Found {len(markets)} truly active markets with upcoming resolution", "green")
 
         # Step 2: Apply niche classifier
-        cprint("\n[2/5] Applying niche classifier...", "cyan")
+        cprint("\n[2/7] Applying niche classifier...", "cyan")
         niche_targets = self.classifier.filter_target_markets(markets)
         results['niche_targets'] = len(niche_targets)
         cprint(f"   Found {len(niche_targets)} niche targets (score >= {MIN_NICHE_SCORE})", "green")
@@ -204,29 +251,92 @@ class PolymarketMicroEdgeAgent:
 
         # Step 3: Calculate REAL edge from external data sources
         data_edge_opps = []
+        seen_condition_ids = set()  # Track seen markets to avoid duplicates
+
         if self.data_sources:
-            cprint("\n[3/6] Calculating REAL edge from external data...", "cyan")
-            for market in niche_targets[:100]:  # Check top 100 niche targets
+            cprint("\n[3/7] Calculating REAL edge from external data...", "cyan")
+
+            # 3a: Check niche targets (original logic)
+            for market in niche_targets[:100]:
                 edge_data = self.data_sources.calculate_real_edge(market)
                 if edge_data and edge_data.get('has_edge'):
                     market['real_edge'] = edge_data
                     data_edge_opps.append(market)
+                    seen_condition_ids.add(market.get('condition_id'))
+
+            cprint(f"   Found {len(data_edge_opps)} opportunities from niche markets", "white")
+
+            # 3b: ALSO check high-volume markets with data source coverage
+            # This catches Fed, Sports, Crypto, AI/Tech markets that fail niche score
+            # Optimized: Pre-filter by keywords, then check edge (avoids HTTP requests on non-matches)
+            DATA_SOURCE_KEYWORDS = {
+                'fed': ['fed ', 'fomc', 'interest rate', 'federal reserve', 'rate cut', 'rate hike'],
+                'crypto': ['bitcoin', 'btc', 'ethereum', 'eth', 'solana', 'sol ', 'crypto'],
+                'ai_tech': ['ai model', 'chatgpt', 'gemini', 'claude', 'grok', 'llama', 'benchmark', 'frontiermath'],
+                'sports': ['super bowl', 'nfl', 'nba', 'championship', 'playoffs', 'world series'],
+            }
+            high_volume_opps = 0
+            checked_count = 0
+
+            # Sort by volume to prioritize high-liquidity markets
+            sorted_markets = sorted(markets, key=lambda m: m.get('volume', 0), reverse=True)
+
+            for market in sorted_markets[:500]:  # Only check top 500 by volume
+                # Skip if already processed
+                if market.get('condition_id') in seen_condition_ids:
+                    continue
+
+                question = (market.get('question') or '').lower()
+
+                # Quick keyword pre-filter (no HTTP requests)
+                category = None
+                for cat, keywords in DATA_SOURCE_KEYWORDS.items():
+                    if any(kw in question for kw in keywords):
+                        category = cat
+                        break
+
+                if not category:
+                    continue  # Skip if no category match
+
+                checked_count += 1
+
+                # Now check for edge (this may make HTTP requests)
+                edge_data = self.data_sources.calculate_real_edge(market)
+                if edge_data and edge_data.get('has_edge'):
+                    # Require higher confidence for high-volume markets (more efficient)
+                    if edge_data.get('confidence', 0) >= 0.45 and edge_data.get('edge_pct', 0) >= 5.0:
+                        market['real_edge'] = edge_data
+                        market['niche_score'] = 3.0  # Assign baseline score
+                        market['niche_category'] = category
+                        data_edge_opps.append(market)
+                        seen_condition_ids.add(market.get('condition_id'))
+                        high_volume_opps += 1
+
+                # Limit total checks to avoid long runtime
+                if checked_count >= 100 or high_volume_opps >= 30:
+                    break
+
+            if high_volume_opps > 0:
+                cprint(f"   Found {high_volume_opps} additional opportunities from high-volume markets (checked {checked_count})", "green")
 
             results['data_edge_opportunities'] = len(data_edge_opps)
-            cprint(f"   Found {len(data_edge_opps)} opportunities with REAL external edge", "green")
+            cprint(f"   TOTAL: {len(data_edge_opps)} opportunities with REAL external edge", "green")
 
             if data_edge_opps:
                 cprint("\n   Top Data-Backed Opportunities:", "yellow")
-                for i, m in enumerate(data_edge_opps[:3]):
+                # Sort by edge before displaying
+                sorted_opps = sorted(data_edge_opps, key=lambda m: m.get('real_edge', {}).get('edge_pct', 0), reverse=True)
+                for i, m in enumerate(sorted_opps[:5]):
                     edge = m['real_edge']
                     question = (m.get('question') or '')[:45]
-                    cprint(f"   {i+1}. {edge['recommended_side']} @ {edge['edge_pct']:.1f}% edge ({edge['source']}) | {question}...", "white")
+                    cat = m.get('niche_category', 'unknown')
+                    cprint(f"   {i+1}. [{cat}] {edge['recommended_side']} @ {edge['edge_pct']:.1f}% edge ({edge['source'][:20]}) | {question}...", "white")
         else:
-            cprint("\n[3/6] External data sources not configured - skipping real edge calc", "yellow")
+            cprint("\n[3/7] External data sources not configured - skipping real edge calc", "yellow")
             results['data_edge_opportunities'] = 0
 
         # Step 4: Check resolution timing
-        cprint("\n[4/6] Checking resolution timing opportunities...", "cyan")
+        cprint("\n[4/7] Checking resolution timing opportunities...", "cyan")
         resolution_opps = self.resolution.find_resolution_opportunities(niche_targets)
         results['resolution_opportunities'] = len(resolution_opps)
         cprint(f"   Found {len(resolution_opps)} near-resolution opportunities", "green")
@@ -242,7 +352,7 @@ class PolymarketMicroEdgeAgent:
                 cprint(f"   {i+1}. {hours:.0f}h | {side} @ {edge:.1f}% edge | {question}...", "white")
 
         # Step 5: Check correlation arbitrage
-        cprint("\n[5/6] Scanning for correlation arbitrage...", "cyan")
+        cprint("\n[5/7] Scanning for correlation arbitrage...", "cyan")
         arb_opps = self.correlator.find_all_arbitrage_opportunities(niche_targets)
         results['arbitrage_opportunities'] = len(arb_opps)
         cprint(f"   Found {len(arb_opps)} arbitrage opportunities", "green")
@@ -255,13 +365,29 @@ class PolymarketMicroEdgeAgent:
                 cprint(f"   {i+1}. {pct:.1f}% arb - {strategy}...", "white")
 
         # Step 6: Generate signals (prioritize data-backed edges)
-        cprint("\n[6/6] Generating signals...", "cyan")
+        cprint("\n[6/7] Generating signals...", "cyan")
         signals = self._generate_signals(resolution_opps, arb_opps, data_edge_opps)
         results['signals_generated'] = len(signals)
         cprint(f"   Generated {len(signals)} trading signals", "green")
 
         # Store markets and signals in database
         self._persist_discoveries(niche_targets, signals)
+
+        # Step 7: Check for resolved markets and calculate PnL
+        cprint("\n[7/7] Checking for resolved markets...", "cyan")
+        try:
+            monitor = get_resolution_monitor()
+            resolved = monitor.check_and_resolve()
+            results['markets_resolved'] = len(resolved)
+            if resolved:
+                total_pnl = sum(r.get('pnl_usd', 0) for r in resolved)
+                wins = sum(1 for r in resolved if r.get('was_correct', False))
+                cprint(f"   Resolved {len(resolved)} markets: {wins} wins, PnL ${total_pnl:.2f}", "green" if total_pnl > 0 else "red")
+            else:
+                cprint("   No markets resolved this cycle", "white")
+        except Exception as e:
+            cprint(f"   Resolution check error: {e}", "yellow")
+            results['markets_resolved'] = 0
 
         # Update tracking
         self.last_scan_time = datetime.now(timezone.utc)
@@ -511,32 +637,92 @@ class PolymarketMicroEdgeAgent:
                 seen_markets.add(market_key)
                 unique_signals.append(sig)
 
+        # Score signals by quality (not just edge)
+        if HAS_SCORER:
+            scorer = get_scorer()
+            unique_signals = scorer.rank_signals(unique_signals)
+
         # Take top 10 unique signals
         quality_signals = unique_signals[:10]
+
+        # Apply Kelly position sizing
+        if HAS_KELLY:
+            sizer = get_position_sizer(total_capital=250.0)
+            quality_signals = sizer.size_signals(quality_signals)
 
         executed = 0
 
         for signal in quality_signals:
-            cprint(f"\nExecuting signal: {signal['signal_type']} {signal['side']} @ ${signal['entry_price']:.2f} ({signal.get('edge_pct', 0):.1f}% edge)", "cyan")
+            quality = signal.get('quality_score', 0)
+            quality_str = f" [Q:{quality:.0f}]" if quality > 0 else ""
+
+            # Get position size (Kelly or default)
+            position_usd = signal.get('position_size_usd', MICRO_POSITION_SIZE_USD)
+            kelly_info = signal.get('kelly_info', {})
+            kelly_str = f" ${position_usd:.0f}" if position_usd != MICRO_POSITION_SIZE_USD else ""
+
+            # Category info
+            category = signal.get('niche_category') or signal.get('category', '')
+            cat_mult = signal.get('category_multiplier', 1.0)
+            cat_rec = signal.get('category_recommendation', '')
+            cat_str = f" [{category}]" if category else ""
+            if cat_mult != 1.0:
+                cat_str += f" ({cat_mult:.2f}x)"
+
+            cprint(f"\nExecuting signal: {signal['signal_type']} {signal['side']} @ ${signal['entry_price']:.2f} ({signal.get('edge_pct', 0):.1f}% edge){quality_str}{kelly_str}{cat_str}", "cyan")
             cprint(f"   Market: {signal.get('question', '')[:50]}...", "white")
+            if kelly_info:
+                cprint(f"   Kelly: {kelly_info.get('reasoning', '')}", "white")
+            if cat_rec in ('focus', 'favorable'):
+                cprint(f"   Category: {category} - {cat_rec.upper()} (historically profitable)", "green")
+            elif cat_rec in ('caution', 'avoid'):
+                cprint(f"   Category: {category} - {cat_rec.upper()} (historically weak)", "yellow")
 
             if self.dry_run:
                 cprint("   [DRY RUN] Would place limit order", "yellow")
                 self.store.update_signal_status(signal['id'], 'active')
                 executed += 1
+
+                # Record for simulated PnL tracking
+                if HAS_PNL_TRACKER:
+                    tracker = get_pnl_tracker()
+                    # Get category from signal or market data
+                    category = signal.get('niche_category') or signal.get('category')
+                    tracker.record_signal(
+                        condition_id=signal.get('condition_id', ''),
+                        question=signal.get('question', signal.get('notes', '')),
+                        side=signal['side'],
+                        entry_price=signal['entry_price'],
+                        edge_pct=signal.get('edge_pct', 0),
+                        signal_type=signal.get('signal_type', 'unknown'),
+                        confidence=signal.get('confidence', 0.5),
+                        source=signal.get('notes', '')[:100],
+                        amount_usd=position_usd,
+                        category=category,
+                        subcategory=signal.get('subcategory'),
+                    )
+
+                # Send alert for high-edge signals (>30%)
+                if HAS_SIGNAL_ALERTS and signal.get('edge_pct', 0) >= 30:
+                    send_signal_alert(signal)
             else:
-                # Place actual order
+                # Place actual order with Kelly position sizing
+                order_size = position_usd / signal['entry_price'] if signal['entry_price'] > 0 else 0
                 result = self.executor.place_limit_order(
                     market_token_id=signal['condition_id'],
                     side='buy' if signal['side'] == 'YES' else 'sell',
                     price=signal['entry_price'],
-                    size=MICRO_POSITION_SIZE_USD / signal['entry_price'],
+                    size=order_size,
                 )
 
                 if result.get('success'):
                     cprint(f"   Order placed: {result.get('result')}", "green")
                     self.store.update_signal_status(signal['id'], 'active')
                     executed += 1
+
+                    # Send alert for live trades
+                    if HAS_SIGNAL_ALERTS:
+                        send_signal_alert(signal)
                 else:
                     cprint(f"   Order failed: {result.get('error')}", "red")
 
@@ -608,6 +794,57 @@ class PolymarketMicroEdgeAgent:
         ''')
         for row in cur.fetchall():
             cprint(f"   {row['signal_type']}: {row['count']} signals (avg edge: {row['avg_edge']:.1f}%)", "white")
+
+        # Simulated PnL (dry-run tracking)
+        if HAS_PNL_TRACKER:
+            tracker = get_pnl_tracker()
+            sim_perf = tracker.get_performance_summary()
+            pending_trades = tracker.get_pending_by_category()
+
+            cprint("\n🎯 SIMULATED PnL (Dry-Run Tracking):", "yellow", attrs=['bold'])
+            if sim_perf.get('total_resolved', 0) > 0:
+                cprint(f"   Resolved: {sim_perf['total_resolved']} trades", "white")
+                cprint(f"   Win Rate: {sim_perf['win_rate']:.1f}%", "green" if sim_perf['win_rate'] >= 50 else "red")
+                cprint(f"   Simulated PnL: ${sim_perf['total_pnl']:.2f}", "green" if sim_perf['total_pnl'] >= 0 else "red")
+            else:
+                cprint("   No resolved trades yet - waiting for market resolutions", "white")
+
+            if pending_trades:
+                total_pending = sum(pending_trades.values())
+                cprint(f"   Pending: {total_pending} trades awaiting resolution", "cyan")
+
+        # Category Performance (the real edge insight)
+        if HAS_CATEGORY_TRACKER:
+            try:
+                cat_tracker = get_category_tracker()
+                cat_stats = cat_tracker.get_category_stats()
+                recs = cat_tracker.get_recommendations()
+
+                cprint("\n📊 CATEGORY PERFORMANCE (Your Edge):", "yellow", attrs=['bold'])
+                if cat_stats:
+                    cprint(f"   {'Category':<12} {'Trades':>7} {'Win%':>7} {'PnL':>9} {'Action':>10}", "white")
+                    cprint("   " + "-" * 50, "white")
+
+                    for s in cat_stats[:8]:  # Top 8 categories
+                        if s['resolved_trades'] == 0:
+                            continue
+                        color = "green" if s['win_rate'] >= 55 else ("red" if s['win_rate'] < 45 else "white")
+                        rec = s.get('recommendation', 'neutral').upper()[:6]
+                        cprint(
+                            f"   {s['category']:<12} {s['resolved_trades']:>7} "
+                            f"{s['win_rate']:>6.1f}% ${s['total_pnl']:>7.2f} {rec:>10}",
+                            color
+                        )
+
+                    # Show recommendations
+                    if recs.get('focus'):
+                        cprint(f"\n   FOCUS ON: {', '.join(recs['focus'])}", "green", attrs=['bold'])
+                    if recs.get('avoid'):
+                        cprint(f"   AVOID: {', '.join(recs['avoid'])}", "red", attrs=['bold'])
+                else:
+                    cprint("   No category data yet - trades will populate this", "white")
+            except Exception as e:
+                cprint(f"   Category tracker error: {e}", "yellow")
 
         cprint("\n" + "=" * 80 + "\n", "cyan")
 

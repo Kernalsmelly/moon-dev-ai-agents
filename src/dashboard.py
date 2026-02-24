@@ -7,7 +7,7 @@ and displays an updating dashboard every 2 seconds.
 import os
 import time
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import pandas as pd
@@ -90,7 +90,7 @@ def human_age(ts: Optional[float]) -> str:
     if not ts:
         return "-"
     try:
-        delta = datetime.utcnow().timestamp() - ts
+        delta = datetime.now(timezone.utc).timestamp() - ts
         if delta < 60:
             return f"{int(delta)}s"
         if delta < 3600:

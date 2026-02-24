@@ -10,7 +10,7 @@ Need an API key? for a limited time, bootcamp members get free api keys for clau
 import os
 import pandas as pd
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import openai
 import anthropic
@@ -211,7 +211,7 @@ class LiquidationAgent(BaseAgent):
 
                 print("✅ Using columns: side='side', usd_value='usd_value'")
 
-                current_time = datetime.utcnow()
+                current_time = datetime.now(timezone.utc)
 
                 # Calculate time windows
                 fifteen_min = current_time - timedelta(minutes=15)

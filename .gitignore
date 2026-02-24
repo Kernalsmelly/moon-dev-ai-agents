@@ -167,3 +167,8 @@ src/data/chat_agent/*.mov
 
 # Video Agent - Sora 2 generated videos
 src/data/video_agent/
+.env
+config/rpc_pool.json
+data/rpc_pool.json
+data/meme_runs/
+data/meme_snapshots.jsonl

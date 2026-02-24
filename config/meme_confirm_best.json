@@ -1,0 +1,8 @@
+{
+  "parameters": {
+    "CONFIRM_N": 3,
+    "ENTRY_COOLDOWN_SECONDS": 300,
+    "MAX_5M_PUMP": 20,
+    "MIN_TXNS_5M": 15
+  }
+}

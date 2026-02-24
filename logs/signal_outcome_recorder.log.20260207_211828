@@ -1,0 +1,194 @@
+outcomes: pending=0 offset=87563 backoff=0s
+outcomes: pending=0 offset=88849 backoff=0s
+outcomes: pending=0 offset=88849 backoff=0s
+signal_outcome_recorder: start
+outcomes: pending=2 offset=89595 backoff=6s
+outcomes: pending=2 offset=90337 backoff=86s
+outcomes: pending=9 offset=95268 backoff=300s
+outcomes: pending=23 offset=107243 backoff=300s
+signal_outcome_recorder: start
+outcomes: pending=26 offset=109467 backoff=300s
+signal_outcome_recorder: start
+outcomes: pending=29 offset=110613 backoff=300s
+signal_outcome_recorder: start
+outcomes: pending=29 offset=110613 backoff=300s
+signal_outcome_recorder: start
+outcomes: pending=29 offset=110613 backoff=300s
+outcomes: pending=28 offset=110613 backoff=300s
+outcomes: pending=27 offset=110613 backoff=300s
+outcomes: pending=26 offset=110613 backoff=300s
+outcomes: pending=26 offset=110613 backoff=300s
+outcomes: pending=25 offset=110613 backoff=300s
+signal_outcome_recorder: start
+outcomes: pending=25 offset=110613 backoff=300s
+outcomes: pending=25 offset=110613 backoff=300s
+signal_outcome_recorder: start
+outcomes: pending=25 offset=110842 backoff=300s
+outcomes: pending=129 offset=135055 backoff=300s
+outcomes: pending=253 offset=163619 backoff=300s
+Traceback (most recent call last):
+  File "/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/signal_outcome_recorder.py", line 18, in <module>
+    from src.solana.rpc_pool import RpcError, RpcPool
+ModuleNotFoundError: No module named 'src'
+signal_outcome_recorder: start
+signal_outcome_recorder: start
+outcomes: pending=298 offset=174436 backoff=0s
+outcomes: pending=297 offset=176965 backoff=0s
+outcomes: pending=298 offset=186644 backoff=0s
+outcomes: pending=296 offset=192401 backoff=0s
+signal_outcome_recorder: start
+outcomes: pending=296 offset=193783 backoff=0s
+outcomes: pending=297 offset=197243 backoff=0s
+outcomes: pending=297 offset=200008 backoff=0s
+outcomes: pending=298 offset=203469 backoff=0s
+outcomes: pending=298 offset=206234 backoff=0s
+outcomes: pending=297 offset=209460 backoff=0s
+outcomes: pending=296 offset=212003 backoff=0s
+outcomes: pending=296 offset=214768 backoff=0s
+outcomes: pending=297 offset=218654 backoff=0s
+outcomes: pending=297 offset=224248 backoff=0s
+outcomes: pending=298 offset=229518 backoff=0s
+outcomes: pending=297 offset=232146 backoff=0s
+outcomes: pending=298 offset=237088 backoff=0s
+outcomes: pending=284 offset=247290 backoff=0s
+outcomes: pending=290 offset=255507 backoff=0s
+outcomes: pending=280 offset=256825 backoff=0s
+outcomes: pending=265 offset=257485 backoff=0s
+signal_outcome_recorder: start
+outcomes: pending=256 offset=258474 backoff=0s
+outcomes: pending=242 offset=258474 backoff=0s
+outcomes: pending=227 offset=258474 backoff=0s
+outcomes: pending=213 offset=258474 backoff=0s
+outcomes: pending=197 offset=258474 backoff=0s
+outcomes: pending=183 offset=258474 backoff=0s
+outcomes: pending=171 offset=258474 backoff=0s
+outcomes: pending=160 offset=258474 backoff=0s
+outcomes: pending=154 offset=258474 backoff=0s
+outcomes: pending=140 offset=258474 backoff=0s
+outcomes: pending=125 offset=258474 backoff=0s
+outcomes: pending=111 offset=258474 backoff=0s
+outcomes: pending=95 offset=258474 backoff=0s
+outcomes: pending=79 offset=258474 backoff=0s
+outcomes: pending=67 offset=258474 backoff=0s
+outcomes: pending=56 offset=258474 backoff=0s
+outcomes: pending=50 offset=258474 backoff=0s
+outcomes: pending=37 offset=258474 backoff=0s
+outcomes: pending=25 offset=258474 backoff=0s
+outcomes: pending=7 offset=258474 backoff=0s
+outcomes: pending=2 offset=258474 backoff=0s
+outcomes: pending=1 offset=258474 backoff=0s
+outcomes: pending=0 offset=258474 backoff=0s
+outcomes: pending=0 offset=258474 backoff=0s
+outcomes: pending=0 offset=258474 backoff=0s
+outcomes: pending=0 offset=258474 backoff=0s
+signal_outcome_recorder: start
+outcomes: pending=0 offset=0 backoff=0s
+outcomes: pending=2 offset=658 backoff=0s
+outcomes: pending=9 offset=3284 backoff=0s
+outcomes: pending=12 offset=4271 backoff=0s
+outcomes: pending=14 offset=4928 backoff=0s
+outcomes: pending=15 offset=5256 backoff=0s
+outcomes: pending=19 offset=6572 backoff=0s
+outcomes: pending=21 offset=7230 backoff=0s
+outcomes: pending=23 offset=7886 backoff=0s
+outcomes: pending=25 offset=8542 backoff=0s
+outcomes: pending=28 offset=9533 backoff=0s
+outcomes: pending=30 offset=10192 backoff=0s
+outcomes: pending=32 offset=10847 backoff=0s
+outcomes: pending=39 offset=13152 backoff=0s
+outcomes: pending=43 offset=14471 backoff=0s
+outcomes: pending=49 offset=16444 backoff=0s
+outcomes: pending=52 offset=17434 backoff=0s
+outcomes: pending=53 offset=17763 backoff=0s
+outcomes: pending=54 offset=18092 backoff=0s
+outcomes: pending=54 offset=18421 backoff=0s
+outcomes: pending=56 offset=19404 backoff=0s
+outcomes: pending=56 offset=19404 backoff=0s
+outcomes: pending=57 offset=19733 backoff=0s
+outcomes: pending=57 offset=19733 backoff=0s
+outcomes: pending=58 offset=20391 backoff=0s
+outcomes: pending=59 offset=20720 backoff=0s
+outcomes: pending=63 offset=22031 backoff=0s
+outcomes: pending=64 offset=22358 backoff=0s
+outcomes: pending=66 offset=23015 backoff=0s
+outcomes: pending=68 offset=24001 backoff=0s
+outcomes: pending=63 offset=24660 backoff=0s
+outcomes: pending=61 offset=24989 backoff=0s
+outcomes: pending=59 offset=25318 backoff=0s
+outcomes: pending=59 offset=25647 backoff=0s
+outcomes: pending=58 offset=25978 backoff=0s
+outcomes: pending=55 offset=25978 backoff=0s
+outcomes: pending=55 offset=26968 backoff=0s
+outcomes: pending=56 offset=27956 backoff=0s
+outcomes: pending=58 offset=28944 backoff=0s
+outcomes: pending=59 offset=29931 backoff=0s
+outcomes: pending=57 offset=30262 backoff=0s
+outcomes: pending=58 offset=31249 backoff=0s
+outcomes: pending=52 offset=31580 backoff=0s
+outcomes: pending=46 offset=31911 backoff=0s
+outcomes: pending=43 offset=32237 backoff=0s
+outcomes: pending=42 offset=32566 backoff=0s
+outcomes: pending=42 offset=32896 backoff=0s
+outcomes: pending=48 offset=35534 backoff=0s
+outcomes: pending=47 offset=35863 backoff=0s
+outcomes: pending=47 offset=36521 backoff=0s
+outcomes: pending=49 offset=37177 backoff=0s
+outcomes: pending=47 offset=37177 backoff=0s
+outcomes: pending=49 offset=37835 backoff=0s
+outcomes: pending=48 offset=37835 backoff=0s
+outcomes: pending=47 offset=37835 backoff=0s
+outcomes: pending=47 offset=39153 backoff=0s
+outcomes: pending=50 offset=40466 backoff=0s
+outcomes: pending=53 offset=41779 backoff=0s
+outcomes: pending=50 offset=41779 backoff=0s
+outcomes: pending=55 offset=44077 backoff=0s
+outcomes: pending=56 offset=44736 backoff=0s
+outcomes: pending=55 offset=44736 backoff=0s
+outcomes: pending=56 offset=45062 backoff=0s
+outcomes: pending=56 offset=45720 backoff=0s
+outcomes: pending=57 offset=46378 backoff=0s
+outcomes: pending=55 offset=46378 backoff=0s
+outcomes: pending=54 offset=47364 backoff=0s
+outcomes: pending=53 offset=47692 backoff=0s
+outcomes: pending=51 offset=48349 backoff=0s
+outcomes: pending=49 offset=48349 backoff=0s
+outcomes: pending=48 offset=48678 backoff=0s
+outcomes: pending=48 offset=49335 backoff=0s
+outcomes: pending=53 offset=50979 backoff=0s
+outcomes: pending=53 offset=51307 backoff=0s
+outcomes: pending=52 offset=51307 backoff=0s
+outcomes: pending=53 offset=51966 backoff=0s
+outcomes: pending=46 offset=51966 backoff=0s
+outcomes: pending=45 offset=51966 backoff=0s
+outcomes: pending=45 offset=52295 backoff=0s
+signal_outcome_recorder: start
+outcomes: pending=45 offset=52952 backoff=0s
+outcomes: pending=45 offset=52952 backoff=0s
+outcomes: pending=43 offset=52952 backoff=0s
+outcomes: pending=43 offset=52952 backoff=0s
+signal_outcome_recorder: start
+outcomes: pending=43 offset=52952 backoff=0s
+outcomes: pending=44 offset=54596 backoff=0s
+outcomes: pending=40 offset=54596 backoff=0s
+signal_outcome_recorder: start
+outcomes: pending=39 offset=54924 backoff=0s
+outcomes: pending=37 offset=54924 backoff=0s
+outcomes: pending=39 offset=55913 backoff=0s
+outcomes: pending=35 offset=56901 backoff=0s
+outcomes: pending=36 offset=57555 backoff=0s
+outcomes: pending=37 offset=57884 backoff=0s
+outcomes: pending=37 offset=58542 backoff=0s
+outcomes: pending=41 offset=60849 backoff=0s
+outcomes: pending=43 offset=61839 backoff=0s
+outcomes: pending=44 offset=62498 backoff=0s
+outcomes: pending=46 offset=63811 backoff=0s
+outcomes: pending=45 offset=64141 backoff=0s
+outcomes: pending=45 offset=64141 backoff=0s
+outcomes: pending=46 offset=64801 backoff=0s
+outcomes: pending=45 offset=64801 backoff=0s
+outcomes: pending=41 offset=64801 backoff=0s
+outcomes: pending=40 offset=65458 backoff=0s
+outcomes: pending=39 offset=65789 backoff=0s
+outcomes: pending=38 offset=65789 backoff=0s
+outcomes: pending=37 offset=65789 backoff=0s
+outcomes: pending=38 offset=66120 backoff=0s

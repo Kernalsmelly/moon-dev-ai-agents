@@ -7,6 +7,9 @@ import json
 import threading
 import time
 
+# Discord webhook used by alerts (set explicitly here for Paper Trade Battle Mode)
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1462684075688067178/TJfAPSd3oShJXg2Xct-_gzc6CnMIdZ3CHdNpuw6vNcoOsD6ZPrrU2HgFzYFSbjAWrzny"
+
 # Prefer environment-provided RPC URL (set in .env or shell). If provided we
 # honor it and do not auto-promote a PRIMARY from the pool. If not provided
 # we'll attempt to load the PRIMARY entry from `config/rpc_pool.json` which is
@@ -73,7 +76,6 @@ def _apply_rpc_pool(pool: list[dict]):
 # initial load
 _apply_rpc_pool(_load_rpc_pool_file())
 
-
 def _watch_rpc_pool_file(poll_interval: float = 2.0):
     """Background thread that watches `rpc_pool.json` for changes and
     reloads the in-memory pool so other modules pick up changes without a
@@ -136,6 +138,11 @@ ANKR_URL = os.getenv('ANKR_URL') or (f"https://rpc.ankr.com/solana/{ANKR_API_KEY
 ALCHEMY_API_KEY = os.getenv('ALCHEMY_API_KEY', '')
 ALCHEMY_URL = os.getenv('ALCHEMY_URL') or (f"https://solana-mainnet.g.alchemy.com/v2/{ALCHEMY_API_KEY}" if ALCHEMY_API_KEY else '')
 
+# Multi-RPC list for load-balancing / failover.
+# Priority order: first is preferred when healthy.
+# Note: we reference the *_URL variables above so this never NameErrors when env vars are unset.
+RPC_URLS = [u for u in (HELIUS_URL, ALCHEMY_URL, CHAINSTACK_URL, ANKR_URL) if u]
+
 # 🔄 Exchange Selection
 EXCHANGE = 'solana'  # Options: 'solana', 'hyperliquid'
 
@@ -187,6 +194,14 @@ usd_size = 25  # Size of position to hold
 max_usd_order_size = 3  # Max order size
 tx_sleep = 30  # Sleep between transactions
 slippage = 199  # Slippage settings
+
+# Volatility-adjusted position sizing
+# Base size in SOL to use when no adjustment is applied
+BASE_POSITION_SIZE_SOL = float(os.getenv('BASE_POSITION_SIZE_SOL', '1.0'))
+# Reduce size by this factor in high volatility (e.g., 0.5 = 50%)
+SIZE_REDUCTION_FACTOR = float(os.getenv('SIZE_REDUCTION_FACTOR', '0.5'))
+# Boost size by this factor in low volatility (e.g., 1.25 = +25%)
+SIZE_BOOST_FACTOR = float(os.getenv('SIZE_BOOST_FACTOR', '1.25'))
 
 # Risk Management Settings 🛡️
 CASH_PERCENTAGE = 20  # Minimum % to keep in USDC as safety buffer (0-100)
@@ -245,6 +260,9 @@ STRATEGY_MIN_CONFIDENCE = 0.7  # Minimum confidence to act on strategy signals
 # to still be used for signals and telemetry.
 LIVE_TRADING_ENABLED = False
 USE_REAL_TIME_DATA = True
+USE_PAPER_TRADING = True
+# Dynamic thresholds for strategy filtering (e.g., higher noise during NY open)
+DYNAMIC_THRESHOLD = True
 
 # Sleep time between main agent runs
 SLEEP_BETWEEN_RUNS_MINUTES = 15  # How long to sleep between agent runs 🕒
@@ -307,6 +325,14 @@ JITO_TIP_PERCENTILE = int(os.getenv('JITO_TIP_PERCENTILE', '95'))
 # preserve a 'moonbag' for fees/tips. Default is 0.01 SOL.
 MIN_TRADE_BALANCE_SOL = float(os.getenv('MIN_TRADE_BALANCE_SOL', '0.01'))
 
+# Moon bag and slippage configuration
+# Fractional profit at which we secure an initial moon-bag (e.g., 1.0 == 100% gain)
+INITIAL_OUT_THRESHOLD = float(os.getenv('INITIAL_OUT_THRESHOLD', '1.0'))
+# Fraction of the position to sell to secure the initial moon-bag (50% = 0.5)
+MOON_BAG_PERCENT = float(os.getenv('MOON_BAG_PERCENT', '0.50'))
+# Hard cap for dynamic slippage in basis points (500 = 5%)
+MAX_SLIPPAGE_BPS = int(os.getenv('MAX_SLIPPAGE_BPS', '500'))
+
 
 # Pydantic-backed Jito configuration for validation and safety caps
 try:
@@ -335,3 +361,22 @@ except Exception:
     # pydantic not available or something else failed — keep existing raw values
     pass
 
+    # Verified Jito tip accounts (operator-configurable)
+    JITO_VERIFIED_TIP_ACCOUNTS = [
+        '96g9sBY9m9S774oW97uEHSAnp7N37Pcy92h9U6Tz6y7',
+        'HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe',
+    ]
+
+    # Path to JSONL trades log (source of truth)
+    TRADES_JSONL_PATH = os.getenv('TRADES_JSONL_PATH', os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'trades.jsonl'))
+
+    # Interval (seconds) to check Jito bundle status when monitoring
+    JITO_STATUS_CHECK_INTERVAL = int(os.getenv('JITO_STATUS_CHECK_INTERVAL', '2'))
+
+    # Jito Block Engine and tip configuration (MEV protection)
+    # Official block engine URL for Jito (can be environment-overridden)
+    JITO_BLOCK_ENGINE_URL = os.getenv('JITO_BLOCK_ENGINE_URL', 'https://mainnet.block-engine.jito.wtf')
+    # Tip amount in SOL to include as bribe for private inclusion
+    JITO_TIP_AMOUNT_SOL = float(os.getenv('JITO_TIP_AMOUNT_SOL', '0.001'))
+    # Enable sending via Jito (default True to enable MEV protection when keys available)
+    ENABLE_JITO = str(os.getenv('ENABLE_JITO', 'True')).lower() in ('1', 'true', 'yes')

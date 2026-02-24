@@ -1,7 +1,7 @@
 
 import pandas as pd
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 from pathlib import Path
 
@@ -74,9 +74,9 @@ def get_ohlcv2(symbol, interval, start_time, end_time, batch_size=BATCH_SIZE):
                 if snapshot_data:
                     # Manually calculate timestamp offset if not already done
                     if timestamp_offset is None:
-                        latest_api_timestamp = datetime.utcfromtimestamp(snapshot_data[-1]['t'] / 1000)
+                        latest_api_timestamp = datetime.fromtimestamp(snapshot_data[-1]['t'] / 1000, tz=timezone.utc)
                         # Your system's current date (adjust to your actual current date)
-                        system_current_date = datetime.utcnow()
+                        system_current_date = datetime.now(timezone.utc)
                         # Manually set the expected latest timestamp (e.g., now)
                         expected_latest_timestamp = system_current_date
                         # Calculate offset
@@ -84,12 +84,12 @@ def get_ohlcv2(symbol, interval, start_time, end_time, batch_size=BATCH_SIZE):
                         print(f"⏱️ Calculated timestamp offset: {timestamp_offset}")
                     # Adjust timestamps due to API bug
                     for candle in snapshot_data:
-                        dt = datetime.utcfromtimestamp(candle['t'] / 1000)
+                        dt = datetime.fromtimestamp(candle['t'] / 1000, tz=timezone.utc)
                         # Adjust date
                         adjusted_dt = adjust_timestamp(dt)
                         candle['t'] = int(adjusted_dt.timestamp() * 1000)
-                    first_time = datetime.utcfromtimestamp(snapshot_data[0]['t'] / 1000)
-                    last_time = datetime.utcfromtimestamp(snapshot_data[-1]['t'] / 1000)
+                    first_time = datetime.fromtimestamp(snapshot_data[0]['t'] / 1000, tz=timezone.utc)
+                    last_time = datetime.fromtimestamp(snapshot_data[-1]['t'] / 1000, tz=timezone.utc)
                     print(f'✨ Received {len(snapshot_data)} candles')
                     print(f'📈 First: {first_time}')
                     print(f'📉 Last: {last_time}')
@@ -110,7 +110,7 @@ def process_data_to_df(snapshot_data):
         columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
         data = []
         for snapshot in snapshot_data:
-            timestamp = datetime.utcfromtimestamp(snapshot['t'] / 1000)
+            timestamp = datetime.fromtimestamp(snapshot['t'] / 1000, tz=timezone.utc)
             open_price = snapshot['o']
             high_price = snapshot['h']
             low_price = snapshot['l']
@@ -133,7 +133,7 @@ def fetch_historical_data(symbol, timeframe):
 
 
     # Just fetch the most recent 5000 candles
-    end_time = datetime.utcnow()
+    end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(days=60)  # Setting a wide enough window
 
 
@@ -173,7 +173,7 @@ all_data = fetch_historical_data(symbol, timeframe)
 
 # Save the data
 if not all_data.empty:
-    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     file_path = DATA_DIR / f'{symbol}_{timeframe}_{timestamp}_historical.csv'
     all_data.to_csv(file_path, index=False)
     print(f'\n💾 Moon Dev saved data to: {file_path}')

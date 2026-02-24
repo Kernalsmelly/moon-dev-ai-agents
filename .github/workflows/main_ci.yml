@@ -39,6 +39,9 @@ jobs:
         run: |
           python -m pip install -r requirements-ci.txt
 
+      - name: Runtime compile check (quarantine src/data)
+        run: python scripts/repo_runtime_compile_check.py
+
       - name: Run pytest
         run: python -m pytest -q
 

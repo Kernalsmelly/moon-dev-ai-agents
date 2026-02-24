@@ -1,0 +1,18 @@
+{
+  "parameters": {
+    "MIN_PRICE_CHANGE_5M": 3.0,
+    "MIN_BUYS_5M": 5,
+    "MIN_TXNS_5M": 10,
+    "MIN_VOLUME_5M": 2000.0,
+    "MIN_VOL5M_SHARE": 0.0,
+    "MIN_VHI_SCORE": 35,
+    "MAX_5M_PUMP": 40
+  },
+  "metadata": {
+    "source": "meme_threshold_builder",
+    "n": 14,
+    "avg_max_return_future": -0.008,
+    "score": -0.0217,
+    "price_accel_min": 0.0
+  }
+}
