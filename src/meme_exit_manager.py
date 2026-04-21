@@ -15,6 +15,7 @@ Usage:
 """
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -65,6 +66,16 @@ class PositionState:
     signal_net_sol_in: float = 0.0
     signal_top_buyer_share: float = 0.0
     signal_t_first_sell_s: Optional[float] = None
+    signal_source: str = ""
+    signal_source_family: str = ""
+    signal_rank_score: float = 0.0
+    signal_rank_matches: int = 0
+    signal_rank_negative_hits: int = 0
+    signal_profile: str = ""
+    signal_pair_age_min: float = 0.0
+    signal_mover_pattern: str = ""
+    signal_unique_buyers_estimated: bool = False
+    signal_top_buyer_share_estimated: bool = False
     winner_score: float = 0.0
     winner_features_used: int = 0
     winner_size_mult: float = 1.0
@@ -106,6 +117,18 @@ class MemeExitManager:
         self.max_hold_time = meme_config.MAX_HOLD_TIME_SECONDS
         self.stagnation_minutes = meme_config.STAGNATION_CHECK_MINUTES
         self.stagnation_threshold = meme_config.STAGNATION_THRESHOLD_PCT
+        # Dynamic max-loss cap by entry quality score.
+        # Purpose: keep weak setups from consuming full hard-loss budget.
+        self.dynamic_max_loss_enabled = os.getenv("MEME_DYNAMIC_MAX_LOSS_ENABLED", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        self.dynamic_max_loss_score_mid = float(os.getenv("MEME_DYNAMIC_MAX_LOSS_SCORE_MID", "90") or 90)
+        self.dynamic_max_loss_score_low = float(os.getenv("MEME_DYNAMIC_MAX_LOSS_SCORE_LOW", "80") or 80)
+        self.dynamic_max_loss_mult_mid = float(os.getenv("MEME_DYNAMIC_MAX_LOSS_MULT_MID", "0.75") or 0.75)
+        self.dynamic_max_loss_mult_low = float(os.getenv("MEME_DYNAMIC_MAX_LOSS_MULT_LOW", "0.55") or 0.55)
+        self.dynamic_max_loss_floor_usd = float(os.getenv("MEME_DYNAMIC_MAX_LOSS_FLOOR_USD", "0.20") or 0.20)
 
     def check_exit(self, position: PositionState, current_price: float) -> ExitResult:
         """Check if position should exit based on current price.
@@ -274,7 +297,13 @@ class MemeExitManager:
             return ExitResult(should_exit=False)
 
         # Check max loss per trade (prevents catastrophic single losses)
-        max_loss_usd = getattr(meme_config, 'MAX_LOSS_PER_TRADE_USD', 10.0)
+        max_loss_usd = float(getattr(meme_config, 'MAX_LOSS_PER_TRADE_USD', 10.0) or 10.0)
+        score_used = float(getattr(position, "signal_score", 0.0) or getattr(position, "score", 0.0) or 0.0)
+        if self.dynamic_max_loss_enabled and max_loss_usd > 0:
+            if score_used > 0 and score_used < self.dynamic_max_loss_score_low:
+                max_loss_usd = max(float(self.dynamic_max_loss_floor_usd), max_loss_usd * float(self.dynamic_max_loss_mult_low))
+            elif score_used > 0 and score_used < self.dynamic_max_loss_score_mid:
+                max_loss_usd = max(float(self.dynamic_max_loss_floor_usd), max_loss_usd * float(self.dynamic_max_loss_mult_mid))
         current_loss_usd = pnl_pct * position.amount_usd
         if current_loss_usd <= -max_loss_usd:
             return ExitResult(
@@ -284,6 +313,7 @@ class MemeExitManager:
                 details={
                     'loss_usd': abs(current_loss_usd),
                     'max_loss_usd': max_loss_usd,
+                    'score_used': score_used,
                     'pnl_pct': pnl_pct * 100,
                 }
             )

@@ -57,6 +57,33 @@ feel free to join [our discord](https://discord.gg/8UPuVZ53bh) if you beleive ai
 - **TX Agent** (`tx_agent.py`): Watches transactions made by your copy list and prints them out with optional auto tab open
 - **Solana Agent** (`solana_agent.py`): Looks at the sniper agent and the TX agent to select which memes may be interesting
 
+## Solana Meme Coin Bot
+
+If you're here for the **stateful Solana meme coin bot / paper trader**, start here:
+
+- Overview doc: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/docs/solana_meme_coin_bot.md`
+- Product roadmap: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/docs/meme_stateful_trading_roadmap.md`
+- Main runtime supervisor: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_pipeline_supervisor.py`
+- Main operator dashboard: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_daily_scorecard.py`
+- Main paper trader: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_decision_paper_overlay_v2.py`
+- Active shadow paper trader: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_decision_paper_overlay_active.py`
+- Operator action board: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/scripts/meme_operator_action_board.py`
+
+Core reports:
+
+- Daily scorecard: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/data/meme_reports/meme_daily_scorecard.md`
+- Lifecycle board: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/data/meme_reports/meme_lifecycle_monitor.md`
+- Decision tracker: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/data/meme_reports/meme_decision_tracker.md`
+- Operator action board: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/data/meme_reports/meme_operator_action_board.md`
+- Paper expectancy: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/data/meme_reports/meme_paper_trade_expectancy_report.md`
+- Trading readiness: `/Users/nickdavis/MOON DEV BOT/moon-dev-ai-agents/data/meme_reports/meme_trading_readiness_report.md`
+
+This is the active build that is trying to become a **stateful meme trading engine**:
+- catch names early
+- track them through a lifecycle
+- paper-trade starter/add/cut behavior
+- earn the right to go live only after paper results improve
+
 ### Content Creation Agents
 - **Chat Agent** (`chat_agent.py`): Monitors YouTube live stream chat, moderates & responds to known questions. Absolute fire.
 - **Twitter Agent** (`tweet_agent.py`): Takes in text and creates tweets using DeepSeek or other models

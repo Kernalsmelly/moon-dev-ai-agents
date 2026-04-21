@@ -70,7 +70,17 @@ def build_env() -> dict[str, str]:
     This makes tuning iteration smoother: updating `.env` and restarting a single
     process is enough; we do not need to restart the whole supervisor.
     """
-    load_dotenv(dotenv_path=str(BASE / ".env"), override=True)
+    # 1) Load primary project env.
+    primary_env = BASE / ".env"
+    load_dotenv(dotenv_path=str(primary_env), override=True)
+    # 2) Optional deterministic runtime env (flattened from `.env`).
+    runtime_env_raw = str(os.getenv("MEME_ENV_FILE", "") or "").strip()
+    if runtime_env_raw:
+        runtime_env = Path(runtime_env_raw)
+        if not runtime_env.is_absolute():
+            runtime_env = BASE / runtime_env
+        if runtime_env.exists():
+            load_dotenv(dotenv_path=str(runtime_env), override=True)
     env = os.environ.copy()
     # Default to whatever the user has in .env; only set a fallback if none is present.
     env.setdefault("RPC_URL", env.get("RPC_ENDPOINT", "") or "")
@@ -98,6 +108,16 @@ def build_specs(env: dict[str, str]) -> list[ProcSpec]:
         "yes",
     )
     enable_main_bot = env.get("MEME_SUPERVISOR_ENABLE_BOT", "1").strip().lower() in ("1", "true", "yes")
+    enable_paper_v1 = env.get("MEME_PAPER_OVERLAY_V1_ENABLED", "1").strip().lower() in ("1", "true", "yes")
+    enable_paper_v2 = env.get("MEME_PAPER_OVERLAY_V2_ENABLED", "1").strip().lower() in ("1", "true", "yes")
+    enable_paper_active = env.get("MEME_PAPER_OVERLAY_ACTIVE_ENABLED", "1").strip().lower() in ("1", "true", "yes")
+    # These names can round-trip in minutes, so a 5-minute paper loop is too slow
+    # to teach us anything useful about risk control.
+    paper_interval = str(int(float(env.get("MEME_PAPER_OVERLAY_INTERVAL_SEC", "60") or 60)))
+    paper_max_hold = str(float(env.get("MEME_PAPER_OVERLAY_MAX_HOLD_HOURS", "12") or 12))
+    paper_v1_no_refresh = env.get("MEME_PAPER_V1_NO_REFRESH", "1").strip().lower() in ("1", "true", "yes")
+    paper_v2_no_refresh = env.get("MEME_PAPER_V2_NO_REFRESH", "0").strip().lower() in ("1", "true", "yes")
+    paper_active_no_refresh = env.get("MEME_PAPER_ACTIVE_NO_REFRESH", "0").strip().lower() in ("1", "true", "yes")
 
     specs: list[ProcSpec] = []
 
@@ -338,6 +358,70 @@ def build_specs(env: dict[str, str]) -> list[ProcSpec]:
                 name="meme_ab_zone_tri_watcher",
                 cmd=[PYTHON, "-u", str(BASE / "scripts" / "meme_ab_zone_tri_watcher.py")],
                 log_path=LOGS / "meme_ab_zone_tri_watcher.log",
+            )
+        )
+
+    # Keep the paper trader live so the project keeps producing decision outcomes.
+    if enable_paper_v1:
+        cmd = [
+            PYTHON,
+            "-u",
+            str(BASE / "scripts" / "meme_decision_paper_overlay.py"),
+            "--loop",
+            "--interval-sec",
+            paper_interval,
+            "--max-hold-hours",
+            paper_max_hold,
+        ]
+        if paper_v1_no_refresh:
+            cmd.append("--no-refresh")
+        specs.append(
+            ProcSpec(
+                name="meme_decision_paper_overlay",
+                cmd=cmd,
+                log_path=LOGS / "meme_decision_paper_overlay.loop.log",
+            )
+        )
+
+    if enable_paper_v2:
+        cmd = [
+            PYTHON,
+            "-u",
+            str(BASE / "scripts" / "meme_decision_paper_overlay_v2.py"),
+            "--loop",
+            "--interval-sec",
+            paper_interval,
+            "--max-hold-hours",
+            paper_max_hold,
+        ]
+        if paper_v2_no_refresh:
+            cmd.append("--no-refresh")
+        specs.append(
+            ProcSpec(
+                name="meme_decision_paper_overlay_v2",
+                cmd=cmd,
+                log_path=LOGS / "meme_decision_paper_overlay_v2.loop.log",
+            )
+        )
+
+    if enable_paper_active:
+        cmd = [
+            PYTHON,
+            "-u",
+            str(BASE / "scripts" / "meme_decision_paper_overlay_active.py"),
+            "--loop",
+            "--interval-sec",
+            paper_interval,
+            "--max-hold-hours",
+            paper_max_hold,
+        ]
+        if paper_active_no_refresh:
+            cmd.append("--no-refresh")
+        specs.append(
+            ProcSpec(
+                name="meme_decision_paper_overlay_active",
+                cmd=cmd,
+                log_path=LOGS / "meme_decision_paper_overlay_active.loop.log",
             )
         )
 

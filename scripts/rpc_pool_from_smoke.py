@@ -51,6 +51,7 @@ def main() -> int:
     obj = json.loads(inp.read_text(encoding="utf-8"))
     rpc = obj.get("rpc", {}) if isinstance(obj, dict) else {}
     entries = []
+    best_by_url: dict[str, dict] = {}
     for name, info in rpc.items():
         if not isinstance(info, dict):
             continue
@@ -68,9 +69,17 @@ def main() -> int:
         allow_devnet = os.getenv("RPC_POOL_ALLOW_DEVNET", "").strip().lower() in ("1", "true", "yes")
         if (not allow_devnet) and ("devnet" in url.lower()):
             continue
-        entries.append({"url": url, "success_getLatestBlockhash": True, "rtt_ms": rtt, "name": name})
+        candidate = {"url": url, "success_getLatestBlockhash": True, "rtt_ms": rtt, "name": name}
+        prev = best_by_url.get(url)
+        if prev is None:
+            best_by_url[url] = candidate
+            continue
+        prev_rtt = prev.get("rtt_ms")
+        if prev_rtt is None or (rtt is not None and rtt < prev_rtt):
+            best_by_url[url] = candidate
 
     # Sort by RTT if available, otherwise keep original order.
+    entries = list(best_by_url.values())
     entries.sort(key=lambda e: (e["rtt_ms"] is None, e["rtt_ms"] or 999999))
 
     out.parent.mkdir(parents=True, exist_ok=True)

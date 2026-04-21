@@ -7,6 +7,7 @@ Writes to data/meme_launch_signals.jsonl and optional mints file.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -67,6 +68,8 @@ PUMP_WS_EVAL_TX_SAMPLES = int(os.getenv("PUMP_WS_EVAL_TX_SAMPLES", "5") or 5)
 PUMP_WS_REJECT_COOLDOWN_S = float(os.getenv("PUMP_WS_REJECT_COOLDOWN_S", "600") or 600)
 PUMP_WS_USE_BLOCK_SUBSCRIBE = (os.getenv("PUMP_WS_USE_BLOCK_SUBSCRIBE", "true") or "true").strip().lower() in ("1", "true", "yes")
 PUMP_WS_AUTO_FALLBACK_TO_LOGS = (os.getenv("PUMP_WS_AUTO_FALLBACK_TO_LOGS", "true") or "true").strip().lower() in ("1", "true", "yes")
+PUMP_WS_TX_NONE_RETRY_COUNT = int(os.getenv("PUMP_WS_TX_NONE_RETRY_COUNT", "2") or 2)
+PUMP_WS_TX_NONE_RETRY_DELAY_S = float(os.getenv("PUMP_WS_TX_NONE_RETRY_DELAY_S", "0.35") or 0.35)
 # When false, do not emit "degraded" signals with missing demand metrics.
 # This keeps the launch-signal stream high-quality and reduces downstream API waste.
 PUMP_SIGNAL_ALLOW_DEGRADED_EMIT = (os.getenv("PUMP_SIGNAL_ALLOW_DEGRADED_EMIT", "false") or "false").strip().lower() in (
@@ -74,8 +77,11 @@ PUMP_SIGNAL_ALLOW_DEGRADED_EMIT = (os.getenv("PUMP_SIGNAL_ALLOW_DEGRADED_EMIT", 
     "true",
     "yes",
 )
+PUMP_WS_BUY_LOG_SAMPLE_RATE = float(os.getenv("PUMP_WS_BUY_LOG_SAMPLE_RATE", "0.08") or 0.08)
 
 _PUMP_MINT_RE = re.compile(r"([1-9A-HJ-NP-Za-km-z]{32,44}pump)")
+_INSTRUCTION_RE = re.compile(r"Instruction:\s*([A-Za-z0-9_]+)")
+_BUYISH_SUBSTRINGS = ("buy",)
 
 
 def _is_pump_mint(addr: Any) -> bool:
@@ -107,6 +113,40 @@ def extract_mints_from_logs(logs: Any) -> list[str]:
                 seen.add(m)
                 out.append(m)
     return out
+
+
+def _instruction_labels(logs: Any) -> set[str]:
+    if not isinstance(logs, list):
+        return set()
+    out: set[str] = set()
+    for ln in logs:
+        if not isinstance(ln, str):
+            continue
+        m = _INSTRUCTION_RE.search(ln)
+        if not m:
+            continue
+        label = str(m.group(1) or "").strip()
+        if label:
+            out.add(label)
+    return out
+
+
+def _has_buyish_instruction(labels: set[str]) -> bool:
+    for label in labels:
+        lower = label.lower()
+        if any(part in lower for part in _BUYISH_SUBSTRINGS):
+            return True
+    return False
+
+
+def _sample_signature(signature: str, rate: float) -> bool:
+    if rate >= 1.0:
+        return True
+    if rate <= 0.0:
+        return False
+    h = hashlib.blake2b(signature.encode("utf-8", errors="ignore"), digest_size=8).digest()
+    bucket = int.from_bytes(h, "big") / float(2**64)
+    return bucket < rate
 
 
 def load_program_ids() -> list[str]:
@@ -491,8 +531,11 @@ async def main() -> None:
     stat_reject_net = 0
     stat_reject_top = 0
     stat_reject_accel = 0
+    stat_reject_buy_samples: list[dict[str, Any]] = []
     stat_ws_msgs = 0
     stat_tx_calls = 0
+    stat_skip_nonbuy = 0
+    stat_skip_sample = 0
     last_msg_at = time.time()
 
     # Keep the WS session honest. In blockSubscribe mode, we can otherwise sit
@@ -516,16 +559,14 @@ async def main() -> None:
     async def handle(msg: dict) -> None:
         nonlocal backoff, last_log, seen, last_tx_call, cooldown_until
         nonlocal stat_window_started, stat_emitted, stat_eval
-        nonlocal stat_reject_buys, stat_reject_net, stat_reject_top, stat_reject_accel
-        nonlocal stat_ws_msgs, stat_tx_calls
+        nonlocal stat_reject_buys, stat_reject_net, stat_reject_top, stat_reject_accel, stat_reject_buy_samples
+        nonlocal stat_ws_msgs, stat_tx_calls, stat_skip_nonbuy, stat_skip_sample
         nonlocal last_msg_at
         if msg.get("method") != "logsNotification":
             return
         last_msg_at = time.time()
         stat_ws_msgs += 1
         now = time.time()
-        if cooldown_until and now < cooldown_until:
-            return
         params = msg.get("params", {}) or {}
         result = params.get("result", {}) or {}
         value = result.get("value", {}) or {}
@@ -541,6 +582,8 @@ async def main() -> None:
         else:
             tx = None
 
+        instruction_labels = _instruction_labels(logs)
+        buyish_logs = _has_buyish_instruction(instruction_labels)
         # Fast-path: if we can identify the mint(s) from logs, we can defer expensive tx fetch.
         mints_from_logs = extract_mints_from_logs(logs)
         if tx is None and PUMP_WS_DEFER_TX_FETCH and mints_from_logs:
@@ -598,27 +641,34 @@ async def main() -> None:
 
                 async def _fetch_tx(sig: str) -> dict | None:
                     nonlocal backoff, last_tx_call, cooldown_until, stat_tx_calls
-                    try:
-                        if MAX_TX_PER_SEC > 0:
-                            min_dt = 1.0 / MAX_TX_PER_SEC
-                            dt = time.time() - last_tx_call
-                            if dt < min_dt:
-                                await asyncio.sleep(min_dt - dt)
-                        tx = await asyncio.to_thread(
-                            pool.call,
-                            "getTransaction",
-                            [sig, {"encoding": "json", "maxSupportedTransactionVersion": 0}],
-                        )
-                        stat_tx_calls += 1
-                        last_tx_call = time.time()
-                        return tx
-                    except RpcError as e:
-                        if e.kind == "rate_limited":
-                            backoff = min(300, backoff + 10)
-                            cooldown_until = time.time() + backoff
-                        return None
-                    except Exception:
-                        return None
+                    for attempt in range(max(1, PUMP_WS_TX_NONE_RETRY_COUNT + 1)):
+                        try:
+                            if MAX_TX_PER_SEC > 0:
+                                min_dt = 1.0 / MAX_TX_PER_SEC
+                                dt = time.time() - last_tx_call
+                                if dt < min_dt:
+                                    await asyncio.sleep(min_dt - dt)
+                            tx = await asyncio.to_thread(
+                                pool.call,
+                                "getTransaction",
+                                [sig, {"encoding": "json", "maxSupportedTransactionVersion": 0}],
+                            )
+                            stat_tx_calls += 1
+                            last_tx_call = time.time()
+                            if tx:
+                                return tx
+                            if attempt < PUMP_WS_TX_NONE_RETRY_COUNT:
+                                await asyncio.sleep(max(0.05, PUMP_WS_TX_NONE_RETRY_DELAY_S))
+                                continue
+                            return None
+                        except RpcError as e:
+                            if e.kind == "rate_limited":
+                                backoff = min(300, backoff + 10)
+                                cooldown_until = time.time() + backoff
+                            return None
+                        except Exception:
+                            return None
+                    return None
 
                 # Update eval_state from each tx (reuse existing attribution heuristics).
                 for sig in eval_sigs:
@@ -744,6 +794,19 @@ async def main() -> None:
                 eff_buys = max(buys, unique_buyers)
                 if eff_buys < MIN_BUYS and not (net_sol_in >= BUY_BYPASS_NET_SOL):
                     stat_reject_buys += 1
+                    if len(stat_reject_buy_samples) < 3:
+                        stat_reject_buy_samples.append(
+                            {
+                                "mint": mint,
+                                "hits": hits,
+                                "buys": buys,
+                                "unique_buyers": unique_buyers,
+                                "net_sol_in": round(net_sol_in, 6),
+                                "top_buyer_share": round(float(top_buyer_share), 4) if top_buyer_share is not None else None,
+                                "sampled_sigs": len(eval_sigs),
+                                "t_first_sell_s": round(float(t_first_sell_s), 3) if t_first_sell_s is not None else None,
+                            }
+                        )
                     rejected = True
                 if not rejected and net_sol_in < MIN_NET_SOL_IN:
                     stat_reject_net += 1
@@ -808,21 +871,41 @@ async def main() -> None:
                 mint_hit_state.pop(mint, None)
             return
 
+        # On public/free RPC, the vast majority of Pump mentions are sell-side or
+        # router-side noise. Fetching getTransaction for those burns the budget and
+        # starves actual buy discovery. Only spend HTTP on buy-like log flows.
+        if tx is None and not mints_from_logs:
+            if not buyish_logs:
+                stat_skip_nonbuy += 1
+                return
+            if not _sample_signature(signature, PUMP_WS_BUY_LOG_SAMPLE_RATE):
+                stat_skip_sample += 1
+                return
+            if cooldown_until and now < cooldown_until:
+                return
+
         if tx is None:
             try:
-                if MAX_TX_PER_SEC > 0:
-                    min_dt = 1.0 / MAX_TX_PER_SEC
-                    dt = time.time() - last_tx_call
-                    if dt < min_dt:
-                        await asyncio.sleep(min_dt - dt)
-                # Run blocking HTTP off the event loop. Blocking here causes WS keepalive ping timeouts.
-                tx = await asyncio.to_thread(
-                    pool.call,
-                    "getTransaction",
-                    [signature, {"encoding": "json", "maxSupportedTransactionVersion": 0}],
-                )
-                stat_tx_calls += 1
-                last_tx_call = time.time()
+                for attempt in range(max(1, PUMP_WS_TX_NONE_RETRY_COUNT + 1)):
+                    if MAX_TX_PER_SEC > 0:
+                        min_dt = 1.0 / MAX_TX_PER_SEC
+                        dt = time.time() - last_tx_call
+                        if dt < min_dt:
+                            await asyncio.sleep(min_dt - dt)
+                    # Run blocking HTTP off the event loop. Blocking here causes WS keepalive ping timeouts.
+                    tx = await asyncio.to_thread(
+                        pool.call,
+                        "getTransaction",
+                        [signature, {"encoding": "json", "maxSupportedTransactionVersion": 0}],
+                    )
+                    stat_tx_calls += 1
+                    last_tx_call = time.time()
+                    if tx:
+                        break
+                    if attempt < PUMP_WS_TX_NONE_RETRY_COUNT:
+                        await asyncio.sleep(max(0.05, PUMP_WS_TX_NONE_RETRY_DELAY_S))
+                if not tx:
+                    return
             except RpcError as e:
                 if e.kind == "rate_limited":
                     backoff = min(300, backoff + 10)
@@ -1099,9 +1182,16 @@ async def main() -> None:
                 "WS emit_stats "
                 f"emitted={stat_emitted} rate_h={rate_h:.1f} eval={stat_eval} "
                 f"rej_buys={stat_reject_buys} rej_net={stat_reject_net} rej_top={stat_reject_top} rej_accel={stat_reject_accel} "
-                f"ws_msgs={stat_ws_msgs} tx_calls={stat_tx_calls} in_window={len(mint_hit_state)}",
+                f"ws_msgs={stat_ws_msgs} tx_calls={stat_tx_calls} "
+                f"skip_nonbuy={stat_skip_nonbuy} skip_sample={stat_skip_sample} in_window={len(mint_hit_state)}",
                 flush=True,
             )
+            if stat_reject_buy_samples:
+                print(
+                    "WS reject_buy_samples "
+                    + json.dumps(stat_reject_buy_samples, separators=(",", ":"), ensure_ascii=True),
+                    flush=True,
+                )
             stat_window_started = now
             stat_emitted = 0
             stat_eval = 0
@@ -1109,15 +1199,18 @@ async def main() -> None:
             stat_reject_net = 0
             stat_reject_top = 0
             stat_reject_accel = 0
+            stat_reject_buy_samples = []
             stat_ws_msgs = 0
             stat_tx_calls = 0
+            stat_skip_nonbuy = 0
+            stat_skip_sample = 0
 
     async def heartbeat() -> None:
         """Periodic status + stale-connection detector (especially important for blockSubscribe)."""
         nonlocal last_log, seen
         nonlocal stat_window_started, stat_emitted, stat_eval
-        nonlocal stat_reject_buys, stat_reject_net, stat_reject_top, stat_reject_accel
-        nonlocal stat_ws_msgs, stat_tx_calls
+        nonlocal stat_reject_buys, stat_reject_net, stat_reject_top, stat_reject_accel, stat_reject_buy_samples
+        nonlocal stat_ws_msgs, stat_tx_calls, stat_skip_nonbuy, stat_skip_sample
         nonlocal last_msg_at, backoff
         while True:
             await asyncio.sleep(max(1.0, HEARTBEAT_S))
@@ -1137,9 +1230,16 @@ async def main() -> None:
                     "WS emit_stats "
                     f"emitted={stat_emitted} rate_h={rate_h:.1f} eval={stat_eval} "
                     f"rej_buys={stat_reject_buys} rej_net={stat_reject_net} rej_top={stat_reject_top} rej_accel={stat_reject_accel} "
-                    f"ws_msgs={stat_ws_msgs} tx_calls={stat_tx_calls} in_window={len(mint_hit_state)}",
+                    f"ws_msgs={stat_ws_msgs} tx_calls={stat_tx_calls} "
+                    f"skip_nonbuy={stat_skip_nonbuy} skip_sample={stat_skip_sample} in_window={len(mint_hit_state)}",
                     flush=True,
                 )
+                if stat_reject_buy_samples:
+                    print(
+                        "WS reject_buy_samples "
+                        + json.dumps(stat_reject_buy_samples, separators=(",", ":"), ensure_ascii=True),
+                        flush=True,
+                    )
                 stat_window_started = now
                 stat_emitted = 0
                 stat_eval = 0
@@ -1147,8 +1247,11 @@ async def main() -> None:
                 stat_reject_net = 0
                 stat_reject_top = 0
                 stat_reject_accel = 0
+                stat_reject_buy_samples = []
                 stat_ws_msgs = 0
                 stat_tx_calls = 0
+                stat_skip_nonbuy = 0
+                stat_skip_sample = 0
 
             # If we haven't seen any messages for a while, force a reconnect.
             stale_for = now - float(last_msg_at or now)

@@ -218,8 +218,10 @@ def _pair_metrics(pair: dict[str, Any]) -> dict[str, Any]:
         net_usd = vol_5m * ((float(buys_5m) - float(sells_5m)) / float(txns_5m))
     net_sol_in = max(0.0, net_usd / max(1.0, SOL_USD_FALLBACK))
 
-    # We do not have wallet-level unique buyers from DexScreener API; use a conservative proxy.
-    unique_buyers_proxy = max(0, min(16, buys_5m))
+    # We do not have wallet-level unique buyers from DexScreener API.
+    # Keep a rough activity proxy but mark it as estimated so downstream gates can
+    # avoid treating it as ground truth.
+    unique_buyers_proxy = max(0, min(64, buys_5m))
 
     # Structure classification:
     # - breakout: immediate expansion in both price and flow.
@@ -266,8 +268,10 @@ def _pair_metrics(pair: dict[str, Any]) -> dict[str, Any]:
         "buys": buys_5m,
         "sells": sells_5m,
         "unique_buyers": unique_buyers_proxy,
+        "unique_buyers_estimated": True,
         "net_sol_in": net_sol_in,
         "top_buyer_share": None,
+        "top_buyer_share_estimated": True,
         "volume_5m": vol_5m,
         "volume_1h": vol_1h,
         "volume_5m_share": vol_5m_share,

@@ -110,10 +110,39 @@ def resolve_active_run_id(project_root: str | Path | None = None) -> str | None:
     except Exception:
         pass
 
+    # Fallback to the newest run manifest emitted by meme_bot.
+    try:
+        runs_dir = root / "data" / "meme_runs"
+        if runs_dir.exists():
+            manifests = sorted(
+                runs_dir.glob("run_*.json"),
+                key=lambda p: p.stat().st_mtime if p.exists() else 0.0,
+                reverse=True,
+            )
+            for mf in manifests[:5]:
+                try:
+                    obj = json.loads(mf.read_text(encoding="utf-8"))
+                    rid = str((obj or {}).get("run_id") or "").strip()
+                    if rid:
+                        return rid
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
     log_candidates = [
-        root / "logs" / "meme_base_simple.log",
         root / "logs" / "meme_bot_early_edge_auto.log",
+        root / "logs" / "meme_base_simple.log",
     ]
+    # Prefer whichever log is actively updating to avoid stale run_id attribution.
+    try:
+        log_candidates = sorted(
+            log_candidates,
+            key=lambda p: p.stat().st_mtime if p.exists() else 0.0,
+            reverse=True,
+        )
+    except Exception:
+        pass
     for path in log_candidates:
         rid = _tail_run_id(path)
         if rid:
