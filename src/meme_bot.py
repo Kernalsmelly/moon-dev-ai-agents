@@ -44,9 +44,30 @@ if PROJECT_ROOT not in sys.path:
 # Do not override process-level env so lane-specific overrides (A/B runs, tests)
 # remain effective.
 load_dotenv(dotenv_path=os.path.join(PROJECT_ROOT, ".env"), override=False)
+# Optional deterministic runtime env (generated/flattened). If present, it should
+# contain the final resolved key set and is loaded with override enabled so duplicate
+# keys in `.env` cannot cause drift across runs.
+_runtime_env_file = str(os.getenv("MEME_ENV_FILE", "") or "").strip()
+if _runtime_env_file:
+    _runtime_env_path = _runtime_env_file
+    if not os.path.isabs(_runtime_env_path):
+        _runtime_env_path = os.path.join(PROJECT_ROOT, _runtime_env_path)
+    load_dotenv(dotenv_path=_runtime_env_path, override=True)
 
 import src.config as config
 import src.meme_config as meme_config
+from src.meme_signal_contract import (
+    signal_contract_snapshot,
+    signal_field_status,
+    signal_field_value,
+    signal_source,
+    signal_source_family,
+)
+from src.meme_signal_rank import (
+    candidate_signal_rank_features,
+    load_signal_rank_report,
+    score_candidate_from_report,
+)
 from src.meme_signal_schema import normalize_signal_metrics
 
 # Default excluded tokens (SOL, USDC, USDT) - used if config doesn't have EXCLUDED_TOKENS
@@ -123,6 +144,10 @@ DEXSCREENER_TOKEN = f'{DEXSCREENER_BASE}/latest/dex/tokens'  # For token details
 DEXSCREENER_SEARCH = f'{DEXSCREENER_BASE}/dex/search'
 
 
+def _csv_set(raw: str | None) -> set[str]:
+    return {s.strip().lower() for s in str(raw or "").split(",") if s.strip()}
+
+
 @dataclass
 class TokenCandidate:
     """Token candidate for potential entry."""
@@ -146,6 +171,13 @@ class TokenCandidate:
     winner_zone_objective: float = 0.0
     winner_zone_bypassed: bool = False
     winner_zone_bypass_reason: str = ""
+    signal_profile: str = ""
+    signal_source_family: str = ""
+    signal_rank_score: float = 0.0
+    signal_rank_matches: int = 0
+    signal_rank_negative_hits: int = 0
+    mover_pattern: str = ""
+    pair_age_min: float = 0.0
     # Momentum data
     price_change_5m: float = 0.0
     price_change_1h: float = 0.0
@@ -328,6 +360,37 @@ class MemeCoinBot:
             "streak": 0,
             "pause_s": 0.0,
         }
+        # Source-level regime brake: quarantine only the lane that is underperforming
+        # instead of pausing all entries.
+        self.source_regime_enabled = os.getenv("MEME_SOURCE_REGIME_ENABLED", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        self.source_regime_scope_run_id = os.getenv("MEME_SOURCE_REGIME_SCOPE_RUN_ID", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        self.source_regime_eval_interval_s = float(os.getenv("MEME_SOURCE_REGIME_EVAL_INTERVAL_S", "30") or 30)
+        self.source_regime_window_minutes = int(os.getenv("MEME_SOURCE_REGIME_WINDOW_MINUTES", "45") or 45)
+        self.source_regime_min_trades = int(os.getenv("MEME_SOURCE_REGIME_MIN_TRADES", "6") or 6)
+        self.source_regime_min_winrate = float(os.getenv("MEME_SOURCE_REGIME_MIN_WINRATE", "0.28") or 0.28)
+        self.source_regime_min_avg_pnl_usd = float(
+            os.getenv("MEME_SOURCE_REGIME_MIN_AVG_PNL_USD", "-0.12") or -0.12
+        )
+        self.source_regime_max_sum_loss_usd = float(
+            os.getenv("MEME_SOURCE_REGIME_MAX_SUM_LOSS_USD", "-6.0") or -6.0
+        )
+        self.source_regime_block_seconds = float(os.getenv("MEME_SOURCE_REGIME_BLOCK_SECONDS", "900") or 900)
+        source_regime_sources_raw = os.getenv("MEME_SOURCE_REGIME_SOURCES", "ws_logs,dex_mover")
+        self.source_regime_sources = {
+            str(s).strip().lower() for s in str(source_regime_sources_raw or "").split(",") if str(s).strip()
+        }
+        self._source_block_until: dict[str, float] = {}
+        self._source_regime_snapshot: dict[str, dict[str, float | int | bool | str]] = {}
+        self._source_regime_last_eval_ts: float = 0.0
+        self._source_regime_last_states: dict[str, bool] = {}
         # Winner-first profile/ranking gate (reverse-engineered from historical winners).
         self.winner_profile_enabled = os.getenv("MEME_WINNER_PROFILE_ENABLED", "true").lower() in ("1", "true", "yes")
         self.winner_profile_path = os.getenv("MEME_WINNER_PROFILE_PATH", "data/meme_winner_profile.json")
@@ -356,6 +419,92 @@ class MemeCoinBot:
         self._winner_profile_mtime: float = 0.0
         self._winner_profile_last_reload: float = 0.0
         self._winner_profile_loaded_once: bool = False
+        # Source-aware signal rank gate built from labeled forward outcomes.
+        self.signal_rank_enabled = os.getenv("MEME_SIGNAL_RANK_ENABLED", "true").lower() in ("1", "true", "yes")
+        self.signal_rank_path = os.getenv("MEME_SIGNAL_RANK_PATH", "data/meme_reports/signal_rank_report.json")
+        self.signal_rank_reload_s = float(os.getenv("MEME_SIGNAL_RANK_RELOAD_S", "180") or 180)
+        self.signal_rank_weight = float(os.getenv("MEME_SIGNAL_RANK_WEIGHT", "35") or 35)
+        self.signal_rank_min_score = float(os.getenv("MEME_SIGNAL_RANK_MIN_SCORE", "56") or 56)
+        self.signal_rank_min_matches = int(os.getenv("MEME_SIGNAL_RANK_MIN_MATCHES", "2") or 2)
+        self.signal_rank_min_family_samples = int(os.getenv("MEME_SIGNAL_RANK_MIN_FAMILY_SAMPLES", "30") or 30)
+        # Let strong ranked candidates reach the quote stage instead of dying in static prequote gates.
+        self.signal_rank_prequote_relax_enabled = os.getenv(
+            "MEME_SIGNAL_RANK_PREQUOTE_RELAX_ENABLED", "true"
+        ).lower() in ("1", "true", "yes")
+        self.signal_rank_prequote_relax_score = float(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_SCORE", "68") or 68
+        )
+        self.signal_rank_prequote_relax_matches = int(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_MATCHES", "2") or 2
+        )
+        self.signal_rank_prequote_relax_score_delta = float(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_SCORE_DELTA", "8") or 8
+        )
+        self.signal_rank_prequote_relax_hits_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_HITS_MULT", "0.75") or 0.75
+        )
+        self.signal_rank_prequote_relax_buys_delta = int(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_BUYS_DELTA", "1") or 1
+        )
+        self.signal_rank_prequote_relax_uniq_delta = int(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_UNIQ_DELTA", "1") or 1
+        )
+        self.signal_rank_prequote_relax_net_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_NET_MULT", "0.80") or 0.80
+        )
+        self.signal_rank_prequote_relax_mcap_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_MCAP_MULT", "0.90") or 0.90
+        )
+        self.signal_rank_prequote_relax_top_share_bonus = float(
+            os.getenv("MEME_SIGNAL_RANK_PREQUOTE_RELAX_TOP_SHARE_BONUS", "0.03") or 0.03
+        )
+        # Rank-aware continuation adjustment keeps proven winner slices from being blocked by rigid lane walls.
+        self.signal_rank_continuation_relax_enabled = os.getenv(
+            "MEME_SIGNAL_RANK_CONTINUATION_RELAX_ENABLED", "true"
+        ).lower() in ("1", "true", "yes")
+        self.signal_rank_continuation_relax_score = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_SCORE", "68") or 68
+        )
+        self.signal_rank_continuation_relax_matches = int(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MATCHES", "2") or 2
+        )
+        self.signal_rank_continuation_relax_min_mcap_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MIN_MCAP_MULT", "0.90") or 0.90
+        )
+        self.signal_rank_continuation_relax_max_mcap_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MAX_MCAP_MULT", "1.08") or 1.08
+        )
+        self.signal_rank_continuation_relax_min_mom_delta = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MIN_MOM_DELTA", "8") or 8
+        )
+        self.signal_rank_continuation_relax_max_mom_delta = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MAX_MOM_DELTA", "12") or 12
+        )
+        self.signal_rank_continuation_relax_min_hits_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MIN_HITS_MULT", "0.85") or 0.85
+        )
+        self.signal_rank_continuation_relax_max_hits_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MAX_HITS_MULT", "1.10") or 1.10
+        )
+        self.signal_rank_continuation_relax_min_net_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MIN_NET_MULT", "0.85") or 0.85
+        )
+        self.signal_rank_continuation_relax_max_net_mult = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MAX_NET_MULT", "1.10") or 1.10
+        )
+        self.signal_rank_continuation_relax_min_age_delta = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MIN_AGE_DELTA", "2") or 2
+        )
+        self.signal_rank_continuation_relax_max_age_delta = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_MAX_AGE_DELTA", "5") or 5
+        )
+        self.signal_rank_continuation_relax_bs_ratio_delta = float(
+            os.getenv("MEME_SIGNAL_RANK_CONTINUATION_RELAX_BS_RATIO_DELTA", "0.10") or 0.10
+        )
+        self._signal_rank_report: dict | None = None
+        self._signal_rank_mtime: float = 0.0
+        self._signal_rank_last_reload: float = 0.0
+        self._signal_rank_loaded_once: bool = False
         # Winner-zone gate: learned allowlist from prior outcomes (score/net/top-share/mcap bins).
         self.winner_zone_enabled = os.getenv("MEME_WINNER_ZONE_ENABLED", "false").lower() in ("1", "true", "yes")
         self.winner_zone_enforce = os.getenv("MEME_WINNER_ZONE_ENFORCE", "true").lower() in ("1", "true", "yes")
@@ -427,18 +576,27 @@ class MemeCoinBot:
         self.launch_signal_seen: set[str] = set()
         self.launch_signal_last_used: dict[str, float] = {}
         self.signal_reject_cooldown_s = float(os.getenv("MEME_SIGNAL_REJECT_COOLDOWN_S", "120") or 120)
-        reject_reasons_raw = os.getenv(
-            "MEME_SIGNAL_REJECT_COOLDOWN_REASONS",
-            (
-                "mcap_high,"
-                "prequote_score,prequote_net,prequote_hits,prequote_buys,prequote_uniq,"
-                "prequote_top_share,prequote_bs_ratio,prequote_mcap_low,"
-                "core_metrics,liq_missing_signal,liq_low_signal,"
-                "winner_zone,winner_zone_missing,age,mcap_low"
-            ),
+        default_signal_reject_reasons = (
+            "mcap_high,"
+            "prequote_score,prequote_net,prequote_hits,prequote_buys,prequote_uniq,"
+            "prequote_top_share,prequote_bs_ratio,prequote_mcap_low,"
+            "core_metrics,liq_missing_signal,liq_low_signal,"
+            "winner_zone,winner_zone_missing,age,mcap_low"
+        )
+        reject_reasons_raw_env = os.getenv("MEME_SIGNAL_REJECT_COOLDOWN_REASONS")
+        # Treat blank env as "use defaults" so accidental empty values don't silently disable
+        # reject cooldown protection.
+        reject_reasons_raw = (
+            str(reject_reasons_raw_env)
+            if reject_reasons_raw_env is not None and str(reject_reasons_raw_env).strip()
+            else default_signal_reject_reasons
         )
         self.signal_reject_cooldown_reasons = {
             str(x).strip() for x in str(reject_reasons_raw or "").split(",") if str(x).strip()
+        }
+        age_anchor_latest_raw = os.getenv("MEME_SIGNAL_AGE_ANCHOR_LATEST_SOURCES", "dex_mover")
+        self.signal_age_anchor_latest_sources = {
+            str(x).strip().lower() for x in str(age_anchor_latest_raw or "").split(",") if str(x).strip()
         }
         self._last_signal_log: float = 0.0
         # If enabled, only consider tokens present in launch signals, instead of mass discovery.
@@ -500,6 +658,38 @@ class MemeCoinBot:
         self.signal_late_min_net_sol_in = float(os.getenv("MEME_SIGNAL_LATE_MIN_NET_SOL_IN", "0") or 0.0)
         self.signal_late_max_top_buyer_share = float(os.getenv("MEME_SIGNAL_LATE_MAX_TOP_BUYER_SHARE", "0") or 0.0)
         self.signal_late_min_signal_score = float(os.getenv("MEME_SIGNAL_LATE_MIN_SIGNAL_SCORE", "0") or 0.0)
+        # Source-lane split: ws_logs = launch lane, dex_mover = momentum lane.
+        # Momentum-lane signals are often discovered later by design, so they can use
+        # different age and demand settings.
+        dex_lane_sources_raw = os.getenv("MEME_SIGNAL_DEX_LANE_SOURCES", "dex_mover")
+        self.signal_dex_lane_sources = {
+            str(s).strip().lower() for s in str(dex_lane_sources_raw or "").split(",") if str(s).strip()
+        }
+        self.signal_dex_max_age_seconds = int(
+            os.getenv("MEME_SIGNAL_DEX_MAX_AGE_SECONDS", str(max(0, int(self.signal_max_age_seconds)))) or self.signal_max_age_seconds
+        )
+        self.signal_dex_late_max_age_seconds = int(
+            os.getenv(
+                "MEME_SIGNAL_DEX_LATE_MAX_AGE_SECONDS",
+                str(max(int(self.signal_late_max_age_seconds), int(self.signal_dex_max_age_seconds))),
+            )
+            or max(int(self.signal_late_max_age_seconds), int(self.signal_dex_max_age_seconds))
+        )
+        self.signal_dex_late_min_signal_score = float(
+            os.getenv("MEME_SIGNAL_DEX_LATE_MIN_SIGNAL_SCORE", str(float(self.signal_late_min_signal_score)))
+            or self.signal_late_min_signal_score
+        )
+        self.signal_dex_late_min_net_sol_in = float(
+            os.getenv("MEME_SIGNAL_DEX_LATE_MIN_NET_SOL_IN", str(float(self.signal_late_min_net_sol_in)))
+            or self.signal_late_min_net_sol_in
+        )
+        self.signal_dex_late_min_unique_buyers = int(
+            os.getenv("MEME_SIGNAL_DEX_LATE_MIN_UNIQUE_BUYERS", "0") or 0
+        )
+        self.signal_dex_late_use_unique_buyers = os.getenv(
+            "MEME_SIGNAL_DEX_LATE_USE_UNIQUE_BUYERS",
+            "false",
+        ).lower() in ("1", "true", "yes")
         # Data-integrity gate: block entries unless core signal/tradability fields are present.
         # Keep liquidity requirements consistent across the prequote gate and core-metrics gate
         # so we do not silently reject candidates when liquidity is intentionally optional.
@@ -582,7 +772,9 @@ class MemeCoinBot:
         self._mint_supply_ui: dict[str, float] = {}
         self.signal_max_candidates_per_tick = int(os.getenv("MEME_SIGNAL_MAX_CANDIDATES_PER_TICK", "20"))
         env_sources = os.getenv("MEME_SIGNAL_SOURCES", "").strip()
-        self.signal_source_allowlist = {s.strip() for s in env_sources.split(",") if s.strip()} if env_sources else set()
+        self.signal_source_allowlist = (
+            {s.strip().lower() for s in env_sources.split(",") if s.strip()} if env_sources else set()
+        )
         env_cap_bypass_sources = os.getenv("MEME_SIGNAL_CAP_BYPASS_SOURCES", "dex_mover").strip()
         self.signal_cap_bypass_sources = (
             {s.strip() for s in env_cap_bypass_sources.split(",") if s.strip()} if env_cap_bypass_sources else set()
@@ -634,6 +826,66 @@ class MemeCoinBot:
         )
         self.signal_prequote_score_bypass_max_top_buyer_share = float(
             os.getenv("MEME_SIGNAL_PREQUOTE_SCORE_BYPASS_MAX_TOP_BUYER_SHARE", "0.45") or 0.45
+        )
+        # Source-lane overrides for prequote demand gates.
+        self.signal_dex_prequote_min_signal_score = float(
+            os.getenv("MEME_SIGNAL_DEX_PREQUOTE_MIN_SIGNAL_SCORE", str(float(self.signal_prequote_min_signal_score)))
+            or self.signal_prequote_min_signal_score
+        )
+        self.signal_dex_prequote_min_hits = int(
+            os.getenv("MEME_SIGNAL_DEX_PREQUOTE_MIN_HITS", str(int(self.signal_prequote_min_hits)))
+            or self.signal_prequote_min_hits
+        )
+        self.signal_dex_prequote_min_buys = int(
+            os.getenv("MEME_SIGNAL_DEX_PREQUOTE_MIN_BUYS", str(int(self.signal_prequote_min_buys)))
+            or self.signal_prequote_min_buys
+        )
+        self.signal_dex_prequote_min_unique_buyers = int(
+            os.getenv("MEME_SIGNAL_DEX_PREQUOTE_MIN_UNIQUE_BUYERS", "0") or 0
+        )
+        self.signal_dex_prequote_min_mcap_usd = float(
+            os.getenv("MEME_SIGNAL_DEX_PREQUOTE_MIN_MCAP_USD", str(float(self.signal_prequote_min_mcap_usd)))
+            or self.signal_prequote_min_mcap_usd
+        )
+        self.signal_dex_prequote_min_net_sol_in = float(
+            os.getenv("MEME_SIGNAL_DEX_PREQUOTE_MIN_NET_SOL_IN", str(float(self.signal_prequote_min_net_sol_in)))
+            or self.signal_prequote_min_net_sol_in
+        )
+        self.signal_dex_prequote_min_buy_sell_ratio = float(
+            os.getenv("MEME_SIGNAL_DEX_PREQUOTE_MIN_BUY_SELL_RATIO", str(float(self.signal_prequote_min_buy_sell_ratio)))
+            or self.signal_prequote_min_buy_sell_ratio
+        )
+        self.signal_dex_prequote_max_top_buyer_share = float(
+            os.getenv("MEME_SIGNAL_DEX_PREQUOTE_MAX_TOP_BUYER_SHARE", str(float(self.signal_prequote_max_top_buyer_share)))
+            or self.signal_prequote_max_top_buyer_share
+        )
+        self.signal_dex_prequote_use_unique_buyers = os.getenv(
+            "MEME_SIGNAL_DEX_PREQUOTE_USE_UNIQUE_BUYERS",
+            "false",
+        ).lower() in ("1", "true", "yes")
+        # Continuation policy: explicit zone-based entry policy derived from observed outcomes.
+        # This is intentionally rule-based so we do not over-trust a saturated heuristic score.
+        self.continuation_policy_enabled = os.getenv(
+            "MEME_CONTINUATION_POLICY_ENABLED",
+            "false",
+        ).lower() in ("1", "true", "yes")
+        self.continuation_profile = str(os.getenv("MEME_CONTINUATION_PROFILE", "default") or "default").strip()
+        self.continuation_policy_sources = _csv_set(
+            os.getenv("MEME_CONTINUATION_POLICY_SOURCES", "dex_mover")
+        )
+        self.continuation_min_mcap_usd = float(os.getenv("MEME_CONTINUATION_MIN_MCAP_USD", "0") or 0.0)
+        self.continuation_max_mcap_usd = float(os.getenv("MEME_CONTINUATION_MAX_MCAP_USD", "0") or 0.0)
+        self.continuation_min_mom5m = float(os.getenv("MEME_CONTINUATION_MIN_PRICE_CHANGE_5M", "-999") or -999.0)
+        self.continuation_max_mom5m = float(os.getenv("MEME_CONTINUATION_MAX_PRICE_CHANGE_5M", "999") or 999.0)
+        self.continuation_min_hits = int(os.getenv("MEME_CONTINUATION_MIN_HITS", "0") or 0)
+        self.continuation_max_hits = int(os.getenv("MEME_CONTINUATION_MAX_HITS", "0") or 0)
+        self.continuation_min_net_sol_in = float(os.getenv("MEME_CONTINUATION_MIN_NET_SOL_IN", "0") or 0.0)
+        self.continuation_max_net_sol_in = float(os.getenv("MEME_CONTINUATION_MAX_NET_SOL_IN", "0") or 0.0)
+        self.continuation_min_pair_age_min = float(os.getenv("MEME_CONTINUATION_MIN_PAIR_AGE_MIN", "0") or 0.0)
+        self.continuation_max_pair_age_min = float(os.getenv("MEME_CONTINUATION_MAX_PAIR_AGE_MIN", "0") or 0.0)
+        self.continuation_min_buy_sell_ratio = float(os.getenv("MEME_CONTINUATION_MIN_BUY_SELL_RATIO", "0") or 0.0)
+        self.continuation_allowed_patterns = _csv_set(
+            os.getenv("MEME_CONTINUATION_ALLOWED_PATTERNS", "")
         )
         # Request budgeting: keep the bot alive on free tiers by bounding quote/RPC traffic.
         self._jup_window_start = 0.0
@@ -775,9 +1027,185 @@ class MemeCoinBot:
         except Exception:
             self.scale_in_abort_below_pct = -1.0
         try:
+            self.scale_in_abort_max_loss_usd = float(os.getenv("MEME_SCALE_IN_ABORT_MAX_LOSS_USD", "0.35") or 0.35)
+        except Exception:
+            self.scale_in_abort_max_loss_usd = 0.35
+        try:
             self.scale_in_window_seconds = int(os.getenv("MEME_SCALE_IN_WINDOW_SECONDS", "60") or 60)
         except Exception:
             self.scale_in_window_seconds = 60
+        # Avoid tiny probe tickets that generate noise-level P&L.
+        # In signal-first mode, keep at least this fraction of target size on entry.
+        try:
+            self.scale_in_min_initial_fraction = float(
+                os.getenv("MEME_SCALE_IN_MIN_INITIAL_FRACTION", "0.50") or 0.50
+            )
+        except Exception:
+            self.scale_in_min_initial_fraction = 0.50
+        # Optional: when fail-fast triggers, close the full position for selected sources
+        # instead of leaving a residual leg that can later hit MAX_LOSS_CAP.
+        self.fail_fast_force_flat = os.getenv("MEME_FAIL_FAST_FORCE_FLAT", "true").lower() in ("1", "true", "yes")
+        ff_force_flat_sources_raw = os.getenv("MEME_FAIL_FAST_FORCE_FLAT_SOURCES", "ws_logs,dex_mover")
+        self.fail_fast_force_flat_sources = {
+            str(s).strip().lower() for s in str(ff_force_flat_sources_raw or "").split(",") if str(s).strip()
+        }
+        # Early invalidation: cut weak entries before they drift into MAX_LOSS_CAP.
+        self.early_invalidation_enabled = os.getenv("MEME_EARLY_INVALIDATION_ENABLED", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        try:
+            self.early_invalidation_min_hold_s = float(os.getenv("MEME_EARLY_INVALIDATION_MIN_HOLD_S", "15") or 15)
+        except Exception:
+            self.early_invalidation_min_hold_s = 15.0
+        try:
+            self.early_invalidation_window_s = float(os.getenv("MEME_EARLY_INVALIDATION_WINDOW_S", "120") or 120)
+        except Exception:
+            self.early_invalidation_window_s = 120.0
+        try:
+            self.early_invalidation_soft_trigger_pct = float(
+                os.getenv("MEME_EARLY_INVALIDATION_SOFT_TRIGGER_PCT", "-1.6") or -1.6
+            )
+        except Exception:
+            self.early_invalidation_soft_trigger_pct = -1.6
+        try:
+            self.early_invalidation_hard_trigger_pct = float(
+                os.getenv("MEME_EARLY_INVALIDATION_HARD_TRIGGER_PCT", "-2.4") or -2.4
+            )
+        except Exception:
+            self.early_invalidation_hard_trigger_pct = -2.4
+        try:
+            self.early_invalidation_price5m_max = float(
+                os.getenv("MEME_EARLY_INVALIDATION_PRICE5M_MAX", "0.0") or 0.0
+            )
+        except Exception:
+            self.early_invalidation_price5m_max = 0.0
+        try:
+            self.early_invalidation_sell_ratio_min = float(
+                os.getenv("MEME_EARLY_INVALIDATION_SELL_RATIO_MIN", "1.15") or 1.15
+            )
+        except Exception:
+            self.early_invalidation_sell_ratio_min = 1.15
+        try:
+            self.early_invalidation_soft_confirms = int(
+                os.getenv("MEME_EARLY_INVALIDATION_SOFT_CONFIRMS", "1") or 1
+            )
+        except Exception:
+            self.early_invalidation_soft_confirms = 1
+        # Per-mint post-loss cooldown to avoid immediate repeat entries after hard loss exits.
+        self.post_loss_entry_cooldown_s = float(os.getenv("MEME_POST_LOSS_ENTRY_COOLDOWN_S", "10800") or 10800)
+        post_loss_tokens_raw = os.getenv(
+            "MEME_POST_LOSS_ENTRY_COOLDOWN_REASONS",
+            "FAIL_FAST,MAX_LOSS_CAP,MAX_LOSS,GAP_PROTECTION,SCALE_IN_ABORT,SCALE_IN_TIMEOUT",
+        )
+        self.post_loss_entry_cooldown_reason_tokens = {
+            str(tok).strip().upper() for tok in str(post_loss_tokens_raw or "").split(",") if str(tok).strip()
+        }
+        # Source-specific demand floors: Dex movers are noisy unless flow is strong.
+        try:
+            self.dex_mover_entry_min_net_sol_in = float(os.getenv("MEME_DEX_MOVER_ENTRY_MIN_NET_SOL_IN", "10.0") or 10.0)
+        except Exception:
+            self.dex_mover_entry_min_net_sol_in = 10.0
+        try:
+            self.dex_mover_entry_min_hits = int(os.getenv("MEME_DEX_MOVER_ENTRY_MIN_HITS", "150") or 150)
+        except Exception:
+            self.dex_mover_entry_min_hits = 150
+        # Size policy: stay conservative until this run proves positive expectancy,
+        # then allow larger size only on top-flow setups.
+        self.size_escalation_enabled = os.getenv("MEME_SIZE_ESCALATION_ENABLED", "true").lower() in ("1", "true", "yes")
+        try:
+            self.size_escalation_min_trades = int(os.getenv("MEME_SIZE_ESCALATION_MIN_TRADES", "50") or 50)
+        except Exception:
+            self.size_escalation_min_trades = 50
+        try:
+            self.size_escalation_min_pnl_usd = float(os.getenv("MEME_SIZE_ESCALATION_MIN_PNL_USD", "0.0") or 0.0)
+        except Exception:
+            self.size_escalation_min_pnl_usd = 0.0
+        try:
+            self.pre_edge_max_position_usd = float(os.getenv("MEME_PRE_EDGE_MAX_POSITION_USD", "5.0") or 5.0)
+        except Exception:
+            self.pre_edge_max_position_usd = 5.0
+        try:
+            self.topflow_size_mult = float(os.getenv("MEME_TOPFLOW_SIZE_MULT", "2.0") or 2.0)
+        except Exception:
+            self.topflow_size_mult = 2.0
+        try:
+            self.topflow_min_net_sol_in = float(os.getenv("MEME_TOPFLOW_MIN_NET_SOL_IN", "20.0") or 20.0)
+        except Exception:
+            self.topflow_min_net_sol_in = 20.0
+        try:
+            self.topflow_min_hits = int(os.getenv("MEME_TOPFLOW_MIN_HITS", "200") or 200)
+        except Exception:
+            self.topflow_min_hits = 200
+        # Anti-crowding (source-specific): avoid chasing late dex_mover runners.
+        try:
+            self.dex_mover_entry_max_mcap_usd = float(
+                os.getenv("MEME_DEX_MOVER_ENTRY_MAX_MCAP_USD", "350000") or 350000
+            )
+        except Exception:
+            self.dex_mover_entry_max_mcap_usd = 350000.0
+        try:
+            self.size_escalation_eval_interval_s = float(os.getenv("MEME_SIZE_ESCALATION_EVAL_INTERVAL_S", "30") or 30)
+        except Exception:
+            self.size_escalation_eval_interval_s = 30.0
+        self._size_escalation_last_eval_ts: float = 0.0
+        self._size_escalation_snapshot: dict[str, float | int | bool] = {
+            "ready": False,
+            "n": 0,
+            "wins": 0,
+            "wr": 0.0,
+            "sum_pnl": 0.0,
+        }
+        # Hard run-level mint lock after first bad loss: no second chance on same mint in this run.
+        self.run_mint_lock_on_loss_enabled = os.getenv("MEME_RUN_MINT_LOCK_ON_LOSS", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        run_lock_tokens_raw = os.getenv(
+            "MEME_RUN_MINT_LOCK_LOSS_REASONS",
+            "SCALE_IN_ABORT,SCALE_IN_TIMEOUT,FAIL_FAST,MAX_LOSS_CAP,MAX_LOSS",
+        )
+        self.run_mint_lock_loss_reason_tokens = {
+            str(tok).strip().upper() for tok in str(run_lock_tokens_raw or "").split(",") if str(tok).strip()
+        }
+        self._run_mint_loss_locked: set[str] = set()
+        self.persistent_mint_quarantine_enabled = os.getenv("MEME_PERSISTENT_MINT_QUARANTINE_ENABLED", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        quarantine_file_raw = str(
+            os.getenv("MEME_PERSISTENT_MINT_QUARANTINE_FILE", "data/meme_persistent_mint_quarantine.json")
+            or "data/meme_persistent_mint_quarantine.json"
+        ).strip()
+        quarantine_path = Path(quarantine_file_raw) if quarantine_file_raw else Path("data/meme_persistent_mint_quarantine.json")
+        if not quarantine_path.is_absolute():
+            quarantine_path = Path(PROJECT_ROOT) / quarantine_path
+        self.persistent_mint_quarantine_file = quarantine_path
+        try:
+            self.persistent_mint_quarantine_hours = float(
+                os.getenv("MEME_PERSISTENT_MINT_QUARANTINE_HOURS", "12") or 12
+            )
+        except Exception:
+            self.persistent_mint_quarantine_hours = 12.0
+        quarantine_reason_tokens_raw = os.getenv(
+            "MEME_PERSISTENT_MINT_QUARANTINE_REASONS",
+            "FAIL_FAST,MAX_LOSS_CAP,MAX_LOSS,GAP_PROTECTION",
+        )
+        self.persistent_mint_quarantine_reason_tokens = {
+            str(tok).strip().upper()
+            for tok in str(quarantine_reason_tokens_raw or "").split(",")
+            if str(tok).strip()
+        }
+        self._persistent_mint_quarantine: dict[str, float] = {}
+        self._load_persistent_mint_quarantine()
+        # Faster risk loop for active positions in signal-first mode.
+        try:
+            self.signal_fast_poll_interval_seconds = float(os.getenv("MEME_SIGNAL_FAST_POLL_INTERVAL_S", "3") or 3)
+        except Exception:
+            self.signal_fast_poll_interval_seconds = 3.0
         # Entry pacing: keep fills selective when signal flow is bursty.
         # 0 disables the guard.
         self.max_new_entries_per_tick = int(os.getenv("MEME_MAX_NEW_ENTRIES_PER_TICK", "0") or 0)
@@ -786,6 +1214,69 @@ class MemeCoinBot:
         except Exception:
             self.min_seconds_between_entries = 0.0
         self._last_entry_ts: float = 0.0
+        # Starvation relax: when no entries happen for a while, widen source/gates
+        # gradually so the bot keeps collecting actionable flow instead of stalling.
+        self.signal_starvation_relax_enabled = os.getenv("MEME_SIGNAL_STARVATION_RELAX_ENABLED", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        try:
+            self.signal_starvation_idle_seconds = float(os.getenv("MEME_SIGNAL_STARVATION_IDLE_S", "900") or 900)
+        except Exception:
+            self.signal_starvation_idle_seconds = 900.0
+        self.signal_starvation_expand_sources = os.getenv("MEME_SIGNAL_STARVATION_EXPAND_SOURCES", "true").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        starve_src_raw = os.getenv("MEME_SIGNAL_STARVATION_EXPAND_SOURCE_SET", "ws_logs,dex_mover")
+        self.signal_starvation_expand_source_set = {
+            str(s).strip().lower() for s in str(starve_src_raw or "").split(",") if str(s).strip()
+        }
+        try:
+            self.signal_starvation_relax_score_delta = float(os.getenv("MEME_SIGNAL_STARVATION_RELAX_SCORE_DELTA", "12") or 12)
+        except Exception:
+            self.signal_starvation_relax_score_delta = 12.0
+        try:
+            self.signal_starvation_relax_hits_delta = int(os.getenv("MEME_SIGNAL_STARVATION_RELAX_HITS_DELTA", "1") or 1)
+        except Exception:
+            self.signal_starvation_relax_hits_delta = 1
+        try:
+            self.signal_starvation_relax_buys_delta = int(os.getenv("MEME_SIGNAL_STARVATION_RELAX_BUYS_DELTA", "1") or 1)
+        except Exception:
+            self.signal_starvation_relax_buys_delta = 1
+        try:
+            self.signal_starvation_relax_unique_delta = int(os.getenv("MEME_SIGNAL_STARVATION_RELAX_UNIQUE_DELTA", "1") or 1)
+        except Exception:
+            self.signal_starvation_relax_unique_delta = 1
+        try:
+            self.signal_starvation_relax_net_mult = float(os.getenv("MEME_SIGNAL_STARVATION_RELAX_NET_MULT", "0.65") or 0.65)
+        except Exception:
+            self.signal_starvation_relax_net_mult = 0.65
+        try:
+            self.signal_starvation_relax_mcap_mult = float(os.getenv("MEME_SIGNAL_STARVATION_RELAX_MCAP_MULT", "0.60") or 0.60)
+        except Exception:
+            self.signal_starvation_relax_mcap_mult = 0.60
+        try:
+            self.signal_starvation_relax_min_mcap_floor_usd = float(
+                os.getenv("MEME_SIGNAL_STARVATION_RELAX_MIN_MCAP_FLOOR_USD", "10000") or 10000
+            )
+        except Exception:
+            self.signal_starvation_relax_min_mcap_floor_usd = 10000.0
+        try:
+            self.signal_starvation_relax_top_share_bonus = float(
+                os.getenv("MEME_SIGNAL_STARVATION_RELAX_TOP_SHARE_BONUS", "0.05") or 0.05
+            )
+        except Exception:
+            self.signal_starvation_relax_top_share_bonus = 0.05
+        try:
+            self.signal_starvation_relax_min_age_seconds = float(
+                os.getenv("MEME_SIGNAL_STARVATION_RELAX_MIN_AGE_SECONDS", "20") or 20
+            )
+        except Exception:
+            self.signal_starvation_relax_min_age_seconds = 20.0
+        self._signal_starvation_last_state: bool = False
         # Config guardrails: detect gate drift/mismatch early so we don't run for hours
         # with contradictory entry constraints.
         try:
@@ -984,6 +1475,19 @@ class MemeCoinBot:
                     pos.state.signal_top_buyer_share = float(meta.get("signal_top_buyer_share") or 0.0)
                     tfs = meta.get("signal_t_first_sell_s")
                     pos.state.signal_t_first_sell_s = float(tfs) if tfs is not None else None
+                    pos.state.signal_source = str(meta.get("signal_source") or "")
+                    pos.state.signal_source_family = str(
+                        meta.get("signal_source_family")
+                        or signal_source_family(pos.state.signal_source)
+                    )
+                    pos.state.signal_rank_score = float(meta.get("signal_rank_score") or 0.0)
+                    pos.state.signal_rank_matches = int(meta.get("signal_rank_matches") or 0)
+                    pos.state.signal_rank_negative_hits = int(meta.get("signal_rank_negative_hits") or 0)
+                    pos.state.signal_profile = str(meta.get("signal_profile") or "")
+                    pos.state.signal_pair_age_min = float(meta.get("signal_pair_age_min") or 0.0)
+                    pos.state.signal_mover_pattern = str(meta.get("signal_mover_pattern") or "")
+                    pos.state.signal_unique_buyers_estimated = bool(meta.get("signal_unique_buyers_estimated"))
+                    pos.state.signal_top_buyer_share_estimated = bool(meta.get("signal_top_buyer_share_estimated"))
                     pos.state.signal_mcap_size_mult = float(meta.get("signal_mcap_size_mult") or 0.0)
                 except Exception:
                     pass
@@ -1477,6 +1981,359 @@ class MemeCoinBot:
         }
         return bool(allow)
 
+    def _evaluate_source_regime(self, *, force: bool = False) -> dict[str, dict[str, float | int | bool | str]]:
+        """Evaluate run-scoped expectancy per signal source and block only toxic lanes."""
+        if not self.source_regime_enabled:
+            self._source_regime_snapshot = {}
+            return {}
+        now = time.time()
+        if (
+            not force
+            and self._source_regime_last_eval_ts > 0
+            and (now - self._source_regime_last_eval_ts) < float(self.source_regime_eval_interval_s)
+        ):
+            return dict(self._source_regime_snapshot or {})
+        self._source_regime_last_eval_ts = now
+
+        db_env = str(os.getenv("MEME_POSITIONS_DB", "data/positions.db") or "data/positions.db")
+        db_path = Path(db_env)
+        if not db_path.is_absolute():
+            db_path = Path(PROJECT_ROOT) / db_path
+        if not db_path.exists():
+            self._source_regime_snapshot = {}
+            return {}
+
+        try:
+            con = sqlite3.connect(str(db_path))
+            con.row_factory = sqlite3.Row
+            try:
+                rows = con.execute(
+                    """
+                    SELECT pnl_usd, metadata
+                    FROM trades
+                    WHERE side='SELL' AND datetime(created_at) >= datetime('now', ?)
+                    """,
+                    (f"-{int(self.source_regime_window_minutes)} minutes",),
+                ).fetchall()
+            finally:
+                con.close()
+        except Exception:
+            return dict(self._source_regime_snapshot or {})
+
+        this_run = str(getattr(self, "run_id", "") or "").strip()
+        stats: dict[str, dict[str, float | int]] = {}
+        allowed_sources = set(self.source_regime_sources or set())
+        for r in rows or []:
+            try:
+                pnl = float(r["pnl_usd"] or 0.0)
+            except Exception:
+                pnl = 0.0
+            md_raw = r["metadata"] or "{}"
+            try:
+                md = json.loads(md_raw) if isinstance(md_raw, str) else (md_raw if isinstance(md_raw, dict) else {})
+            except Exception:
+                md = {}
+            rid = str((md or {}).get("run_id") or "").strip()
+            if self.source_regime_scope_run_id and this_run:
+                if not rid or rid != this_run:
+                    continue
+            source = str((md or {}).get("signal_source") or (md or {}).get("source") or "").strip().lower()
+            if not source:
+                continue
+            if allowed_sources and source not in allowed_sources:
+                continue
+            bucket = stats.get(source)
+            if bucket is None:
+                bucket = {"n": 0, "wins": 0, "sum_pnl": 0.0}
+                stats[source] = bucket
+            bucket["n"] = int(bucket.get("n") or 0) + 1
+            bucket["sum_pnl"] = float(bucket.get("sum_pnl") or 0.0) + float(pnl)
+            if pnl > 0:
+                bucket["wins"] = int(bucket.get("wins") or 0) + 1
+
+        snap: dict[str, dict[str, float | int | bool | str]] = {}
+        sources_iter = set(stats.keys())
+        if allowed_sources:
+            sources_iter |= allowed_sources
+        for source in sorted(sources_iter):
+            st = stats.get(source) or {"n": 0, "wins": 0, "sum_pnl": 0.0}
+            n = int(st.get("n") or 0)
+            wins = int(st.get("wins") or 0)
+            sum_pnl = float(st.get("sum_pnl") or 0.0)
+            wr = (float(wins) / float(n)) if n > 0 else 0.0
+            avg_pnl = (sum_pnl / float(n)) if n > 0 else 0.0
+            reasons: list[str] = []
+            if n >= max(1, int(self.source_regime_min_trades)):
+                if sum_pnl <= float(self.source_regime_max_sum_loss_usd):
+                    reasons.append("sum_pnl")
+                if wr < float(self.source_regime_min_winrate):
+                    reasons.append("wr")
+                if avg_pnl < float(self.source_regime_min_avg_pnl_usd):
+                    reasons.append("avg_pnl")
+
+            unhealthy = bool(("sum_pnl" in reasons) or (("wr" in reasons) and ("avg_pnl" in reasons)))
+            if unhealthy:
+                until = now + max(0.0, float(self.source_regime_block_seconds))
+                prev_until = float(self._source_block_until.get(source) or 0.0)
+                self._source_block_until[source] = max(prev_until, until)
+
+            block_until = float(self._source_block_until.get(source) or 0.0)
+            blocked = block_until > now
+            snap[source] = {
+                "n": int(n),
+                "wins": int(wins),
+                "wr": float(wr),
+                "avg_pnl": float(avg_pnl),
+                "sum_pnl": float(sum_pnl),
+                "blocked": bool(blocked),
+                "pause_s": float(max(0.0, block_until - now)) if blocked else 0.0,
+                "reasons": ",".join(reasons),
+            }
+            prev_state = bool(self._source_regime_last_states.get(source, False))
+            if blocked != prev_state:
+                self._source_regime_last_states[source] = bool(blocked)
+                state_txt = "ON" if blocked else "OFF"
+                color = "yellow" if blocked else "green"
+                console.print(
+                    f"[{color}]SOURCE REGIME {state_txt}: {source} "
+                    f"n={n} wr={wr*100:.1f}% avg=${avg_pnl:+.3f} sum=${sum_pnl:+.2f} "
+                    f"reasons={','.join(reasons) if reasons else '-'} "
+                    f"pause={max(0.0, block_until-now):.0f}s[/{color}]"
+                )
+
+        self._source_regime_snapshot = snap
+        return dict(snap)
+
+    def _is_source_blocked(self, source: str) -> bool:
+        if not self.source_regime_enabled:
+            return False
+        src = str(source or "").strip().lower()
+        if not src:
+            return False
+        self._evaluate_source_regime()
+        until = float(self._source_block_until.get(src) or 0.0)
+        return until > time.time()
+
+    def _evaluate_size_escalation(self, *, force: bool = False) -> dict[str, float | int | bool]:
+        """Return cached run-scoped expectancy stats for size policy."""
+        if not self.size_escalation_enabled:
+            out = {
+                "ready": True,
+                "n": 0,
+                "wins": 0,
+                "wr": 0.0,
+                "sum_pnl": 0.0,
+            }
+            self._size_escalation_snapshot = out
+            return out
+
+        now = time.time()
+        if (
+            not force
+            and self._size_escalation_last_eval_ts > 0
+            and (now - self._size_escalation_last_eval_ts) < float(self.size_escalation_eval_interval_s)
+        ):
+            return dict(self._size_escalation_snapshot or {})
+        self._size_escalation_last_eval_ts = now
+
+        db_env = str(os.getenv("MEME_POSITIONS_DB", "data/positions.db") or "data/positions.db")
+        db_path = Path(db_env)
+        if not db_path.is_absolute():
+            db_path = Path(PROJECT_ROOT) / db_path
+        if not db_path.exists():
+            out = {
+                "ready": False,
+                "n": 0,
+                "wins": 0,
+                "wr": 0.0,
+                "sum_pnl": 0.0,
+            }
+            self._size_escalation_snapshot = out
+            return out
+
+        this_run = str(getattr(self, "run_id", "") or "").strip()
+        if not this_run:
+            out = {
+                "ready": False,
+                "n": 0,
+                "wins": 0,
+                "wr": 0.0,
+                "sum_pnl": 0.0,
+            }
+            self._size_escalation_snapshot = out
+            return out
+
+        try:
+            con = sqlite3.connect(str(db_path))
+            con.row_factory = sqlite3.Row
+            try:
+                row = con.execute(
+                    """
+                    SELECT count(*) AS n,
+                           sum(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END) AS wins,
+                           sum(COALESCE(pnl_usd, 0.0)) AS sum_pnl
+                    FROM trades
+                    WHERE side='SELL'
+                      AND json_extract(metadata, '$.run_id') = ?
+                    """,
+                    (this_run,),
+                ).fetchone()
+            finally:
+                con.close()
+        except Exception:
+            row = None
+
+        n = int((row["n"] if row is not None else 0) or 0)
+        wins = int((row["wins"] if row is not None else 0) or 0)
+        sum_pnl = float((row["sum_pnl"] if row is not None else 0.0) or 0.0)
+        wr = (float(wins) / float(n)) if n > 0 else 0.0
+        ready = bool(
+            n >= max(1, int(self.size_escalation_min_trades))
+            and sum_pnl >= float(self.size_escalation_min_pnl_usd)
+        )
+        out = {
+            "ready": ready,
+            "n": n,
+            "wins": wins,
+            "wr": wr,
+            "sum_pnl": sum_pnl,
+        }
+        self._size_escalation_snapshot = out
+        return out
+
+    def _is_topflow_candidate(self, candidate: TokenCandidate) -> tuple[bool, dict[str, float | int]]:
+        """Classify whether a candidate has enough flow to justify larger size."""
+        metrics = self.launch_signal_metrics.get(candidate.mint, {}) or {}
+        try:
+            net_sol_in = float(metrics.get("net_sol_in") or 0.0)
+        except Exception:
+            net_sol_in = 0.0
+        try:
+            hits = int(metrics.get("hits") or 0)
+        except Exception:
+            hits = 0
+        ok = bool(net_sol_in >= float(self.topflow_min_net_sol_in) and hits >= int(self.topflow_min_hits))
+        return ok, {"net_sol_in": float(net_sol_in), "hits": int(hits)}
+
+    def _is_run_mint_loss_locked(self, mint: str) -> bool:
+        if not mint:
+            return False
+        return bool(mint in self._run_mint_loss_locked)
+
+    def _load_persistent_mint_quarantine(self) -> None:
+        self._persistent_mint_quarantine = {}
+        if not self.persistent_mint_quarantine_enabled:
+            return
+        path = getattr(self, "persistent_mint_quarantine_file", None)
+        if not isinstance(path, Path) or not path.exists():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        data = raw.get("mints") if isinstance(raw, dict) and isinstance(raw.get("mints"), dict) else raw
+        if not isinstance(data, dict):
+            return
+        now = time.time()
+        for mint, until in data.items():
+            try:
+                until_f = float(until or 0.0)
+            except Exception:
+                continue
+            if mint and until_f > now:
+                self._persistent_mint_quarantine[str(mint)] = until_f
+        self._save_persistent_mint_quarantine()
+
+    def _save_persistent_mint_quarantine(self) -> None:
+        if not self.persistent_mint_quarantine_enabled:
+            return
+        path = getattr(self, "persistent_mint_quarantine_file", None)
+        if not isinstance(path, Path):
+            return
+        now = time.time()
+        payload = {
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "mints": {
+                str(mint): float(until)
+                for mint, until in sorted((self._persistent_mint_quarantine or {}).items())
+                if mint and float(until or 0.0) > now
+            },
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            tmp.replace(path)
+        except Exception:
+            pass
+
+    def _persistent_mint_quarantine_remaining(self, mint: str) -> float:
+        if not mint or not self.persistent_mint_quarantine_enabled:
+            return 0.0
+        try:
+            self._load_persistent_mint_quarantine()
+        except Exception:
+            pass
+        until = float((self._persistent_mint_quarantine or {}).get(str(mint)) or 0.0)
+        return max(0.0, until - time.time())
+
+    def _set_persistent_mint_quarantine(self, mint: str, reason: str, pnl_usd: float) -> float:
+        if not mint or not self.persistent_mint_quarantine_enabled:
+            return 0.0
+        try:
+            if float(pnl_usd or 0.0) >= 0.0:
+                return 0.0
+        except Exception:
+            return 0.0
+        hours = max(0.0, float(self.persistent_mint_quarantine_hours or 0.0))
+        if hours <= 0.0:
+            return 0.0
+        reason_upper = str(reason or "").upper()
+        if self.persistent_mint_quarantine_reason_tokens and not any(
+            tok in reason_upper for tok in self.persistent_mint_quarantine_reason_tokens
+        ):
+            return 0.0
+        try:
+            self._load_persistent_mint_quarantine()
+        except Exception:
+            pass
+        now = time.time()
+        cooldown_s = hours * 3600.0
+        prev_until = float((self._persistent_mint_quarantine or {}).get(str(mint)) or 0.0)
+        new_until = max(prev_until, now + cooldown_s)
+        self._persistent_mint_quarantine[str(mint)] = new_until
+        self._save_persistent_mint_quarantine()
+        return max(0.0, new_until - now)
+
+    def _maybe_lock_mint_after_loss(self, mint: str, reason: str, pnl_usd: float) -> bool:
+        """Lock mint for the rest of this run after configured hard-loss exits."""
+        if not self.run_mint_lock_on_loss_enabled or not mint:
+            return False
+        try:
+            if float(pnl_usd or 0.0) >= 0.0:
+                return False
+        except Exception:
+            return False
+        reason_upper = str(reason or "").upper()
+        if self.run_mint_lock_loss_reason_tokens and not any(
+            tok in reason_upper for tok in self.run_mint_lock_loss_reason_tokens
+        ):
+            return False
+        self._run_mint_loss_locked.add(str(mint))
+        return True
+
+    def _poll_sleep_seconds(self) -> float:
+        """Return loop sleep seconds, using faster cadence while carrying position risk."""
+        try:
+            base = float(meme_config.POLL_INTERVAL_SECONDS)
+        except Exception:
+            base = 10.0
+        if not (self.signal_first and self.launch_signals_file):
+            return max(0.5, base)
+        if (self.active_positions or self.pending_entries) and self.signal_fast_poll_interval_seconds > 0:
+            return max(0.5, min(float(base), float(self.signal_fast_poll_interval_seconds)))
+        return max(0.5, base)
+
     def _load_stats(self):
         """Load persisted session stats from disk."""
         try:
@@ -1535,6 +2392,10 @@ class MemeCoinBot:
             m = metrics if isinstance(metrics, dict) else {}
             out_path = self.signal_debug_file or "data/meme_signal_debug.jsonl"
             source_run_id = str(m.get("run_id") or "").strip() if isinstance(m, dict) else ""
+            sig_source = signal_source(m)
+            sig_source_family = str(
+                getattr(candidate, "signal_source_family", "") or signal_source_family(sig_source)
+            )
             evt = {
                 "ts": now,
                 "run_id": self.run_id,
@@ -1550,20 +2411,52 @@ class MemeCoinBot:
                 "winner_zone_objective": float(getattr(candidate, "winner_zone_objective", 0.0) or 0.0),
                 "winner_zone_bypassed": bool(getattr(candidate, "winner_zone_bypassed", False)),
                 "winner_zone_bypass_reason": str(getattr(candidate, "winner_zone_bypass_reason", "") or ""),
+                "signal_profile": str(getattr(candidate, "signal_profile", "") or ""),
+                "signal_source": sig_source or None,
+                "signal_source_family": sig_source_family or None,
+                "signal_rank_score": float(getattr(candidate, "signal_rank_score", 0.0) or 0.0),
+                "signal_rank_matches": int(getattr(candidate, "signal_rank_matches", 0) or 0),
+                "signal_rank_negative_hits": int(getattr(candidate, "signal_rank_negative_hits", 0) or 0),
+                "mover_pattern": str(getattr(candidate, "mover_pattern", "") or ""),
+                "pair_age_min": float(getattr(candidate, "pair_age_min", 0.0) or 0.0),
                 "liquidity_estimated": bool(getattr(candidate, "liquidity_estimated", False)),
                 "price": float(getattr(candidate, "price", 0.0) or 0.0),
                 "impact": float(getattr(candidate, "price_impact_pct", 0.0) or 0.0),
                 "market_cap": float(getattr(candidate, "market_cap", 0.0) or 0.0),
+                "signal_field_status": signal_contract_snapshot(
+                    m,
+                    source=sig_source,
+                    fields=(
+                        "market_cap",
+                        "liquidity",
+                        "pair_age_min",
+                        "price_change_5m",
+                        "buy_sell_ratio",
+                        "unique_buyers",
+                        "top_buyer_share",
+                        "buyer_wallets",
+                    ),
+                ),
                 "m": {
+                    "source": sig_source or None,
                     "hits": m.get("hits"),
                     "buys": m.get("buys"),
                     "sells": m.get("sells"),
                     "unique_buyers": m.get("unique_buyers"),
+                    "unique_buyers_estimated": m.get("unique_buyers_estimated"),
                     "net_sol_in": m.get("net_sol_in"),
                     "buy_accel": m.get("buy_accel"),
                     "top_buyer_share": m.get("top_buyer_share"),
+                    "top_buyer_share_estimated": m.get("top_buyer_share_estimated"),
                     "buy_max_sol": m.get("buy_max_sol"),
                     "t_first_sell_s": m.get("t_first_sell_s"),
+                    "buy_sell_ratio": m.get("buy_sell_ratio"),
+                    "price_change_5m": m.get("price_change_5m"),
+                    "price_change_1h": m.get("price_change_1h"),
+                    "pair_age_min": m.get("pair_age_min"),
+                    "mover_pattern": m.get("mover_pattern"),
+                    "liquidity": m.get("liquidity"),
+                    "market_cap": m.get("market_cap"),
                 },
                 "extra": extra or {},
             }
@@ -1843,6 +2736,7 @@ class MemeCoinBot:
             _put("signal_buy_accel", metrics.get("buy_accel"))
             _put("signal_top_buyer_share", metrics.get("top_buyer_share"))
             _put("signal_t_first_sell_s", metrics.get("t_first_sell_s"))
+            _put("pair_age_min", metrics.get("pair_age_min"))
             try:
                 sb = float(metrics.get("buys") or 0.0)
                 ss = float(metrics.get("sells") or 0.0)
@@ -1852,6 +2746,195 @@ class MemeCoinBot:
             except Exception:
                 pass
         return values
+
+    def _refresh_candidate_signal_context(
+        self,
+        candidate: TokenCandidate,
+        metrics: dict[str, Any] | None,
+        *,
+        sig_source: str = "",
+    ) -> None:
+        """Hydrate candidate fields from launch-signal metrics for downstream policy/debug."""
+        m = metrics if isinstance(metrics, dict) else {}
+        src = signal_source(m, sig_source)
+        candidate.signal_source_family = signal_source_family(src)
+        try:
+            if signal_field_status(m, "pair_age_min", src) != "missing" and m.get("pair_age_min") is not None:
+                candidate.pair_age_min = float(m.get("pair_age_min") or 0.0)
+        except Exception:
+            pass
+        try:
+            pattern = (
+                str(signal_field_value(m, "mover_pattern", source=src, default="") or "")
+                .strip()
+                .lower()
+            )
+            if pattern:
+                candidate.mover_pattern = pattern
+        except Exception:
+            pass
+        if self.continuation_policy_enabled and (not self.continuation_policy_sources or src in self.continuation_policy_sources):
+            candidate.signal_profile = str(self.continuation_profile or "")
+
+    def _relaxed_runtime_mom_floor(
+        self,
+        candidate: TokenCandidate,
+        metrics: dict[str, Any] | None,
+        base_floor: float,
+    ) -> float:
+        """Allow hot-lane profiles to survive temporary quote-time momentum noise."""
+        try:
+            profile = str(getattr(candidate, "signal_profile", "") or self.continuation_profile or "").strip().lower()
+            if profile not in {"breakout", "impulse"}:
+                return float(base_floor)
+            m = metrics if isinstance(metrics, dict) else {}
+            sig_mom = m.get("price_change_5m")
+            if sig_mom is None:
+                sig_mom = m.get("momentum_5m_pct")
+            if sig_mom is None:
+                return float(base_floor)
+            sig_mom = float(sig_mom)
+            min_signal_mom = float(os.getenv("MEME_BREAKOUT_SIGNAL_MIN_MOM5M", "5.0") or 5.0)
+            if sig_mom < min_signal_mom:
+                return float(base_floor)
+            relaxed_floor = float(os.getenv("MEME_BREAKOUT_RUNTIME_MIN_MOM5M", "-15.0") or -15.0)
+            return min(float(base_floor), relaxed_floor)
+        except Exception:
+            return float(base_floor)
+
+    def _apply_continuation_policy(
+        self,
+        candidate: TokenCandidate,
+        metrics: dict[str, Any] | None,
+        *,
+        sig_source: str = "",
+        stage: str = "prequote",
+    ) -> str | None:
+        """Return reject code when the continuation policy blocks a candidate."""
+        if not self.continuation_policy_enabled:
+            return None
+        src = str(sig_source or "").strip().lower()
+        if self.continuation_policy_sources and src not in self.continuation_policy_sources:
+            return None
+        m = metrics if isinstance(metrics, dict) else {}
+        self._refresh_candidate_signal_context(candidate, m, sig_source=src)
+
+        def _f(*keys: str, default: float = 0.0) -> float:
+            for key in keys:
+                val = m.get(key)
+                if val is None:
+                    continue
+                try:
+                    return float(val)
+                except Exception:
+                    continue
+            return float(default)
+
+        def _reject(code: str, **extra: Any) -> str:
+            self._signal_debug_write(
+                f"reject_cont_{code}",
+                candidate,
+                {
+                    "stage": stage,
+                    "profile": self.continuation_profile,
+                    "source": src,
+                    **extra,
+                },
+            )
+            return f"cont_{code}"
+
+        mcap = _f("market_cap", "market_cap_usd", "mcap", "fdv", default=float(getattr(candidate, "market_cap", 0.0) or 0.0))
+        mom5 = _f("price_change_5m", "momentum_5m_pct", default=float(getattr(candidate, "price_change_5m", 0.0) or 0.0))
+        hits = int(_f("hits", default=float(getattr(candidate, "txns_5m", 0) or 0)))
+        net_sol_in = _f("net_sol_in")
+        age_min = _f("pair_age_min", default=float(getattr(candidate, "pair_age_min", 0.0) or 0.0))
+        bs_ratio = _f("buy_sell_ratio")
+        pattern = str((m.get("mover_pattern") or getattr(candidate, "mover_pattern", "") or "")).strip().lower()
+
+        cont_params: dict[str, float | int] = {
+            "min_mcap": float(self.continuation_min_mcap_usd),
+            "max_mcap": float(self.continuation_max_mcap_usd),
+            "min_mom5m": float(self.continuation_min_mom5m),
+            "max_mom5m": float(self.continuation_max_mom5m),
+            "min_hits": int(self.continuation_min_hits),
+            "max_hits": int(self.continuation_max_hits),
+            "min_net": float(self.continuation_min_net_sol_in),
+            "max_net": float(self.continuation_max_net_sol_in),
+            "min_age": float(self.continuation_min_pair_age_min),
+            "max_age": float(self.continuation_max_pair_age_min),
+            "min_bs_ratio": float(self.continuation_min_buy_sell_ratio),
+        }
+        relaxed_cont = self._maybe_apply_signal_rank_continuation_relax(candidate, cont_params)
+        if relaxed_cont != cont_params:
+            self._signal_debug_write(
+                "signal_rank_continuation_relax",
+                candidate,
+                {
+                    "stage": stage,
+                    "profile": self.continuation_profile,
+                    "source": src,
+                    "signal_rank_score": float(getattr(candidate, "signal_rank_score", 0.0) or 0.0),
+                    "signal_rank_matches": int(getattr(candidate, "signal_rank_matches", 0) or 0),
+                    "signal_rank_negative_hits": int(getattr(candidate, "signal_rank_negative_hits", 0) or 0),
+                    "before": cont_params,
+                    "after": relaxed_cont,
+                },
+            )
+        min_mcap = float(relaxed_cont.get("min_mcap", self.continuation_min_mcap_usd))
+        max_mcap = float(relaxed_cont.get("max_mcap", self.continuation_max_mcap_usd))
+        min_mom5m = float(relaxed_cont.get("min_mom5m", self.continuation_min_mom5m))
+        max_mom5m = float(relaxed_cont.get("max_mom5m", self.continuation_max_mom5m))
+        min_hits = int(relaxed_cont.get("min_hits", self.continuation_min_hits))
+        max_hits = int(relaxed_cont.get("max_hits", self.continuation_max_hits))
+        min_net = float(relaxed_cont.get("min_net", self.continuation_min_net_sol_in))
+        max_net = float(relaxed_cont.get("max_net", self.continuation_max_net_sol_in))
+        min_age = float(relaxed_cont.get("min_age", self.continuation_min_pair_age_min))
+        max_age = float(relaxed_cont.get("max_age", self.continuation_max_pair_age_min))
+        min_bs_ratio = float(relaxed_cont.get("min_bs_ratio", self.continuation_min_buy_sell_ratio))
+
+        if min_mcap > 0 and mcap < min_mcap:
+            return _reject("mcap_low", mcap=mcap, min_mcap=min_mcap)
+        if max_mcap > 0 and mcap > max_mcap:
+            return _reject("mcap_high", mcap=mcap, max_mcap=max_mcap)
+        if mom5 < min_mom5m:
+            return _reject("mom5m_low", price_change_5m=mom5, min_price_change_5m=min_mom5m)
+        if max_mom5m < 999 and mom5 > max_mom5m:
+            return _reject("mom5m_high", price_change_5m=mom5, max_price_change_5m=max_mom5m)
+        if min_hits > 0 and hits < min_hits:
+            return _reject("hits_low", hits=hits, min_hits=min_hits)
+        if max_hits > 0 and hits > max_hits:
+            return _reject("hits_high", hits=hits, max_hits=max_hits)
+        if min_net > 0 and net_sol_in < min_net:
+            return _reject("net_low", net_sol_in=net_sol_in, min_net_sol_in=min_net)
+        if max_net > 0 and net_sol_in > max_net:
+            return _reject("net_high", net_sol_in=net_sol_in, max_net_sol_in=max_net)
+        if min_age > 0 and age_min > 0 and age_min < min_age:
+            return _reject("age_low", pair_age_min=age_min, min_pair_age_min=min_age)
+        if max_age > 0 and age_min > max_age:
+            return _reject("age_high", pair_age_min=age_min, max_pair_age_min=max_age)
+        if min_bs_ratio > 0 and bs_ratio > 0 and bs_ratio < min_bs_ratio:
+            return _reject("bs_ratio_low", buy_sell_ratio=bs_ratio, min_buy_sell_ratio=min_bs_ratio)
+        if self.continuation_allowed_patterns and pattern not in self.continuation_allowed_patterns:
+            return _reject("pattern", mover_pattern=pattern or "none", allowed_patterns=sorted(self.continuation_allowed_patterns))
+
+        if stage == "prequote":
+            self._signal_debug_write(
+                "pass_continuation_policy",
+                candidate,
+                {
+                    "stage": stage,
+                    "profile": self.continuation_profile,
+                    "source": src,
+                    "mcap": mcap,
+                    "price_change_5m": mom5,
+                    "hits": hits,
+                    "net_sol_in": net_sol_in,
+                    "pair_age_min": age_min,
+                    "buy_sell_ratio": bs_ratio,
+                    "mover_pattern": pattern or "none",
+                },
+            )
+        return None
 
     def _check_signal_core_metrics(self, candidate: TokenCandidate, metrics: dict) -> tuple[bool, dict]:
         """Validate core metrics required for high-integrity signal-first entries."""
@@ -1863,6 +2946,13 @@ class MemeCoinBot:
         liq = float(getattr(candidate, "liquidity", 0.0) or 0.0)
         mcap = float(getattr(candidate, "market_cap", 0.0) or 0.0)
         sscore = float(self.launch_signal_scores.get(candidate.mint, 0.0) or 0.0)
+        sig_source = signal_source(metrics)
+        uniq_status = signal_field_status(metrics, "unique_buyers", sig_source)
+        use_unique_buyers = not (
+            sig_source in self.signal_dex_lane_sources
+            and uniq_status == "estimated"
+            and not self.signal_dex_prequote_use_unique_buyers
+        )
         hits = metrics.get("hits")
         uniq = metrics.get("unique_buyers")
         net_in = metrics.get("net_sol_in")
@@ -1876,7 +2966,7 @@ class MemeCoinBot:
 
         if hits is None:
             missing.append("signal_hits")
-        if uniq is None:
+        if use_unique_buyers and uniq is None:
             missing.append("signal_unique_buyers")
         if net_in is None:
             missing.append("signal_net_sol_in")
@@ -1902,11 +2992,11 @@ class MemeCoinBot:
                 weak.append("signal_score_nonpositive")
             if hits_v <= 0:
                 weak.append("signal_hits_nonpositive")
-            if uniq_v <= 0:
+            if use_unique_buyers and uniq_v <= 0:
                 weak.append("signal_unique_buyers_nonpositive")
         if hits_v < int(self.signal_core_min_hits):
             weak.append("signal_hits_below_min")
-        if uniq_v < int(self.signal_core_min_unique_buyers):
+        if use_unique_buyers and uniq_v < int(self.signal_core_min_unique_buyers):
             weak.append("signal_unique_buyers_below_min")
         if net_v < float(self.signal_core_min_net_sol_in):
             weak.append("signal_net_sol_in_below_min")
@@ -1919,6 +3009,10 @@ class MemeCoinBot:
         details["net_sol_in"] = net_v
         details["liq"] = liq
         details["mcap"] = mcap
+        details["signal_source"] = sig_source
+        details["signal_source_family"] = signal_source_family(sig_source)
+        details["unique_buyers_status"] = uniq_status
+        details["top_buyer_share_status"] = signal_field_status(metrics, "top_buyer_share", sig_source)
         details["require_liquidity"] = bool(self.signal_core_require_liquidity)
         ok = not missing and not weak
         return ok, details
@@ -2010,6 +3104,72 @@ class MemeCoinBot:
             },
         )
         return est
+
+    def _maybe_reload_signal_rank_report(self, force: bool = False) -> None:
+        """Reload the source-aware signal rank report from disk if stale/changed."""
+        if not self.signal_rank_enabled:
+            return
+        now = time.time()
+        if not force and (now - float(self._signal_rank_last_reload or 0.0)) < float(self.signal_rank_reload_s):
+            return
+        self._signal_rank_last_reload = now
+        path = Path(self.signal_rank_path)
+        if not path.is_absolute():
+            path = Path(PROJECT_ROOT) / path
+        if not path.exists():
+            if not self._signal_rank_loaded_once:
+                self._signal_rank_loaded_once = True
+                console.print(
+                    f"[yellow]Signal rank report not found: {path}. "
+                    "Build with scripts/meme_signal_rank_report.py[/yellow]"
+                )
+            self._signal_rank_report = None
+            self._signal_rank_mtime = 0.0
+            return
+        try:
+            mtime = float(path.stat().st_mtime)
+        except Exception:
+            mtime = 0.0
+        if (not force) and self._signal_rank_report and mtime > 0 and mtime == float(self._signal_rank_mtime or 0.0):
+            return
+        report = load_signal_rank_report(path)
+        if not report:
+            self._signal_rank_report = None
+            self._signal_rank_mtime = 0.0
+            console.print(f"[yellow]Signal rank report load failed: {path}[/yellow]")
+            return
+        self._signal_rank_report = report
+        self._signal_rank_mtime = mtime
+        self._signal_rank_loaded_once = True
+        fams = len((report or {}).get("family_summary") or {})
+        console.print(f"[cyan]Signal rank report loaded: {path} ({fams} families)[/cyan]")
+
+    def _score_signal_rank(self, candidate: TokenCandidate) -> tuple[float, int, int]:
+        """Score the candidate against source-aware outcome-ranked slices."""
+        candidate.signal_rank_score = 0.0
+        candidate.signal_rank_matches = 0
+        candidate.signal_rank_negative_hits = 0
+        if not self.signal_rank_enabled:
+            return 0.0, 0, 0
+        self._maybe_reload_signal_rank_report()
+        report = self._signal_rank_report or {}
+        if not report:
+            return 0.0, 0, 0
+        metrics = self.launch_signal_metrics.get(candidate.mint, {}) if self.launch_signals_file else {}
+        features = candidate_signal_rank_features(candidate, metrics if isinstance(metrics, dict) else {})
+        result = score_candidate_from_report(
+            report=report,
+            features=features,
+            min_family_samples=int(self.signal_rank_min_family_samples),
+        )
+        if not result.active:
+            return 0.0, 0, 0
+        match_count = len(set(result.recommended_matches + result.positive_matches))
+        negative_hits = len(set(result.negative_matches))
+        candidate.signal_rank_score = float(result.score)
+        candidate.signal_rank_matches = int(match_count)
+        candidate.signal_rank_negative_hits = int(negative_hits)
+        return candidate.signal_rank_score, candidate.signal_rank_matches, candidate.signal_rank_negative_hits
 
     def _score_winner_profile(self, candidate: TokenCandidate) -> tuple[float, int]:
         """Return winner-profile score (0..100) and number of features used."""
@@ -2103,6 +3263,8 @@ class MemeCoinBot:
         """
         if not self.launch_signals_file:
             return []
+        self._maybe_emit_signal_starvation_state()
+        self._evaluate_source_regime()
         cutoff = time.time() - self.launch_signal_ttl
         now = time.time()
         out: list[TokenCandidate] = []
@@ -2127,10 +3289,12 @@ class MemeCoinBot:
                 continue
             if not mint or mint in EXCLUDED_TOKENS:
                 continue
+            src = str((self.launch_signal_metrics.get(mint, {}) or {}).get("source") or "").strip().lower()
             if self.signal_source_allowlist:
-                src = (self.launch_signal_metrics.get(mint, {}) or {}).get("source")
-                if src not in self.signal_source_allowlist:
+                if src not in self.signal_source_allowlist and not self._signal_starvation_allow_source(str(src or "")):
                     continue
+            if self._is_source_blocked(src):
+                continue
             if mint in self.launch_signal_seen:
                 continue
             fail_until = self._signal_quote_fail_until.get(mint)
@@ -2147,7 +3311,10 @@ class MemeCoinBot:
                 continue
             self._signal_last_attempt[mint] = now
             first_seen = float(self.launch_signal_first_seen.get(mint, ts) or ts)
-            c = TokenCandidate(mint=mint, discovered_at=float(first_seen))
+            discovered_at = float(ts)
+            if src not in self.signal_age_anchor_latest_sources:
+                discovered_at = float(first_seen)
+            c = TokenCandidate(mint=mint, discovered_at=float(discovered_at))
             # We often won't have a symbol this early; keep logs readable.
             c.symbol = (self.launch_signal_metrics.get(mint, {}) or {}).get("symbol") or mint[:4]
             out.append(c)
@@ -2752,13 +3919,41 @@ class MemeCoinBot:
         if not mint:
             return 0.0
         cooldown = max(0.0, float(self._entry_reject_cooldown_for_reason(reason)))
+        return self._set_entry_reject_cooldown_seconds(mint, cooldown)
+
+    def _set_entry_reject_cooldown_seconds(self, mint: str, cooldown_s: float) -> float:
+        if not mint:
+            return 0.0
+        cooldown = max(0.0, float(cooldown_s or 0.0))
         if cooldown <= 0.0:
             self._entry_reject_until.pop(mint, None)
             return 0.0
-        self._entry_reject_until[mint] = time.time() + cooldown
+        now = time.time()
+        new_until = now + cooldown
+        prev_until = float(self._entry_reject_until.get(mint) or 0.0)
+        # Keep the longer remaining cooldown when one is already active.
+        self._entry_reject_until[mint] = max(prev_until, new_until)
         # Keep launch-signal reuse cooldown aligned with entry reject cooldown.
         self._mark_launch_signal_reject_cooldown(mint, cooldown)
         return cooldown
+
+    def _apply_post_loss_entry_cooldown(self, mint: str, reason: str, pnl_usd: float) -> float:
+        if not mint:
+            return 0.0
+        try:
+            if float(pnl_usd or 0.0) >= 0.0:
+                return 0.0
+        except Exception:
+            return 0.0
+        cooldown_s = max(0.0, float(self.post_loss_entry_cooldown_s or 0.0))
+        if cooldown_s <= 0.0:
+            return 0.0
+        reason_upper = str(reason or "").upper()
+        if self.post_loss_entry_cooldown_reason_tokens and not any(
+            tok in reason_upper for tok in self.post_loss_entry_cooldown_reason_tokens
+        ):
+            return 0.0
+        return self._set_entry_reject_cooldown_seconds(mint, cooldown_s)
 
     def _mark_launch_signal_reject_cooldown(self, mint: str, cooldown_s: float) -> None:
         """Project an entry-level reject cooldown into launch-signal reuse cooldown."""
@@ -2965,6 +4160,159 @@ class MemeCoinBot:
             )
         return False
 
+    def _entry_idle_seconds(self) -> float:
+        try:
+            run_start = float(getattr(self, "_run_started_at", 0.0) or 0.0)
+        except Exception:
+            run_start = 0.0
+        now = time.time()
+        anchor = float(self._last_entry_ts) if self._last_entry_ts > 0 else (run_start if run_start > 0 else now)
+        return max(0.0, float(now - anchor))
+
+    def _signal_starvation_active(self) -> bool:
+        if not self.signal_starvation_relax_enabled:
+            return False
+        idle_s = self._entry_idle_seconds()
+        return idle_s >= max(1.0, float(self.signal_starvation_idle_seconds))
+
+    def _signal_starvation_allow_source(self, source: str) -> bool:
+        if not self.signal_starvation_expand_sources:
+            return False
+        if not self._signal_starvation_active():
+            return False
+        src = str(source or "").strip().lower()
+        if not src:
+            return False
+        return src in self.signal_starvation_expand_source_set
+
+    def _maybe_emit_signal_starvation_state(self) -> None:
+        active = self._signal_starvation_active()
+        if active == self._signal_starvation_last_state:
+            return
+        self._signal_starvation_last_state = bool(active)
+        idle_s = self._entry_idle_seconds()
+        if active:
+            console.print(
+                "[yellow]STARVATION RELAX ON[/yellow] "
+                f"(idle={idle_s:.0f}s, threshold={self.signal_starvation_idle_seconds:.0f}s)"
+            )
+        else:
+            console.print(
+                "[green]STARVATION RELAX OFF[/green] "
+                f"(idle={idle_s:.0f}s, threshold={self.signal_starvation_idle_seconds:.0f}s)"
+            )
+
+    def _apply_starvation_relax(self, thresholds: dict[str, float | int]) -> dict[str, float | int]:
+        if not self._signal_starvation_active():
+            return thresholds
+        out = dict(thresholds)
+        if "min_score" in out:
+            out["min_score"] = max(0.0, float(out["min_score"]) - float(self.signal_starvation_relax_score_delta))
+        if "min_hits" in out:
+            out["min_hits"] = max(0, int(out["min_hits"]) - int(self.signal_starvation_relax_hits_delta))
+        if "min_buys" in out:
+            out["min_buys"] = max(0, int(out["min_buys"]) - int(self.signal_starvation_relax_buys_delta))
+        if "min_uniq" in out:
+            out["min_uniq"] = max(0, int(out["min_uniq"]) - int(self.signal_starvation_relax_unique_delta))
+        if "min_net" in out:
+            out["min_net"] = max(0.0, float(out["min_net"]) * float(self.signal_starvation_relax_net_mult))
+        if "min_mcap" in out and float(out["min_mcap"]) > 0:
+            relaxed = float(out["min_mcap"]) * float(self.signal_starvation_relax_mcap_mult)
+            out["min_mcap"] = max(float(self.signal_starvation_relax_min_mcap_floor_usd), float(relaxed))
+        if "max_top_share" in out and float(out["max_top_share"]) > 0:
+            out["max_top_share"] = min(0.98, float(out["max_top_share"]) + float(self.signal_starvation_relax_top_share_bonus))
+        return out
+
+    def _signal_rank_relax_active(self, candidate: TokenCandidate) -> bool:
+        if not self.signal_rank_enabled:
+            return False
+        try:
+            rank_score = float(getattr(candidate, "signal_rank_score", 0.0) or 0.0)
+        except Exception:
+            rank_score = 0.0
+        try:
+            rank_matches = int(getattr(candidate, "signal_rank_matches", 0) or 0)
+        except Exception:
+            rank_matches = 0
+        return (
+            rank_score >= float(self.signal_rank_prequote_relax_score)
+            and rank_matches >= int(self.signal_rank_prequote_relax_matches)
+        )
+
+    def _apply_signal_rank_prequote_relax(
+        self,
+        candidate: TokenCandidate,
+        thresholds: dict[str, float | int],
+        *,
+        uniq_estimated: bool = False,
+        dex_lane: bool = False,
+    ) -> dict[str, float | int]:
+        if not self.signal_rank_prequote_relax_enabled:
+            return thresholds
+        if not self._signal_rank_relax_active(candidate):
+            return thresholds
+        out = dict(thresholds)
+        if "min_score" in out:
+            out["min_score"] = max(0.0, float(out["min_score"]) - float(self.signal_rank_prequote_relax_score_delta))
+        if "min_hits" in out:
+            out["min_hits"] = max(0, int(math.floor(float(out["min_hits"]) * float(self.signal_rank_prequote_relax_hits_mult))))
+        if "min_buys" in out:
+            out["min_buys"] = max(0, int(out["min_buys"]) - int(self.signal_rank_prequote_relax_buys_delta))
+        if "min_uniq" in out and not (dex_lane and uniq_estimated and not self.signal_dex_prequote_use_unique_buyers):
+            out["min_uniq"] = max(0, int(out["min_uniq"]) - int(self.signal_rank_prequote_relax_uniq_delta))
+        if "min_net" in out:
+            out["min_net"] = max(0.0, float(out["min_net"]) * float(self.signal_rank_prequote_relax_net_mult))
+        if "min_mcap" in out and float(out["min_mcap"]) > 0:
+            out["min_mcap"] = max(0.0, float(out["min_mcap"]) * float(self.signal_rank_prequote_relax_mcap_mult))
+        if "max_top_share" in out and float(out["max_top_share"]) > 0:
+            out["max_top_share"] = min(0.99, float(out["max_top_share"]) + float(self.signal_rank_prequote_relax_top_share_bonus))
+        return out
+
+    def _maybe_apply_signal_rank_continuation_relax(
+        self,
+        candidate: TokenCandidate,
+        params: dict[str, float | int],
+    ) -> dict[str, float | int]:
+        if not self.signal_rank_continuation_relax_enabled:
+            return params
+        try:
+            rank_score = float(getattr(candidate, "signal_rank_score", 0.0) or 0.0)
+        except Exception:
+            rank_score = 0.0
+        try:
+            rank_matches = int(getattr(candidate, "signal_rank_matches", 0) or 0)
+        except Exception:
+            rank_matches = 0
+        if (
+            rank_score < float(self.signal_rank_continuation_relax_score)
+            or rank_matches < int(self.signal_rank_continuation_relax_matches)
+        ):
+            return params
+        out = dict(params)
+        if "min_mcap" in out and float(out["min_mcap"]) > 0:
+            out["min_mcap"] = max(0.0, float(out["min_mcap"]) * float(self.signal_rank_continuation_relax_min_mcap_mult))
+        if "max_mcap" in out and float(out["max_mcap"]) > 0:
+            out["max_mcap"] = float(out["max_mcap"]) * float(self.signal_rank_continuation_relax_max_mcap_mult)
+        if "min_mom5m" in out:
+            out["min_mom5m"] = float(out["min_mom5m"]) - float(self.signal_rank_continuation_relax_min_mom_delta)
+        if "max_mom5m" in out and float(out["max_mom5m"]) < 999:
+            out["max_mom5m"] = float(out["max_mom5m"]) + float(self.signal_rank_continuation_relax_max_mom_delta)
+        if "min_hits" in out and int(out["min_hits"]) > 0:
+            out["min_hits"] = max(0, int(math.floor(float(out["min_hits"]) * float(self.signal_rank_continuation_relax_min_hits_mult))))
+        if "max_hits" in out and int(out["max_hits"]) > 0:
+            out["max_hits"] = max(0, int(math.ceil(float(out["max_hits"]) * float(self.signal_rank_continuation_relax_max_hits_mult))))
+        if "min_net" in out and float(out["min_net"]) > 0:
+            out["min_net"] = max(0.0, float(out["min_net"]) * float(self.signal_rank_continuation_relax_min_net_mult))
+        if "max_net" in out and float(out["max_net"]) > 0:
+            out["max_net"] = float(out["max_net"]) * float(self.signal_rank_continuation_relax_max_net_mult)
+        if "min_age" in out and float(out["min_age"]) > 0:
+            out["min_age"] = max(0.0, float(out["min_age"]) - float(self.signal_rank_continuation_relax_min_age_delta))
+        if "max_age" in out and float(out["max_age"]) > 0:
+            out["max_age"] = float(out["max_age"]) + float(self.signal_rank_continuation_relax_max_age_delta)
+        if "min_bs_ratio" in out and float(out["min_bs_ratio"]) > 0:
+            out["min_bs_ratio"] = max(0.0, float(out["min_bs_ratio"]) - float(self.signal_rank_continuation_relax_bs_ratio_delta))
+        return out
+
     def _signal_tier(self, score: float) -> str:
         if score >= 10:
             return "A"
@@ -3153,7 +4501,11 @@ class MemeCoinBot:
                         self._signal_debug_write(
                             "reject_prequote_missing_demand",
                             candidate,
-                            {"missing": missing, "source": metrics.get("source")},
+                            {
+                                "missing": missing,
+                                "source": signal_source(metrics),
+                                "source_family": signal_source_family(signal_source(metrics)),
+                            },
                         )
                         return _reject("prequote_missing_demand")
 
@@ -3208,11 +4560,116 @@ class MemeCoinBot:
                     sig_mom1h = float(_mom1h) if _mom1h is not None else None
                 except Exception:
                     sig_mom1h = None
+                top_share_raw = signal_field_value(
+                    metrics,
+                    "top_buyer_share",
+                    source=signal_source(metrics),
+                    allow_estimated=False,
+                    default=None,
+                )
                 try:
-                    top_share_raw = metrics.get("top_buyer_share")
                     sig_top_share = float(top_share_raw) if top_share_raw is not None else None
                 except Exception:
                     sig_top_share = None
+                sig_source = signal_source(metrics)
+                sig_source_family = signal_source_family(sig_source)
+                dex_lane = sig_source in self.signal_dex_lane_sources
+                uniq_status = signal_field_status(metrics, "unique_buyers", sig_source)
+                top_share_status = signal_field_status(metrics, "top_buyer_share", sig_source)
+                uniq_estimated = uniq_status == "estimated"
+                top_share_estimated = top_share_status == "estimated"
+                self._refresh_candidate_signal_context(candidate, metrics, sig_source=sig_source)
+                signal_rank_score, signal_rank_matches, signal_rank_negative_hits = self._score_signal_rank(candidate)
+
+                pre_min_signal_score = float(self.signal_prequote_min_signal_score)
+                pre_min_hits = int(self.signal_prequote_min_hits)
+                pre_min_buys = int(self.signal_prequote_min_buys)
+                pre_min_uniq = int(self.signal_prequote_min_unique_buyers)
+                pre_min_mcap = float(self.signal_prequote_min_mcap_usd)
+                pre_min_net = float(self.signal_prequote_min_net_sol_in)
+                pre_min_bs_ratio = float(self.signal_prequote_min_buy_sell_ratio)
+                pre_max_top_share = float(self.signal_prequote_max_top_buyer_share)
+                if dex_lane:
+                    pre_min_signal_score = float(self.signal_dex_prequote_min_signal_score)
+                    pre_min_hits = int(self.signal_dex_prequote_min_hits)
+                    pre_min_buys = int(self.signal_dex_prequote_min_buys)
+                    pre_min_uniq = int(self.signal_dex_prequote_min_unique_buyers)
+                    pre_min_mcap = float(self.signal_dex_prequote_min_mcap_usd)
+                    pre_min_net = float(self.signal_dex_prequote_min_net_sol_in)
+                    pre_min_bs_ratio = float(self.signal_dex_prequote_min_buy_sell_ratio)
+                    pre_max_top_share = float(self.signal_dex_prequote_max_top_buyer_share)
+                    if uniq_estimated and not self.signal_dex_prequote_use_unique_buyers:
+                        pre_min_uniq = 0
+                relaxed_pre = self._apply_starvation_relax(
+                    {
+                        "min_score": pre_min_signal_score,
+                        "min_hits": pre_min_hits,
+                        "min_buys": pre_min_buys,
+                        "min_uniq": pre_min_uniq,
+                        "min_net": pre_min_net,
+                        "min_mcap": pre_min_mcap,
+                        "max_top_share": pre_max_top_share,
+                    }
+                )
+                pre_min_signal_score = float(relaxed_pre.get("min_score", pre_min_signal_score))
+                pre_min_hits = int(relaxed_pre.get("min_hits", pre_min_hits))
+                pre_min_buys = int(relaxed_pre.get("min_buys", pre_min_buys))
+                pre_min_uniq = int(relaxed_pre.get("min_uniq", pre_min_uniq))
+                pre_min_net = float(relaxed_pre.get("min_net", pre_min_net))
+                pre_min_mcap = float(relaxed_pre.get("min_mcap", pre_min_mcap))
+                pre_max_top_share = float(relaxed_pre.get("max_top_share", pre_max_top_share))
+                rank_pre = self._apply_signal_rank_prequote_relax(
+                    candidate,
+                    {
+                        "min_score": pre_min_signal_score,
+                        "min_hits": pre_min_hits,
+                        "min_buys": pre_min_buys,
+                        "min_uniq": pre_min_uniq,
+                        "min_net": pre_min_net,
+                        "min_mcap": pre_min_mcap,
+                        "max_top_share": pre_max_top_share,
+                    },
+                    uniq_estimated=uniq_estimated,
+                    dex_lane=dex_lane,
+                )
+                if rank_pre != {
+                    "min_score": pre_min_signal_score,
+                    "min_hits": pre_min_hits,
+                    "min_buys": pre_min_buys,
+                    "min_uniq": pre_min_uniq,
+                    "min_net": pre_min_net,
+                    "min_mcap": pre_min_mcap,
+                    "max_top_share": pre_max_top_share,
+                }:
+                    self._signal_debug_write(
+                        "signal_rank_prequote_relax",
+                        candidate,
+                        {
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                            "signal_rank_score": signal_rank_score,
+                            "signal_rank_matches": signal_rank_matches,
+                            "signal_rank_negative_hits": signal_rank_negative_hits,
+                            "before": {
+                                "min_score": pre_min_signal_score,
+                                "min_hits": pre_min_hits,
+                                "min_buys": pre_min_buys,
+                                "min_uniq": pre_min_uniq,
+                                "min_net": pre_min_net,
+                                "min_mcap": pre_min_mcap,
+                                "max_top_share": pre_max_top_share,
+                            },
+                            "after": rank_pre,
+                        },
+                    )
+                pre_min_signal_score = float(rank_pre.get("min_score", pre_min_signal_score))
+                pre_min_hits = int(rank_pre.get("min_hits", pre_min_hits))
+                pre_min_buys = int(rank_pre.get("min_buys", pre_min_buys))
+                pre_min_uniq = int(rank_pre.get("min_uniq", pre_min_uniq))
+                pre_min_net = float(rank_pre.get("min_net", pre_min_net))
+                pre_min_mcap = float(rank_pre.get("min_mcap", pre_min_mcap))
+                pre_max_top_share = float(rank_pre.get("max_top_share", pre_max_top_share))
 
                 # Winner-zone checks are evaluated after all baseline prequote filters pass.
                 # This prevents zone-gate noise on candidates that are already rejected by core gates.
@@ -3222,70 +4679,114 @@ class MemeCoinBot:
                     candidate.winner_zone_bypassed = False
                     candidate.winner_zone_bypass_reason = ""
 
-                if self.signal_prequote_min_hits > 0 and sig_hits < int(self.signal_prequote_min_hits):
+                if pre_min_hits > 0 and sig_hits < int(pre_min_hits):
                     self._signal_debug_write(
                         "reject_prequote_hits",
                         candidate,
-                        {"hits": sig_hits, "min_hits": int(self.signal_prequote_min_hits)},
+                        {
+                            "hits": sig_hits,
+                            "min_hits": int(pre_min_hits),
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                        },
                     )
                     return _reject("prequote_hits")
-                if self.signal_prequote_min_buys > 0 and sig_buys < int(self.signal_prequote_min_buys):
+                if pre_min_buys > 0 and sig_buys < int(pre_min_buys):
                     self._signal_debug_write(
                         "reject_prequote_buys",
                         candidate,
-                        {"buys": sig_buys, "min_buys": int(self.signal_prequote_min_buys)},
+                        {
+                            "buys": sig_buys,
+                            "min_buys": int(pre_min_buys),
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                        },
                     )
                     return _reject("prequote_buys")
-                if self.signal_prequote_min_unique_buyers > 0 and sig_uniq < int(self.signal_prequote_min_unique_buyers):
+                if pre_min_uniq > 0 and sig_uniq < int(pre_min_uniq):
                     self._signal_debug_write(
                         "reject_prequote_uniq",
                         candidate,
                         {
                             "unique_buyers": sig_uniq,
-                            "min_unique_buyers": int(self.signal_prequote_min_unique_buyers),
+                            "min_unique_buyers": int(pre_min_uniq),
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                            "unique_buyers_status": uniq_status,
                         },
                     )
                     return _reject("prequote_uniq")
-                if self.signal_prequote_min_net_sol_in > 0 and sig_net < float(self.signal_prequote_min_net_sol_in):
+                if pre_min_net > 0 and sig_net < float(pre_min_net):
                     self._signal_debug_write(
                         "reject_prequote_net",
                         candidate,
-                        {"net_sol_in": sig_net, "min_net_sol_in": float(self.signal_prequote_min_net_sol_in)},
+                        {
+                            "net_sol_in": sig_net,
+                            "min_net_sol_in": float(pre_min_net),
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                        },
                     )
                     return _reject("prequote_net")
-                if self.signal_prequote_min_mcap_usd > 0 and sig_mcap > 0 and sig_mcap < float(self.signal_prequote_min_mcap_usd):
+                if pre_min_mcap > 0 and sig_mcap > 0 and sig_mcap < float(pre_min_mcap):
                     self._signal_debug_write(
                         "reject_prequote_mcap_low",
                         candidate,
-                        {"mcap": sig_mcap, "min_mcap": float(self.signal_prequote_min_mcap_usd)},
+                        {
+                            "mcap": sig_mcap,
+                            "min_mcap": float(pre_min_mcap),
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                        },
                     )
                     return _reject("prequote_mcap_low")
                 if (
-                    self.signal_prequote_min_buy_sell_ratio > 0
+                    pre_min_bs_ratio > 0
                     and sig_sells > 0
-                    and (float(sig_buys) / float(sig_sells)) < float(self.signal_prequote_min_buy_sell_ratio)
+                    and (float(sig_buys) / float(sig_sells)) < float(pre_min_bs_ratio)
                 ):
                     bs_ratio = float(sig_buys) / float(sig_sells)
                     self._signal_debug_write(
                         "reject_prequote_bs_ratio",
                         candidate,
-                        {"buy_sell_ratio": bs_ratio, "min_buy_sell_ratio": float(self.signal_prequote_min_buy_sell_ratio)},
+                        {
+                            "buy_sell_ratio": bs_ratio,
+                            "min_buy_sell_ratio": float(pre_min_bs_ratio),
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                        },
                     )
                     return _reject("prequote_bs_ratio")
                 if (
-                    self.signal_prequote_max_top_buyer_share > 0
+                    pre_max_top_share > 0
                     and sig_top_share is not None
-                    and float(sig_top_share) > float(self.signal_prequote_max_top_buyer_share)
+                    and float(sig_top_share) > float(pre_max_top_share)
                 ):
                     self._signal_debug_write(
                         "reject_prequote_top_share",
                         candidate,
-                        {"top_buyer_share": float(sig_top_share), "max_top_buyer_share": float(self.signal_prequote_max_top_buyer_share)},
+                        {
+                            "top_buyer_share": float(sig_top_share),
+                            "max_top_buyer_share": float(pre_max_top_share),
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                            "top_buyer_share_status": top_share_status,
+                        },
                     )
                     return _reject("prequote_top_share")
 
                 score_bypassed = False
-                if self.signal_prequote_min_signal_score > 0 and sig_score < float(self.signal_prequote_min_signal_score):
+                score_bypass_min_uniq = int(self.signal_prequote_score_bypass_min_unique_buyers)
+                if dex_lane and uniq_estimated and not self.signal_dex_prequote_use_unique_buyers:
+                    score_bypass_min_uniq = 0
+                if pre_min_signal_score > 0 and sig_score < float(pre_min_signal_score):
                     if self.signal_prequote_score_bypass_enabled:
                         top_ok = (
                             sig_top_share is None
@@ -3295,7 +4796,7 @@ class MemeCoinBot:
                         score_bypassed = (
                             sig_hits >= int(self.signal_prequote_score_bypass_min_hits)
                             and sig_buys >= int(self.signal_prequote_score_bypass_min_buys)
-                            and sig_uniq >= int(self.signal_prequote_score_bypass_min_unique_buyers)
+                            and sig_uniq >= int(score_bypass_min_uniq)
                             and sig_net >= float(self.signal_prequote_score_bypass_min_net_sol_in)
                             and top_ok
                         )
@@ -3305,8 +4806,10 @@ class MemeCoinBot:
                             candidate,
                             {
                                 "score": sig_score,
-                                "min_score": float(self.signal_prequote_min_signal_score),
-                                "source": metrics.get("source"),
+                                "min_score": float(pre_min_signal_score),
+                                "source": sig_source,
+                                "source_family": sig_source_family,
+                                "dex_lane": dex_lane,
                             },
                         )
                         return _reject("prequote_score")
@@ -3315,14 +4818,27 @@ class MemeCoinBot:
                         candidate,
                         {
                             "score": sig_score,
-                            "min_score": float(self.signal_prequote_min_signal_score),
+                            "min_score": float(pre_min_signal_score),
                             "hits": sig_hits,
                             "buys": sig_buys,
                             "unique_buyers": sig_uniq,
                             "net_sol_in": sig_net,
                             "top_buyer_share": sig_top_share,
+                            "source": sig_source,
+                            "source_family": sig_source_family,
+                            "dex_lane": dex_lane,
+                            "unique_buyers_status": uniq_status,
                         },
                     )
+
+                cont_reject = self._apply_continuation_policy(
+                    candidate,
+                    metrics,
+                    sig_source=sig_source,
+                    stage="prequote",
+                )
+                if cont_reject:
+                    return _reject(cont_reject)
 
                 # Winner-zone gate (post-baseline): only runs after core prequote filters pass.
                 if self.winner_zone_enabled:
@@ -3416,12 +4932,19 @@ class MemeCoinBot:
                         "momentum_5m_pct": sig_mom5,
                         "momentum_1h_pct": sig_mom1h,
                         "top_buyer_share": sig_top_share,
+                        "top_buyer_share_status": top_share_status,
                         "score_bypassed": score_bypassed,
+                        "dex_lane": dex_lane,
+                        "unique_buyers_status": uniq_status,
+                        "pair_age_min": metrics.get("pair_age_min"),
+                        "mover_pattern": metrics.get("mover_pattern"),
+                        "signal_profile": str(getattr(candidate, "signal_profile", "") or ""),
                         "winner_zone_id": str(getattr(candidate, "winner_zone_id", "") or ""),
                         "winner_zone_objective": float(getattr(candidate, "winner_zone_objective", 0.0) or 0.0),
                         "winner_zone_bypassed": bool(getattr(candidate, "winner_zone_bypassed", False)),
                         "winner_zone_bypass_reason": str(getattr(candidate, "winner_zone_bypass_reason", "") or ""),
-                        "source": metrics.get("source"),
+                        "source": sig_source,
+                        "source_family": sig_source_family,
                     },
                 )
 
@@ -3523,6 +5046,45 @@ class MemeCoinBot:
             if self.signal_first and self.launch_signals_file:
                 age_seconds = time.time() - candidate.discovered_at
                 metrics = (self.launch_signal_metrics.get(candidate.mint, {}) or {})
+                sig_source = signal_source(metrics)
+                dex_lane = sig_source in self.signal_dex_lane_sources
+                if dex_lane and self.dex_mover_entry_max_mcap_usd > 0:
+                    try:
+                        mcap_now = float(candidate.market_cap or 0.0)
+                    except Exception:
+                        mcap_now = 0.0
+                    if mcap_now > float(self.dex_mover_entry_max_mcap_usd):
+                        self._signal_debug_write(
+                            "reject_dex_mcap_high",
+                            candidate,
+                            {
+                                "mcap": float(mcap_now),
+                                "max_mcap": float(self.dex_mover_entry_max_mcap_usd),
+                            },
+                        )
+                        return _reject("dex_mcap_high")
+                max_age_s = int(self.signal_max_age_seconds)
+                late_max_age_s = int(self.signal_late_max_age_seconds)
+                late_min_score = float(self.signal_late_min_signal_score)
+                late_min_net = float(self.signal_late_min_net_sol_in)
+                late_min_uniq = int(self.signal_late_min_unique_buyers)
+                late_max_top = float(self.signal_late_max_top_buyer_share)
+                uniq_status = signal_field_status(metrics, "unique_buyers", sig_source)
+                top_share_status = signal_field_status(metrics, "top_buyer_share", sig_source)
+                if dex_lane:
+                    max_age_s = int(self.signal_dex_max_age_seconds or max_age_s)
+                    late_max_age_s = int(self.signal_dex_late_max_age_seconds or late_max_age_s)
+                    late_min_score = float(self.signal_dex_late_min_signal_score)
+                    late_min_net = float(self.signal_dex_late_min_net_sol_in)
+                    late_min_uniq = int(self.signal_dex_late_min_unique_buyers)
+                    if uniq_status == "estimated" and not self.signal_dex_late_use_unique_buyers:
+                        late_min_uniq = 0
+                min_age_seconds_effective = float(self.signal_min_age_seconds)
+                if self._signal_starvation_active():
+                    min_age_seconds_effective = min(
+                        float(min_age_seconds_effective),
+                        float(self.signal_starvation_relax_min_age_seconds),
+                    )
                 if self.signal_age_checkpoints_s:
                     grace_s = max(0.0, float(self.signal_age_checkpoint_grace_s))
                     cps = self.signal_age_checkpoints_s
@@ -3554,19 +5116,19 @@ class MemeCoinBot:
                         candidate,
                         {"age_s": round(age_seconds, 1), "target_s": target_s, "grace_s": grace_s},
                     )
-                if self.signal_min_age_seconds > 0 and age_seconds < self.signal_min_age_seconds:
+                if min_age_seconds_effective > 0 and age_seconds < min_age_seconds_effective:
                     self._signal_debug_write(
                         "reject_age_fresh",
                         candidate,
-                        {"age_s": round(age_seconds, 1), "min_age_s": self.signal_min_age_seconds},
+                        {"age_s": round(age_seconds, 1), "min_age_s": min_age_seconds_effective},
                     )
                     return _reject("age_fresh")
-                if age_seconds > self.signal_max_age_seconds:
+                if age_seconds > max_age_s:
                     late_ok = False
                     late_details: dict[str, Any] = {}
                     if (
-                        self.signal_late_max_age_seconds > self.signal_max_age_seconds
-                        and age_seconds <= float(self.signal_late_max_age_seconds)
+                        late_max_age_s > max_age_s
+                        and age_seconds <= float(late_max_age_s)
                     ):
                         try:
                             late_uniq = int(metrics.get("unique_buyers") or 0)
@@ -3576,7 +5138,13 @@ class MemeCoinBot:
                             late_net = float(metrics.get("net_sol_in") or 0.0)
                         except Exception:
                             late_net = 0.0
-                        top_raw = metrics.get("top_buyer_share")
+                        top_raw = signal_field_value(
+                            metrics,
+                            "top_buyer_share",
+                            source=sig_source,
+                            allow_estimated=False,
+                            default=None,
+                        )
                         try:
                             late_top = float(top_raw) if top_raw is not None else None
                         except Exception:
@@ -3590,30 +5158,40 @@ class MemeCoinBot:
                         except Exception:
                             late_score = 0.0
 
-                        uniq_ok = late_uniq >= int(self.signal_late_min_unique_buyers)
-                        net_ok = late_net >= float(self.signal_late_min_net_sol_in)
-                        score_ok = late_score >= float(self.signal_late_min_signal_score)
+                        uniq_ok = late_uniq >= int(late_min_uniq)
+                        net_ok = late_net >= float(late_min_net)
+                        score_ok = late_score >= float(late_min_score)
                         top_ok = (
                             late_top is None
-                            or self.signal_late_max_top_buyer_share <= 0
-                            or float(late_top) <= float(self.signal_late_max_top_buyer_share)
+                            or late_max_top <= 0
+                            or float(late_top) <= float(late_max_top)
                         )
                         late_ok = bool(uniq_ok and net_ok and score_ok and top_ok)
                         late_details = {
                             "age_s": round(age_seconds, 1),
-                            "max_age_s": self.signal_max_age_seconds,
-                            "late_max_age_s": self.signal_late_max_age_seconds,
+                            "max_age_s": max_age_s,
+                            "late_max_age_s": late_max_age_s,
                             "signal_score": float(late_score),
-                            "min_signal_score": float(self.signal_late_min_signal_score),
+                            "min_signal_score": float(late_min_score),
                             "unique_buyers": int(late_uniq),
-                            "min_unique_buyers": int(self.signal_late_min_unique_buyers),
+                            "min_unique_buyers": int(late_min_uniq),
                             "net_sol_in": float(late_net),
-                            "min_net_sol_in": float(self.signal_late_min_net_sol_in),
+                            "min_net_sol_in": float(late_min_net),
                             "top_buyer_share": float(late_top) if late_top is not None else None,
-                            "max_top_buyer_share": float(self.signal_late_max_top_buyer_share),
+                            "max_top_buyer_share": float(late_max_top),
+                            "source": sig_source,
+                            "source_family": signal_source_family(sig_source),
+                            "dex_lane": dex_lane,
+                            "unique_buyers_status": uniq_status,
+                            "top_buyer_share_status": top_share_status,
                         }
                     if not late_ok:
-                        extra = {"age_s": round(age_seconds, 1), "max_age_s": self.signal_max_age_seconds}
+                        extra = {
+                            "age_s": round(age_seconds, 1),
+                            "max_age_s": max_age_s,
+                            "source": sig_source,
+                            "dex_lane": dex_lane,
+                        }
                         if late_details:
                             extra.update(late_details)
                         self._signal_debug_write("reject_age", candidate, extra)
@@ -3622,7 +5200,10 @@ class MemeCoinBot:
                 # Prefer mints with some immediate activity (set by the WS listener).
                 try:
                     hits = int(metrics.get("hits") or 0)
+                    sig_source = signal_source(metrics)
                     min_hits = int(os.getenv("PUMP_SIGNAL_MIN_HITS") or os.getenv("MEME_SIGNAL_MIN_HITS") or "3")
+                    if dex_lane and self.dex_mover_entry_min_hits > 0:
+                        min_hits = max(int(min_hits), int(self.dex_mover_entry_min_hits))
                     if hits and hits < min_hits:
                         self._signal_debug_write("reject_hits", candidate, {"hits": hits, "min_hits": min_hits})
                         return False
@@ -3631,6 +5212,17 @@ class MemeCoinBot:
                         min_sig_score = float(os.getenv("MEME_SIGNAL_MIN_SCORE", "0") or 0.0)
                     except Exception:
                         min_sig_score = 0.0
+                    relaxed_entry = self._apply_starvation_relax(
+                        {
+                            "min_score": float(min_sig_score),
+                            "min_hits": int(min_hits),
+                            "min_buys": 0,
+                            "min_uniq": 0,
+                            "min_net": 0.0,
+                        }
+                    )
+                    min_hits = int(relaxed_entry.get("min_hits", min_hits))
+                    min_sig_score = float(relaxed_entry.get("min_score", min_sig_score))
                     if min_sig_score > 0:
                         try:
                             sig_score = float(self.launch_signal_scores.get(candidate.mint, 0.0) or 0.0)
@@ -3642,6 +5234,8 @@ class MemeCoinBot:
                     # Demand-burst gates (if available).
                     min_buys = int(os.getenv("MEME_SIGNAL_MIN_BUYS", "2") or 2)
                     min_net_sol = float(os.getenv("MEME_SIGNAL_MIN_NET_SOL_IN", "0.3") or 0.3)
+                    if dex_lane and self.dex_mover_entry_min_net_sol_in > 0:
+                        min_net_sol = max(float(min_net_sol), float(self.dex_mover_entry_min_net_sol_in))
                     # Caps help avoid late/overcrowded launches where the edge is mostly gone.
                     # Default 0 disables.
                     try:
@@ -3659,7 +5253,18 @@ class MemeCoinBot:
                     min_buy_accel = float(os.getenv("MEME_SIGNAL_MIN_BUY_ACCEL", "0.0") or 0.0)
                     max_top_share = float(os.getenv("MEME_SIGNAL_MAX_TOP_BUYER_SHARE", "0.0") or 0.0)
                     min_uniq = int(os.getenv("MEME_SIGNAL_MIN_UNIQUE_BUYERS", "1") or 1)
-                    sig_source = str(metrics.get("source") or "")
+                    relaxed_demand = self._apply_starvation_relax(
+                        {
+                            "min_buys": int(min_buys),
+                            "min_uniq": int(min_uniq),
+                            "min_net": float(min_net_sol),
+                            "max_top_share": float(max_top_share),
+                        }
+                    )
+                    min_buys = int(relaxed_demand.get("min_buys", min_buys))
+                    min_uniq = int(relaxed_demand.get("min_uniq", min_uniq))
+                    min_net_sol = float(relaxed_demand.get("min_net", min_net_sol))
+                    max_top_share = float(relaxed_demand.get("max_top_share", max_top_share))
                     bypass_caps_for_source = bool(sig_source and sig_source in self.signal_cap_bypass_sources)
                     require_demand_metrics = str(os.getenv("MEME_SIGNAL_REQUIRE_DEMAND_METRICS", "false") or "false").lower() in (
                         "1",
@@ -3676,16 +5281,30 @@ class MemeCoinBot:
                     sells = int(metrics.get("sells") or 0)
                     uniq = int(metrics.get("unique_buyers") or 0)
                     net_sol_in = float(metrics.get("net_sol_in") or 0.0)
+                    uniq_status = signal_field_status(metrics, "unique_buyers", sig_source)
+                    use_unique_buyers = not (
+                        dex_lane
+                        and uniq_status == "estimated"
+                        and not self.signal_dex_late_use_unique_buyers
+                    )
                     try:
                         buy_accel = float(metrics.get("buy_accel")) if metrics.get("buy_accel") is not None else None
                     except Exception:
                         buy_accel = None
                     try:
-                        top_buyer_share = (
-                            float(metrics.get("top_buyer_share")) if metrics.get("top_buyer_share") is not None else None
+                        top_buyer_share = signal_field_value(
+                            metrics,
+                            "top_buyer_share",
+                            source=sig_source,
+                            allow_estimated=False,
+                            default=None,
                         )
+                        top_buyer_share = float(top_buyer_share) if top_buyer_share is not None else None
                     except Exception:
                         top_buyer_share = None
+                    if not use_unique_buyers:
+                        min_uniq = 0
+                        max_uniq = 0
                     try:
                         max_sells = int(os.getenv("MEME_SIGNAL_MAX_SELLS", "0") or 0)
                     except Exception:
@@ -3702,14 +5321,24 @@ class MemeCoinBot:
                         self._signal_debug_write(
                             "reject_hits_hard",
                             candidate,
-                            {"hits": hits, "hard_max_hits": hard_max_hits, "source": sig_source},
+                            {
+                                "hits": hits,
+                                "hard_max_hits": hard_max_hits,
+                                "source": sig_source,
+                                "source_family": signal_source_family(sig_source),
+                            },
                         )
                         return False
                     if hard_max_net_sol > 0.0 and "net_sol_in" in metrics and net_sol_in > hard_max_net_sol:
                         self._signal_debug_write(
                             "reject_net_sol_hard",
                             candidate,
-                            {"net_sol_in": net_sol_in, "hard_max_net_sol_in": hard_max_net_sol, "source": sig_source},
+                            {
+                                "net_sol_in": net_sol_in,
+                                "hard_max_net_sol_in": hard_max_net_sol,
+                                "source": sig_source,
+                                "source_family": signal_source_family(sig_source),
+                            },
                         )
                         return False
                     if (not bypass_caps_for_source) and max_hits > 0 and hits and hits > max_hits:
@@ -3734,7 +5363,13 @@ class MemeCoinBot:
                             crowd_bonus += 1
                         crowd_bonus = max(0, min(int(self.signal_crowd_relax_max_bonus), int(crowd_bonus)))
                         max_uniq_effective = int(max_uniq) + int(crowd_bonus)
-                    if (not bypass_caps_for_source) and max_uniq_effective > 0 and "unique_buyers" in metrics and uniq > max_uniq_effective:
+                    if (
+                        use_unique_buyers
+                        and (not bypass_caps_for_source)
+                        and max_uniq_effective > 0
+                        and "unique_buyers" in metrics
+                        and uniq > max_uniq_effective
+                    ):
                         self._signal_debug_write(
                             "reject_uniq_high",
                             candidate,
@@ -3766,8 +5401,8 @@ class MemeCoinBot:
                         if min_net_sol > 0 and "net_sol_in" not in metrics:
                             self._signal_debug_write("reject_missing_net_sol_in", candidate, {"min_net_sol_in": min_net_sol})
                             return False
-                    # Use unique buyers as a buy proxy (WS classification can undercount buys).
-                    eff_buys = max(buys, uniq)
+                    # Only use unique buyers when the source supplies a real metric.
+                    eff_buys = max(buys, uniq) if use_unique_buyers else buys
                     if "buys" in metrics and eff_buys < min_buys:
                         self._signal_debug_write("reject_buys", candidate, {"eff_buys": eff_buys, "min_buys": min_buys, "buys": buys, "uniq": uniq})
                         return False
@@ -3776,7 +5411,7 @@ class MemeCoinBot:
                         # For fallback-liquidity candidates, allow one less unique buyer
                         # because provider sparsity often delays full buyer attribution.
                         min_uniq_effective = max(1, min_uniq_effective - 1)
-                    if "unique_buyers" in metrics and uniq < min_uniq_effective:
+                    if use_unique_buyers and "unique_buyers" in metrics and uniq < min_uniq_effective:
                         self._signal_debug_write(
                             "reject_uniq",
                             candidate,
@@ -3853,7 +5488,7 @@ class MemeCoinBot:
                     return False
                 mom5m_floor = float(self.signal_min_momentum_5m)
                 try:
-                    sig_source = str(metrics.get("source") or "")
+                    sig_source = signal_source(metrics)
                     if sig_source and sig_source in self.signal_cap_bypass_sources:
                         mom5m_floor = float(
                             os.getenv("MEME_SIGNAL_MIN_MOMENTUM_5M_MOVER", str(self.signal_min_momentum_5m))
@@ -3868,6 +5503,7 @@ class MemeCoinBot:
                         sig_mom_dbg = metrics.get("momentum_5m_pct")
                 except Exception:
                     sig_mom_dbg = None
+                mom5m_floor = self._relaxed_runtime_mom_floor(candidate, metrics, mom5m_floor)
 
                 # In signal-first mode, 5m momentum is often unavailable at discovery time.
                 # Avoid treating "missing" as literal 0.0 momentum; only reject when we have
@@ -4055,6 +5691,17 @@ class MemeCoinBot:
                 ts = self.launch_signal_mints.get(candidate.mint)
                 if not ts:
                     return False
+                if self._is_run_mint_loss_locked(candidate.mint):
+                    self._signal_debug_write("reject_run_loss_lock", candidate, {})
+                    return _reject("run_loss_lock")
+                persistent_quarantine_remaining = self._persistent_mint_quarantine_remaining(candidate.mint)
+                if persistent_quarantine_remaining > 0:
+                    self._signal_debug_write(
+                        "reject_persistent_loss_lock",
+                        candidate,
+                        {"remaining_s": round(persistent_quarantine_remaining, 1)},
+                    )
+                    return _reject("persistent_loss_lock")
                 if (time.time() - ts) > self.launch_signal_ttl:
                     return False
                 if candidate.mint in self.launch_signal_seen:
@@ -4112,7 +5759,13 @@ class MemeCoinBot:
                     return True
 
             # Filter 6: Price momentum - reject tokens dumping hard
-            if candidate.price_change_5m < meme_config.MIN_PRICE_CHANGE_5M:
+            runtime_mom5m_floor = float(meme_config.MIN_PRICE_CHANGE_5M)
+            runtime_mom5m_floor = self._relaxed_runtime_mom_floor(
+                candidate,
+                self.launch_signal_metrics.get(candidate.mint, {}) or {},
+                runtime_mom5m_floor,
+            )
+            if candidate.price_change_5m < runtime_mom5m_floor:
                 if meme_config.VERBOSE_LOGGING:
                     console.print(f"[yellow]Dumping: {candidate.symbol} ({candidate.price_change_5m:+.1f}% 5m)[/yellow]")
                 return _reject("mom5m_low")
@@ -4287,11 +5940,14 @@ class MemeCoinBot:
                 candidate.volume_1h = float(volume.get('h1', 0) or 0)
                 candidate.volume_5m = float(volume.get('m5', 0) or 0)
 
-                # Pair creation time - use actual on-chain creation, not discovery time
+                # Pair creation time
                 pair_created_at = best_pair.get('pairCreatedAt')
                 if pair_created_at:
-                    # pairCreatedAt is in milliseconds
-                    candidate.discovered_at = pair_created_at / 1000.0
+                    # pairCreatedAt is in milliseconds.
+                    # In signal-first mode, `discovered_at` is the signal-age anchor used by
+                    # age gates/checkpoints; do not overwrite it with pair age.
+                    if not (self.signal_first and self.launch_signals_file):
+                        candidate.discovered_at = pair_created_at / 1000.0
 
                 # Cache the extracted metrics (avoid storing sensitive data).
                 try:
@@ -4574,6 +6230,10 @@ class MemeCoinBot:
                 demand_score = max(0.0, min(20.0, demand))
 
                 base_composite = impact_score + mom_score + demand_score
+                signal_rank_score, signal_rank_matches, signal_rank_negative_hits = self._score_signal_rank(candidate)
+                if self.signal_rank_enabled and signal_rank_matches > 0 and self.signal_rank_weight > 0:
+                    rw = max(0.0, min(100.0, float(self.signal_rank_weight))) / 100.0
+                    base_composite = ((1.0 - rw) * float(base_composite)) + (rw * float(signal_rank_score))
                 winner_score, winner_used = self._score_winner_profile(candidate)
                 if self.winner_profile_enabled and winner_used > 0 and self.winner_score_weight > 0:
                     w = max(0.0, min(100.0, float(self.winner_score_weight))) / 100.0
@@ -4653,6 +6313,10 @@ class MemeCoinBot:
 
             # Compute final score
             base_composite = momentum_score + volume_score + liquidity_score + social_score - divergence_penalty
+            signal_rank_score, signal_rank_matches, signal_rank_negative_hits = self._score_signal_rank(candidate)
+            if self.signal_rank_enabled and signal_rank_matches > 0 and self.signal_rank_weight > 0:
+                rw = max(0.0, min(100.0, float(self.signal_rank_weight))) / 100.0
+                base_composite = ((1.0 - rw) * float(base_composite)) + (rw * float(signal_rank_score))
             winner_score, winner_used = self._score_winner_profile(candidate)
             if self.winner_profile_enabled and winner_used > 0 and self.winner_score_weight > 0:
                 w = max(0.0, min(100.0, float(self.winner_score_weight))) / 100.0
@@ -4670,10 +6334,16 @@ class MemeCoinBot:
                 winner_str = ""
                 if self.winner_profile_enabled and candidate.winner_features_used > 0:
                     winner_str = f", Win:{candidate.winner_score:.1f}/{candidate.winner_features_used}"
+                rank_str = ""
+                if self.signal_rank_enabled and candidate.signal_rank_matches > 0:
+                    rank_str = (
+                        f", Rank:{candidate.signal_rank_score:.1f}/"
+                        f"{candidate.signal_rank_matches}"
+                    )
                 console.print(
                     f"[cyan]SCORE: {candidate.symbol} = {candidate.composite_score} "
                     f"(Mom:{momentum_score}, Vol:{volume_score}, Liq:{liquidity_score}, "
-                    f"Soc:{social_score}{div_str}{winner_str})[/cyan]"
+                    f"Soc:{social_score}{div_str}{rank_str}{winner_str})[/cyan]"
                 )
 
             return candidate.composite_score
@@ -4696,6 +6366,38 @@ class MemeCoinBot:
             if self.signal_first and self.launch_signals_file:
                 self._signal_debug_write("reject_min_score", candidate, {"min_score": meme_config.MIN_VHI_SCORE})
             return False
+
+        # Outcome-ranked source-aware gate.
+        if self.signal_rank_enabled:
+            rank_score = float(getattr(candidate, "signal_rank_score", 0.0) or 0.0)
+            rank_matches = int(getattr(candidate, "signal_rank_matches", 0) or 0)
+            rank_negative_hits = int(getattr(candidate, "signal_rank_negative_hits", 0) or 0)
+            if rank_matches > 0 and rank_score < float(self.signal_rank_min_score):
+                if self.signal_first and self.launch_signals_file:
+                    self._signal_debug_write(
+                        "reject_signal_rank_score",
+                        candidate,
+                        {
+                            "signal_rank_score": rank_score,
+                            "min_signal_rank_score": float(self.signal_rank_min_score),
+                            "signal_rank_matches": rank_matches,
+                            "signal_rank_negative_hits": rank_negative_hits,
+                        },
+                    )
+                return False
+            if rank_score > 0 and rank_matches < int(self.signal_rank_min_matches):
+                if self.signal_first and self.launch_signals_file:
+                    self._signal_debug_write(
+                        "reject_signal_rank_matches",
+                        candidate,
+                        {
+                            "signal_rank_score": rank_score,
+                            "signal_rank_matches": rank_matches,
+                            "min_signal_rank_matches": int(self.signal_rank_min_matches),
+                            "signal_rank_negative_hits": rank_negative_hits,
+                        },
+                    )
+                return False
 
         # Winner-first gate: require candidate to resemble historical winners.
         if self.winner_profile_enabled:
@@ -4894,11 +6596,44 @@ class MemeCoinBot:
                     max_usd = float(os.getenv("MEME_SIGNAL_MAX_POSITION_USD", "6.0") or 6.0)
                 except Exception:
                     max_usd = 6.0
-                if max_usd > 0 and sol_price_usd > 0:
+                dynamic_cap_usd = float(max_usd)
+                size_snap = {"ready": True, "n": 0, "wins": 0, "wr": 0.0, "sum_pnl": 0.0}
+                topflow_ok = False
+                topflow_meta: dict[str, float | int] = {}
+                if max_usd > 0 and self.size_escalation_enabled:
+                    size_snap = self._evaluate_size_escalation()
+                    topflow_ok, topflow_meta = self._is_topflow_candidate(candidate)
+                    base_cap_usd = max(0.0, float(self.pre_edge_max_position_usd or 0.0))
+                    if base_cap_usd > 0:
+                        dynamic_cap_usd = min(float(dynamic_cap_usd), float(base_cap_usd))
+                    if bool(size_snap.get("ready", False)) and topflow_ok:
+                        if base_cap_usd > 0:
+                            dynamic_cap_usd = min(
+                                float(max_usd),
+                                float(base_cap_usd) * max(1.0, float(self.topflow_size_mult)),
+                            )
+                        else:
+                            dynamic_cap_usd = float(max_usd)
+                if dynamic_cap_usd > 0 and sol_price_usd > 0:
                     est_usd = float(size_sol) * float(sol_price_usd)
-                    if est_usd > max_usd:
-                        size_sol = float(max_usd) / float(sol_price_usd)
+                    if est_usd > float(dynamic_cap_usd):
+                        size_sol = float(dynamic_cap_usd) / float(sol_price_usd)
                         size_sol = max(meme_config.MIN_POSITION_SIZE_SOL, min(meme_config.MAX_POSITION_SIZE_SOL, size_sol))
+                if self.signal_first and self.launch_signals_file and self.signal_debug:
+                    self._signal_debug_write(
+                        "size_policy",
+                        candidate,
+                        {
+                            "max_usd": float(max_usd),
+                            "dynamic_cap_usd": float(dynamic_cap_usd),
+                            "size_ready": bool(size_snap.get("ready", False)),
+                            "size_n": int(size_snap.get("n", 0) or 0),
+                            "size_sum_pnl": float(size_snap.get("sum_pnl", 0.0) or 0.0),
+                            "topflow_ok": bool(topflow_ok),
+                            "topflow_net_sol_in": float(topflow_meta.get("net_sol_in", 0.0) or 0.0),
+                            "topflow_hits": int(topflow_meta.get("hits", 0) or 0),
+                        },
+                    )
 
             # Signal-first: optional minimum position floor in USD.
             # If the computed size falls below this floor, skip the entry
@@ -4959,6 +6694,8 @@ class MemeCoinBot:
             entry_size_sol = float(size_sol)
             if scale_in:
                 frac = max(0.05, min(1.0, float(self.scale_in_initial_fraction)))
+                if self.signal_first and self.launch_signals_file:
+                    frac = max(float(frac), float(self.scale_in_min_initial_fraction))
                 entry_size_sol = max(float(meme_config.MIN_POSITION_SIZE_SOL), float(target_size_sol) * frac)
                 entry_size_sol = min(float(target_size_sol), float(entry_size_sol))
                 # Re-quote at the actual entry size so paper fills don't inherit full-size slippage.
@@ -5110,13 +6847,31 @@ class MemeCoinBot:
                         sig_top_share_f = float(sig_top_share) if sig_top_share is not None else 0.0
                         sig_tfs = sig_metrics.get("t_first_sell_s")
                         sig_tfs_f = float(sig_tfs) if sig_tfs is not None else None
-                        sig_source = str(sig_metrics.get("source") or "") if isinstance(sig_metrics, dict) else ""
+                        sig_source = signal_source(sig_metrics)
+                        sig_source_family = signal_source_family(sig_source)
+                        sig_rank_score = float(getattr(candidate, "signal_rank_score", 0.0) or 0.0)
+                        sig_rank_matches = int(getattr(candidate, "signal_rank_matches", 0) or 0)
+                        sig_rank_negative_hits = int(getattr(candidate, "signal_rank_negative_hits", 0) or 0)
+                        sig_profile = str(getattr(candidate, "signal_profile", "") or "")
+                        sig_pair_age_min = float(getattr(candidate, "pair_age_min", 0.0) or 0.0)
+                        sig_mover_pattern = str(getattr(candidate, "mover_pattern", "") or "")
+                        sig_uniq_estimated = signal_field_status(sig_metrics, "unique_buyers", sig_source) == "estimated"
+                        sig_top_estimated = signal_field_status(sig_metrics, "top_buyer_share", sig_source) == "estimated"
                     except Exception:
                         sig_hits = sig_buys = sig_sells = sig_uniq = 0
                         sig_net_sol = 0.0
                         sig_top_share_f = 0.0
                         sig_tfs_f = None
                         sig_source = ""
+                        sig_source_family = ""
+                        sig_rank_score = 0.0
+                        sig_rank_matches = 0
+                        sig_rank_negative_hits = 0
+                        sig_profile = ""
+                        sig_pair_age_min = 0.0
+                        sig_mover_pattern = ""
+                        sig_uniq_estimated = False
+                        sig_top_estimated = False
                 position.state = PositionState(
                     mint=candidate.mint,
                     symbol=candidate.symbol,
@@ -5136,6 +6891,16 @@ class MemeCoinBot:
                     signal_net_sol_in=sig_net_sol,
                     signal_top_buyer_share=sig_top_share_f,
                     signal_t_first_sell_s=sig_tfs_f,
+                    signal_source=sig_source,
+                    signal_source_family=sig_source_family,
+                    signal_rank_score=sig_rank_score,
+                    signal_rank_matches=sig_rank_matches,
+                    signal_rank_negative_hits=sig_rank_negative_hits,
+                    signal_profile=sig_profile,
+                    signal_pair_age_min=sig_pair_age_min,
+                    signal_mover_pattern=sig_mover_pattern,
+                    signal_unique_buyers_estimated=sig_uniq_estimated,
+                    signal_top_buyer_share_estimated=sig_top_estimated,
                 )
                 try:
                     position.state.winner_score = float(winner_score)
@@ -5152,10 +6917,6 @@ class MemeCoinBot:
                     pass
                 try:
                     position.state.signal_mcap_size_mult = float(mcap_size_mult)
-                except Exception:
-                    pass
-                try:
-                    position.state.signal_source = str(sig_source or "")
                 except Exception:
                     pass
                 try:
@@ -5214,6 +6975,16 @@ class MemeCoinBot:
                             'signal_net_sol_in': sig_net_sol,
                             'signal_top_buyer_share': sig_top_share_f,
                             'signal_t_first_sell_s': sig_tfs_f,
+                            'signal_source': sig_source,
+                            'signal_source_family': sig_source_family,
+                            'signal_rank_score': float(sig_rank_score),
+                            'signal_rank_matches': int(sig_rank_matches),
+                            'signal_rank_negative_hits': int(sig_rank_negative_hits),
+                            'signal_profile': sig_profile,
+                            'signal_pair_age_min': sig_pair_age_min,
+                            'signal_mover_pattern': sig_mover_pattern,
+                            'signal_unique_buyers_estimated': bool(sig_uniq_estimated),
+                            'signal_top_buyer_share_estimated': bool(sig_top_estimated),
                             'winner_score': float(winner_score),
                             'winner_features_used': int(winner_features_used),
                             'winner_zone_id': str(winner_zone_id),
@@ -5429,6 +7200,21 @@ class MemeCoinBot:
                 current_notional = float(position.amount_usd or 0.0)
 
             reason_upper = str(exit_result.reason or "").upper()
+            signal_source = ""
+            try:
+                if position.state:
+                    signal_source = str(getattr(position.state, "signal_source", "") or "").strip().lower()
+            except Exception:
+                signal_source = ""
+            if (
+                self.fail_fast_force_flat
+                and "FAIL_FAST" in reason_upper
+                and (
+                    not self.fail_fast_force_flat_sources
+                    or signal_source in self.fail_fast_force_flat_sources
+                )
+            ):
+                requested_sell_fraction = 1.0
             risk_forced_exit = any(
                 token in reason_upper
                 for token in (
@@ -5528,6 +7314,28 @@ class MemeCoinBot:
                 if meme_config.LOSS_COOLDOWN_ENABLED and self.loss_streak >= meme_config.LOSS_COOLDOWN_THRESHOLD:
                     self.cooldown_until = time.time() + meme_config.LOSS_COOLDOWN_SECONDS
                     console.print(f"[yellow]COOLDOWN: {self.loss_streak} losses in a row. Pausing entries for {meme_config.LOSS_COOLDOWN_SECONDS}s[/yellow]")
+                extra_cd = self._apply_post_loss_entry_cooldown(
+                    position.mint,
+                    str(exit_result.reason or ""),
+                    float(pnl_usd or 0.0),
+                )
+                if extra_cd > 0:
+                    console.print(
+                        f"[yellow]ENTRY COOLDOWN: {position.symbol} blocked for {int(extra_cd)}s after {exit_result.reason}[/yellow]"
+                    )
+                persistent_cd = self._set_persistent_mint_quarantine(
+                    position.mint,
+                    str(exit_result.reason or ""),
+                    float(pnl_usd or 0.0),
+                )
+                if persistent_cd > 0:
+                    console.print(
+                        f"[yellow]PERSISTENT MINT QUARANTINE: {position.symbol} blocked for {int(persistent_cd)}s after {exit_result.reason}[/yellow]"
+                    )
+                if self._maybe_lock_mint_after_loss(position.mint, str(exit_result.reason or ""), float(pnl_usd or 0.0)):
+                    console.print(
+                        f"[yellow]RUN MINT LOCK: {position.symbol} blocked for rest of run after {exit_result.reason}[/yellow]"
+                    )
                 self._save_stats()
 
                 # Update remaining position size after this slice.
@@ -5635,6 +7443,55 @@ class MemeCoinBot:
                             trade_metadata['signal_source'] = str(sig_src) if sig_src else None
                         except Exception:
                             trade_metadata['signal_source'] = None
+                        try:
+                            sig_src_family = getattr(position.state, "signal_source_family", None)
+                            if not sig_src_family:
+                                sig_src_family = signal_source_family(trade_metadata.get('signal_source'))
+                            trade_metadata['signal_source_family'] = str(sig_src_family) if sig_src_family else None
+                        except Exception:
+                            trade_metadata['signal_source_family'] = None
+                        try:
+                            trade_metadata['signal_rank_score'] = float(
+                                getattr(position.state, "signal_rank_score", 0.0) or 0.0
+                            )
+                        except Exception:
+                            trade_metadata['signal_rank_score'] = 0.0
+                        try:
+                            trade_metadata['signal_rank_matches'] = int(
+                                getattr(position.state, "signal_rank_matches", 0) or 0
+                            )
+                        except Exception:
+                            trade_metadata['signal_rank_matches'] = 0
+                        try:
+                            trade_metadata['signal_rank_negative_hits'] = int(
+                                getattr(position.state, "signal_rank_negative_hits", 0) or 0
+                            )
+                        except Exception:
+                            trade_metadata['signal_rank_negative_hits'] = 0
+                        try:
+                            trade_metadata['signal_profile'] = str(getattr(position.state, "signal_profile", "") or "")
+                        except Exception:
+                            trade_metadata['signal_profile'] = ""
+                        try:
+                            trade_metadata['signal_pair_age_min'] = float(getattr(position.state, "signal_pair_age_min", 0.0) or 0.0)
+                        except Exception:
+                            trade_metadata['signal_pair_age_min'] = 0.0
+                        try:
+                            trade_metadata['signal_mover_pattern'] = str(getattr(position.state, "signal_mover_pattern", "") or "")
+                        except Exception:
+                            trade_metadata['signal_mover_pattern'] = ""
+                        try:
+                            trade_metadata['signal_unique_buyers_estimated'] = bool(
+                                getattr(position.state, "signal_unique_buyers_estimated", False)
+                            )
+                        except Exception:
+                            trade_metadata['signal_unique_buyers_estimated'] = False
+                        try:
+                            trade_metadata['signal_top_buyer_share_estimated'] = bool(
+                                getattr(position.state, "signal_top_buyer_share_estimated", False)
+                            )
+                        except Exception:
+                            trade_metadata['signal_top_buyer_share_estimated'] = False
                         try:
                             trade_metadata['signal_mcap_size_mult'] = float(getattr(position.state, "signal_mcap_size_mult", 1.0) or 1.0)
                         except Exception:
@@ -5762,6 +7619,28 @@ class MemeCoinBot:
                 if meme_config.LOSS_COOLDOWN_ENABLED and self.loss_streak >= meme_config.LOSS_COOLDOWN_THRESHOLD:
                     self.cooldown_until = time.time() + meme_config.LOSS_COOLDOWN_SECONDS
                     console.print(f"[yellow]COOLDOWN: {self.loss_streak} losses in a row. Pausing entries for {meme_config.LOSS_COOLDOWN_SECONDS}s[/yellow]")
+                extra_cd = self._apply_post_loss_entry_cooldown(
+                    position.mint,
+                    str(exit_result.reason or ""),
+                    float(pnl_usd or 0.0),
+                )
+                if extra_cd > 0:
+                    console.print(
+                        f"[yellow]ENTRY COOLDOWN: {position.symbol} blocked for {int(extra_cd)}s after {exit_result.reason}[/yellow]"
+                    )
+                persistent_cd = self._set_persistent_mint_quarantine(
+                    position.mint,
+                    str(exit_result.reason or ""),
+                    float(pnl_usd or 0.0),
+                )
+                if persistent_cd > 0:
+                    console.print(
+                        f"[yellow]PERSISTENT MINT QUARANTINE: {position.symbol} blocked for {int(persistent_cd)}s after {exit_result.reason}[/yellow]"
+                    )
+                if self._maybe_lock_mint_after_loss(position.mint, str(exit_result.reason or ""), float(pnl_usd or 0.0)):
+                    console.print(
+                        f"[yellow]RUN MINT LOCK: {position.symbol} blocked for rest of run after {exit_result.reason}[/yellow]"
+                    )
                 self._save_stats()
 
                 if effective_sell_fraction >= 1.0:
@@ -6303,21 +8182,33 @@ class MemeCoinBot:
                     held_s = time.time() - position.entry_time
                     # Abort early if it moves against us in the probe window.
                     if held_s <= float(self.scale_in_window_seconds):
-                        if float(position.unrealized_pnl_pct or 0.0) <= float(self.scale_in_abort_below_pct):
+                        probe_pnl_pct = float(position.unrealized_pnl_pct or 0.0)
+                        probe_pnl_usd = float(position.unrealized_pnl_usd or 0.0)
+                        abort_by_pct = probe_pnl_pct <= float(self.scale_in_abort_below_pct)
+                        abort_by_usd = (
+                            float(self.scale_in_abort_max_loss_usd or 0.0) > 0.0
+                            and probe_pnl_usd <= -abs(float(self.scale_in_abort_max_loss_usd))
+                        )
+                        if abort_by_pct or abort_by_usd:
                             abort_exit = ExitResult(
                                 should_exit=True,
                                 reason="SCALE_IN_ABORT",
                                 sell_fraction=1.0,
                                 details={
                                     "held_s": round(held_s, 1),
-                                    "pnl_pct": float(position.unrealized_pnl_pct or 0.0),
+                                    "pnl_pct": probe_pnl_pct,
+                                    "pnl_usd": probe_pnl_usd,
                                     "abort_below_pct": float(self.scale_in_abort_below_pct),
+                                    "abort_max_loss_usd": float(self.scale_in_abort_max_loss_usd),
+                                    "abort_by_pct": bool(abort_by_pct),
+                                    "abort_by_usd": bool(abort_by_usd),
                                     "target_usd": float(getattr(position, "target_amount_usd", 0.0) or 0.0),
                                     "entry_usd": float(position.amount_usd or 0.0),
                                 },
                             )
                             console.print(
-                                f"[yellow]SCALE-IN ABORT: {position.symbol} pnl={position.unrealized_pnl_pct:+.2f}% "
+                                f"[yellow]SCALE-IN ABORT: {position.symbol} pnl={probe_pnl_pct:+.2f}% "
+                                f"(${probe_pnl_usd:+.2f}) "
                                 f"held={held_s:.0f}s[/yellow]"
                             )
                             await self.execute_exit(position, abort_exit)
@@ -6407,6 +8298,68 @@ class MemeCoinBot:
 
                 # 1. Quick Scalp Check - if +15% in first 5 minutes, take partial profit
                 if meme_config.QUICK_SCALP_ENABLED:
+                    # 0. Early invalidation: for weak post-entry action, flatten fast.
+                    # This is designed to reduce MAX_LOSS_CAP frequency by exiting
+                    # non-continuation setups before the hard loss cap.
+                    if self.signal_first and self.early_invalidation_enabled:
+                        time_held = time.time() - position.entry_time
+                        if (
+                            time_held >= float(self.early_invalidation_min_hold_s)
+                            and time_held <= float(self.early_invalidation_window_s)
+                            and not getattr(position, "_early_invalidated", False)
+                        ):
+                            try:
+                                sells_5m_f = float(sells_5m or 0.0)
+                            except Exception:
+                                sells_5m_f = 0.0
+                            try:
+                                buys_5m_f = float(buys_5m or 0.0)
+                            except Exception:
+                                buys_5m_f = 0.0
+                            sell_ratio_5m = (sells_5m_f / buys_5m_f) if buys_5m_f > 0 else (sells_5m_f if sells_5m_f > 0 else 0.0)
+                            bearish_confirms = 0
+                            try:
+                                if float(price_change_5m) <= float(self.early_invalidation_price5m_max):
+                                    bearish_confirms += 1
+                            except Exception:
+                                pass
+                            if sell_ratio_5m >= float(self.early_invalidation_sell_ratio_min):
+                                bearish_confirms += 1
+
+                            pnl_now = float(position.unrealized_pnl_pct or 0.0)
+                            hard_trip = pnl_now <= float(self.early_invalidation_hard_trigger_pct)
+                            soft_trip = (
+                                pnl_now <= float(self.early_invalidation_soft_trigger_pct)
+                                and bearish_confirms >= int(self.early_invalidation_soft_confirms)
+                            )
+                            if hard_trip or soft_trip:
+                                position._early_invalidated = True
+                                inv_exit = ExitResult(
+                                    should_exit=True,
+                                    reason="EARLY_INVALIDATION",
+                                    sell_fraction=1.0,
+                                    details={
+                                        "pnl_pct": pnl_now,
+                                        "time_held_sec": time_held,
+                                        "hard_trip": bool(hard_trip),
+                                        "soft_trip": bool(soft_trip),
+                                        "soft_trigger_pct": float(self.early_invalidation_soft_trigger_pct),
+                                        "hard_trigger_pct": float(self.early_invalidation_hard_trigger_pct),
+                                        "price_change_5m": float(price_change_5m or 0.0),
+                                        "price5m_max": float(self.early_invalidation_price5m_max),
+                                        "sell_ratio_5m": float(sell_ratio_5m),
+                                        "sell_ratio_min": float(self.early_invalidation_sell_ratio_min),
+                                        "bearish_confirms": int(bearish_confirms),
+                                    },
+                                )
+                                console.print(
+                                    f"[yellow]EARLY INVALIDATION: {position.symbol} pnl={pnl_now:+.2f}% "
+                                    f"held={time_held:.0f}s confirms={bearish_confirms}[/yellow]"
+                                )
+                                await self.execute_exit(position, inv_exit)
+                                continue
+
+                    # 1. Quick Scalp Check - if +15% in first 5 minutes, take partial profit
                     time_held = time.time() - position.entry_time
                     if time_held <= meme_config.QUICK_SCALP_WINDOW_SECONDS:
                         if pnl_fraction >= meme_config.QUICK_SCALP_GAIN and not getattr(position, '_scalped', False):
@@ -6942,7 +8895,7 @@ class MemeCoinBot:
                             pass
                     if self.active_positions or self.pending_entries:
                         self.display_status()
-                    await asyncio.sleep(meme_config.POLL_INTERVAL_SECONDS)
+                    await asyncio.sleep(self._poll_sleep_seconds())
                     continue
 
                 # 2. Discover new tokens
@@ -7043,7 +8996,7 @@ class MemeCoinBot:
                     self.display_status()
 
                 # 8. Sleep until next poll
-                await asyncio.sleep(meme_config.POLL_INTERVAL_SECONDS)
+                await asyncio.sleep(self._poll_sleep_seconds())
 
             except KeyboardInterrupt:
                 console.print("\n[yellow]Shutting down...[/yellow]")
